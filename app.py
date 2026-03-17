@@ -128,6 +128,17 @@ def apply_track_changes(file_bytes, modifications, decisions):
     output.seek(0)
     return output
 
+
+@app.route("/debug", methods=["GET"])
+def debug():
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return jsonify({
+        "key_present": bool(key),
+        "key_length": len(key),
+        "key_prefix": key[:7] if key else "none",
+        "all_vars": list(os.environ.keys())
+    })
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
