@@ -148,6 +148,7 @@ def identify_parties():
     try:
         file = request.files.get("file")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+        partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         lang = request.form.get("lang", "fr")
 
         if not file:
@@ -209,6 +210,7 @@ def analyze():
             return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
 
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+        partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         result = analyze_contract(contract_text, lang, contract_type, api_key, partie)
         return jsonify(result)
 
