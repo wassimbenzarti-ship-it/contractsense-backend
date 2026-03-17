@@ -60,7 +60,7 @@ def get_embedding(text, voyage_key=None):
         vec = [v/norm for v in vec]
     return vec
 
-def search_rag(query, api_key, voyage_key=None, top_k=5):
+def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     data = load_rag()
     if not data["documents"]:
         return []
@@ -69,6 +69,12 @@ def search_rag(query, api_key, voyage_key=None, top_k=5):
     for doc in data["documents"]:
         if "embedding" in doc:
             score = cosine_similarity(query_vec, doc["embedding"])
+            # Boost score for clauses matching the requested partie
+            if partie and doc.get("partie", "").lower() in partie.lower():
+                score *= 1.3
+            # Boost validated clauses
+            if doc.get("source") == "user_validated":
+                score *= 1.1
             scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
@@ -131,7 +137,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     rag_context = ""
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=5)
+        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=5, partie=partie)
         if relevant_docs:
             rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE (utilise ces documents pour renforcer tes modifications):\n"
             for doc in relevant_docs:
@@ -171,17 +177,17 @@ Règles STRICTES:
         raise ValueError("Réponse invalide de l'IA")
     return json.loads(match.group(0))
 
-def fuzzy_match(original, para_text, threshold=0.6):
+def fuzzy_match(original, para_text, threshold=0.45):
     """Check if original text roughly matches para_text"""
     original = original.lower().strip()
     para_text = para_text.lower().strip()
     # Exact match
     if original in para_text:
         return True
-    # Partial match: check if >60% of words from original appear in para
-    orig_words = set(re.findall(r'\w+', original))
-    para_words = set(re.findall(r'\w+', para_text))
-    if not orig_words:
+    # Partial match: check if >45% of words from original appear in para
+    orig_words = set(re.findall(r'[a-zA-ZÀ-ÿ]+', original))
+    para_words = set(re.findall(r'[a-zA-ZÀ-ÿ]+', para_text))
+    if not orig_words or len(orig_words) < 3:
         return False
     overlap = len(orig_words & para_words) / len(orig_words)
     return overlap >= threshold
@@ -247,6 +253,8 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 applied.add(mod_id)
                 break
 
+    # Log how many modifications were applied
+    print(f"Track changes applied: {len(applied)}/{len(accepted)}")
     output = io.BytesIO()
     doc.save(output)
     output.seek(0)
@@ -337,6 +345,189 @@ def export():
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ── Queue for pending clauses ─────────────────────────────
+QUEUE_PATH = os.environ.get("QUEUE_PATH", "/data/queue.json")
+
+def load_queue():
+    try:
+        with open(QUEUE_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {"pending": []}
+
+def save_queue(data):
+    os.makedirs(os.path.dirname(QUEUE_PATH), exist_ok=True)
+    with open(QUEUE_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.route("/rag/contribute", methods=["POST"])
+def rag_contribute():
+    """Auto-queue full contract with AI scoring for admin validation"""
+    try:
+        file = request.files.get("file")
+        modifications = json.loads(request.form.get("modifications", "[]"))
+        decisions = json.loads(request.form.get("decisions", "{}"))
+        partie = request.form.get("partie", "")
+        contract_type = request.form.get("contract_type", "generic")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+
+        if not file:
+            return jsonify({"error": "Fichier manquant"}), 400
+
+        contract_text, _, filename = read_file(file)
+        accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+        rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
+
+        # AI scoring of contract quality for RAG
+        client = anthropic.Anthropic(api_key=api_key)
+        scoring_prompt = f"""Évalue ce contrat pour son intérêt dans une base de connaissances juridiques.
+Réponds UNIQUEMENT en JSON valide:
+{{
+  "score": 0-100,
+  "category": "nda|saas|purchase|employment|partnership|service|generic",
+  "party_label": "favorable {partie if partie else 'neutre'}",
+  "quality_reason": "1 phrase expliquant le score",
+  "key_clauses": ["clause1", "clause2", "clause3"]
+}}
+Score élevé = contrat complet, bien structuré, avec des clauses intéressantes à réutiliser.
+Score faible = contrat trop basique ou incomplet."""
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            system=scoring_prompt,
+            messages=[{"role": "user", "content": f"Contrat:
+
+{contract_text[:5000]}"}]
+        )
+        raw = message.content[0].text
+        match = re.search(r'\{[\s\S]*\}', raw)
+        scoring = json.loads(match.group(0)) if match else {"score": 50, "category": contract_type, "party_label": f"favorable {partie}", "quality_reason": "Scoring indisponible", "key_clauses": []}
+
+        import uuid
+        queue = load_queue()
+        queue["pending"].append({
+            "id": str(uuid.uuid4()),
+            "contract_text": contract_text[:50000],
+            "filename": filename,
+            "partie": partie,
+            "party_label": scoring.get("party_label", f"favorable {partie}"),
+            "contract_type": contract_type,
+            "score": scoring.get("score", 50),
+            "category": scoring.get("category", contract_type),
+            "quality_reason": scoring.get("quality_reason", ""),
+            "key_clauses": scoring.get("key_clauses", []),
+            "accepted_count": len(accepted),
+            "rejected_count": len(rejected),
+            "accepted_modifications": accepted,
+            "submitted_at": datetime.datetime.now().isoformat()
+        })
+        save_queue(queue)
+        return jsonify({"success": True, "score": scoring.get("score", 50)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/queue/list", methods=["GET"])
+def queue_list():
+    """List pending clauses for admin review"""
+    try:
+        queue = load_queue()
+        return jsonify({"pending": queue["pending"], "total": len(queue["pending"])})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/queue/validate", methods=["POST"])
+def queue_validate():
+    """Admin validates contract — indexes full text into RAG"""
+    try:
+        body = request.get_json()
+        contract_id = body.get("id")
+        admin_category = body.get("category", "")
+        admin_party_label = body.get("party_label", "")
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+
+        queue = load_queue()
+        contract = next((c for c in queue["pending"] if c["id"] == contract_id), None)
+        if not contract:
+            return jsonify({"error": "Contrat introuvable"}), 404
+
+        contract_text = contract.get("contract_text", "")
+        category = admin_category or contract.get("category", "generic")
+        party_label = admin_party_label or contract.get("party_label", "")
+        title_base = f"[{category.upper()}] {party_label}"
+
+        # Split contract into chunks and index
+        import uuid
+        words = contract_text.split()
+        chunk_size = 400
+        chunks = []
+        for i in range(0, len(words), chunk_size):
+            chunks.append(" ".join(words[i:i+chunk_size]))
+
+        data = load_rag()
+        for i, chunk in enumerate(chunks):
+            embedding = get_embedding(chunk, voyage_key)
+            title = f"{title_base} (partie {i+1})" if len(chunks) > 1 else title_base
+            data["documents"].append({
+                "id": str(uuid.uuid4()),
+                "title": title,
+                "category": category,
+                "party_label": party_label,
+                "partie": contract.get("partie", ""),
+                "contract_type": category,
+                "content": chunk,
+                "embedding": embedding,
+                "source": "admin_validated",
+                "key_clauses": contract.get("key_clauses", []),
+                "score": contract.get("score", 50),
+                "validated_at": datetime.datetime.now().isoformat()
+            })
+
+        # Also index accepted modifications as separate entries
+        for mod in contract.get("accepted_modifications", []):
+            mod_text = f"CLAUSE VALIDEE [{party_label}]: {mod.get('clause_name','')}
+{mod.get('proposed','')}"
+            embedding = get_embedding(mod_text, voyage_key)
+            data["documents"].append({
+                "id": str(uuid.uuid4()),
+                "title": f"[CLAUSE] {mod.get('clause_name','')} — {party_label}",
+                "category": "validated_clause",
+                "party_label": party_label,
+                "partie": contract.get("partie", ""),
+                "contract_type": category,
+                "content": mod_text,
+                "embedding": embedding,
+                "source": "admin_validated_clause",
+                "validated_at": datetime.datetime.now().isoformat()
+            })
+
+        save_rag(data)
+        queue["pending"] = [c for c in queue["pending"] if c["id"] != contract_id]
+        save_queue(queue)
+
+        return jsonify({"success": True, "chunks_indexed": len(chunks)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/queue/reject", methods=["POST"])
+def queue_reject():
+    """Admin rejects a clause — removes from queue"""
+    try:
+        body = request.get_json()
+        clause_id = body.get("id")
+        queue = load_queue()
+        queue["pending"] = [c for c in queue["pending"] if c["id"] != clause_id]
+        save_queue(queue)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/rag/upload", methods=["POST"])
 def rag_upload():
