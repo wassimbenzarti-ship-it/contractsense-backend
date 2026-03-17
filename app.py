@@ -36,14 +36,15 @@ def extract_text_from_docx(file_bytes):
         except Exception as e2:
             raise ValueError(f"Impossible de lire le fichier Word: {str(e2)}")
 
-def analyze_contract(contract_text, lang, contract_type, api_key):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire"):
     if not api_key:
         raise ValueError("Clé API manquante")
     client = anthropic.Anthropic(api_key=api_key)
 
-    system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger la partie bénéficiaire.
+    system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger {partie}.
 LANGUE OBLIGATOIRE: Détecte automatiquement la langue du contrat et réponds UNIQUEMENT dans cette même langue, sans aucun mélange. Si le contrat est en anglais, réponds en anglais. Si en français, en français. Si en arabe, en arabe. Etc.
 Type de contrat: {contract_type}
+Partie à protéger: {partie} — toutes les modifications doivent favoriser les intérêts de {partie}.
 
 Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
 {{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Une phrase expliquant le risque.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée"}}]}}
@@ -142,6 +143,50 @@ def debug():
 def health():
     return jsonify({"status": "ok"})
 
+@app.route("/identify-parties", methods=["POST"])
+def identify_parties():
+    try:
+        file = request.files.get("file")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+        lang = request.form.get("lang", "fr")
+
+        if not file:
+            return jsonify({"error": "Fichier manquant"}), 400
+
+        file_bytes = file.read()
+        filename = file.filename.lower()
+
+        if filename.endswith(".docx") or filename.endswith(".doc"):
+            contract_text = extract_text_from_docx(file_bytes)
+        else:
+            contract_text = file_bytes.decode("utf-8", errors="ignore")
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        system = f"""Tu es un juriste expert. Identifie les parties dans ce contrat.
+Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON exact, sans markdown:
+{{"parties":[{{"id":"partie_1","name":"Nom exact de la partie 1","description":"Rôle de cette partie dans le contrat"}},{{"id":"partie_2","name":"Nom exact de la partie 2","description":"Rôle de cette partie dans le contrat"}}]}}
+- Utilise les vrais noms des parties tels qu'ils apparaissent dans le contrat
+- Maximum 3 parties
+- description: max 10 mots"""
+
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            system=system,
+            messages=[{"role": "user", "content": f"Contrat:\n\n{contract_text[:20000]}\n\nIdentifie les parties."}]
+        )
+
+        raw = message.content[0].text
+        match = re.search(r'\{[\s\S]*\}', raw)
+        if not match:
+            raise ValueError("Réponse invalide")
+        return jsonify(json.loads(match.group(0)))
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
@@ -164,7 +209,7 @@ def analyze():
             return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
 
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        result = analyze_contract(contract_text, lang, contract_type, api_key)
+        result = analyze_contract(contract_text, lang, contract_type, api_key, partie)
         return jsonify(result)
 
     except Exception as e:
