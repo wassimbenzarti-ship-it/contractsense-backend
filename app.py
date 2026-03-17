@@ -8,6 +8,7 @@ import re
 import zipfile
 import datetime
 import numpy as np
+import voyageai
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -34,16 +35,22 @@ def cosine_similarity(a, b):
     a, b = np.array(a), np.array(b)
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
 
-def get_embedding(text):
+def get_embedding(text, voyage_key=None):
+    # Try Voyage AI for semantic embeddings
+    if voyage_key:
+        try:
+            vo = voyageai.Client(api_key=voyage_key)
+            result = vo.embed([text[:2000]], model="voyage-law-2", input_type="document")
+            return result.embeddings[0]
+        except:
+            pass
+    # Fallback to TF-IDF hashing
     import hashlib
-    # TF-IDF style embedding with bigrams for better matching
     words = re.findall(r'\w+', text.lower())
     vec = [0.0] * 512
-    # Unigrams
     for word in words:
         h = int(hashlib.md5(word.encode()).hexdigest(), 16) % 512
         vec[h] += 1.0
-    # Bigrams
     for i in range(len(words)-1):
         bigram = words[i] + '_' + words[i+1]
         h = int(hashlib.sha256(bigram.encode()).hexdigest(), 16) % 512
@@ -53,11 +60,11 @@ def get_embedding(text):
         vec = [v/norm for v in vec]
     return vec
 
-def search_rag(query, api_key, top_k=5):
+def search_rag(query, api_key, voyage_key=None, top_k=5):
     data = load_rag()
     if not data["documents"]:
         return []
-    query_vec = get_embedding(query)
+    query_vec = get_embedding(query, voyage_key)
     scored = []
     for doc in data["documents"]:
         if "embedding" in doc:
@@ -123,7 +130,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Search RAG for relevant context
     rag_context = ""
     try:
-        relevant_docs = search_rag(contract_text[:2000], api_key, top_k=5)
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=5)
         if relevant_docs:
             rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE (utilise ces documents pour renforcer tes modifications):\n"
             for doc in relevant_docs:
@@ -144,7 +152,7 @@ Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
 {{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Explication du risque avec référence au document de référence si applicable.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée, inspirée des documents de référence si disponibles"}}]}}
 
 Règles STRICTES:
-- Entre 5 et 10 modifications selon la complexité du contrat
+- Identifie TOUTES les clauses problématiques, sans limite de nombre (minimum 5, pas de maximum)
 - original: copie mot pour mot du contrat, max 50 mots
 - proposed: clause complète et professionnelle, max 80 mots
 - reason: 1-2 phrases claires, cite le document de référence pertinent si disponible (ex: "Selon le Code des Obligations, art. X...")
@@ -332,7 +340,8 @@ def rag_upload():
         data = load_rag()
         import uuid
         for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk)
+            voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
+            embedding = get_embedding(chunk, voyage_key)
             data["documents"].append({
                 "id": str(uuid.uuid4()),
                 "title": f"{title} (partie {i+1})" if len(chunks) > 1 else title,
