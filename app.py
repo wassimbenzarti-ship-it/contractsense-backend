@@ -15,7 +15,6 @@ import datetime
 app = Flask(__name__)
 CORS(app)
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 def extract_text_from_docx(file_bytes):
     try:
@@ -38,7 +37,10 @@ def extract_text_from_docx(file_bytes):
             raise ValueError(f"Impossible de lire le fichier Word: {str(e2)}")
 
 def analyze_contract(contract_text, lang, contract_type):
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise ValueError("Clé API manquante")
+    client = anthropic.Anthropic(api_key=api_key)
 
     system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger la partie bénéficiaire.
 LANGUE: Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'}, sans mélange de langues.
