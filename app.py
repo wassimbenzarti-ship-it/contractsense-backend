@@ -4,11 +4,12 @@ import anthropic
 import json
 import os
 import io
+import re
+import zipfile
 import uuid
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from lxml import etree
 import datetime
 
 app = Flask(__name__)
@@ -17,28 +18,40 @@ CORS(app)
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 def extract_text_from_docx(file_bytes):
-    doc = Document(io.BytesIO(file_bytes))
-    text = []
-    for para in doc.paragraphs:
-        if para.text.strip():
-            text.append(para.text)
-    return "\n".join(text)
+    try:
+        doc = Document(io.BytesIO(file_bytes))
+        text = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                text.append(para.text)
+        return "\n".join(text)
+    except Exception:
+        # Fallback: extract text from XML directly
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                if 'word/document.xml' in z.namelist():
+                    doc_xml = z.read('word/document.xml').decode('utf-8', errors='ignore')
+                    text = re.sub(r'<[^>]+>', ' ', doc_xml)
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    return text
+        except Exception as e2:
+            raise ValueError(f"Impossible de lire le fichier Word: {str(e2)}")
 
 def analyze_contract(contract_text, lang, contract_type):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
+
     system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger la partie bénéficiaire.
-LANGUE: Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'}.
+LANGUE: Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'}, sans mélange de langues.
 Type de contrat: {contract_type}
 
-Retourne UNIQUEMENT du JSON valide, sans markdown:
-{{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Une phrase expliquant le risque.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle"}}]}}
+Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
+{{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Une phrase expliquant le risque.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée"}}]}}
 
-Règles:
+Règles STRICTES:
 - Exactement 5 modifications
 - original: copie mot pour mot du contrat, max 50 mots
-- proposed: clause complète et professionnelle, bien rédigée
-- reason: 1 phrase claire
+- proposed: clause complète et professionnelle, bien rédigée en {'anglais' if lang == 'en' else 'français'}, max 60 mots
+- reason: 1 phrase claire en {'anglais' if lang == 'en' else 'français'}
 - clause_name: max 5 mots
 - Priorités: responsabilité, résiliation, propriété intellectuelle, pénalités, confidentialité"""
 
@@ -48,13 +61,11 @@ Règles:
         system=system,
         messages=[{"role": "user", "content": f"Contrat:\n\n{contract_text[:50000]}\n\nRetourne le JSON."}]
     )
-    
+
     raw = message.content[0].text
-    # Extract JSON
-    import re
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
-        raise ValueError("Réponse invalide")
+        raise ValueError("Réponse invalide de l'IA")
     return json.loads(match.group(0))
 
 def apply_track_changes(file_bytes, modifications, decisions):
@@ -66,17 +77,17 @@ def apply_track_changes(file_bytes, modifications, decisions):
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
 
     for para in doc.paragraphs:
+        para_text = para.text
         for mod in accepted:
             original = mod.get("original", "").strip()
             proposed = mod.get("proposed", "").strip()
             if not original or not proposed:
                 continue
-            if original in para.text:
-                # Clear paragraph runs
+            if original in para_text:
+                # Clear existing runs
                 for run in para.runs:
                     run.text = ""
 
-                # Build track change XML
                 p = para._p
 
                 # Delete element (red strikethrough)
@@ -137,6 +148,9 @@ def analyze():
         else:
             contract_text = file_bytes.decode("utf-8", errors="ignore")
 
+        if not contract_text or len(contract_text.strip()) < 50:
+            return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
+
         result = analyze_contract(contract_text, lang, contract_type)
         return jsonify(result)
 
@@ -154,7 +168,46 @@ def export():
             return jsonify({"error": "Fichier manquant"}), 400
 
         file_bytes = file.read()
-        output = apply_track_changes(file_bytes, modifications, decisions)
+        filename = file.filename.lower()
+
+        if filename.endswith(".docx") or filename.endswith(".doc"):
+            output = apply_track_changes(file_bytes, modifications, decisions)
+        else:
+            # For TXT/PDF: create a new DOCX with modifications
+            doc = Document()
+            doc.add_heading('ContractSense - Modifications acceptées', 0)
+
+            accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+            rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
+
+            doc.add_paragraph(f"Modifications acceptées: {len(accepted)} | Refusées: {len(rejected)}")
+            doc.add_paragraph("")
+
+            for i, m in enumerate(accepted):
+                doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
+                p_del = doc.add_paragraph()
+                run_del = p_del.add_run(m.get("original", ""))
+                run_del.font.color.rgb = None
+                from docx.util import Pt
+                from docx.oxml.ns import qn as qname
+                rpr = run_del._r.get_or_add_rPr()
+                strike = OxmlElement('w:strike')
+                rpr.append(strike)
+                color = OxmlElement('w:color')
+                color.set(qname('w:val'), 'FF0000')
+                rpr.append(color)
+
+                p_ins = doc.add_paragraph()
+                run_ins = p_ins.add_run(m.get("proposed", ""))
+                rpr2 = run_ins._r.get_or_add_rPr()
+                color2 = OxmlElement('w:color')
+                color2.set(qname('w:val'), '008000')
+                rpr2.append(color2)
+                doc.add_paragraph("")
+
+            output = io.BytesIO()
+            doc.save(output)
+            output.seek(0)
 
         return send_file(
             output,
