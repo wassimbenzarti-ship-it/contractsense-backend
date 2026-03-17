@@ -36,8 +36,7 @@ def extract_text_from_docx(file_bytes):
         except Exception as e2:
             raise ValueError(f"Impossible de lire le fichier Word: {str(e2)}")
 
-def analyze_contract(contract_text, lang, contract_type):
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+def analyze_contract(contract_text, lang, contract_type, api_key):
     if not api_key:
         raise ValueError("Clé API manquante")
     client = anthropic.Anthropic(api_key=api_key)
@@ -164,7 +163,8 @@ def analyze():
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
 
-        result = analyze_contract(contract_text, lang, contract_type)
+        api_key = request.form.get("api_key", "")
+        result = analyze_contract(contract_text, lang, contract_type, api_key)
         return jsonify(result)
 
     except Exception as e:
