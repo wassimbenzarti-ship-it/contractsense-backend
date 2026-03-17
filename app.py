@@ -34,27 +34,30 @@ def cosine_similarity(a, b):
     a, b = np.array(a), np.array(b)
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
 
-def get_embedding(text, api_key):
-    client = anthropic.Anthropic(api_key=api_key)
-    # Use Claude to generate a summary for embedding simulation
-    # (Anthropic doesn't have a dedicated embedding endpoint yet)
-    # We'll use a simple TF-IDF-like approach with hashing
+def get_embedding(text):
     import hashlib
+    # TF-IDF style embedding with bigrams for better matching
     words = re.findall(r'\w+', text.lower())
-    vec = [0.0] * 256
+    vec = [0.0] * 512
+    # Unigrams
     for word in words:
-        h = int(hashlib.md5(word.encode()).hexdigest(), 16) % 256
+        h = int(hashlib.md5(word.encode()).hexdigest(), 16) % 512
         vec[h] += 1.0
+    # Bigrams
+    for i in range(len(words)-1):
+        bigram = words[i] + '_' + words[i+1]
+        h = int(hashlib.sha256(bigram.encode()).hexdigest(), 16) % 512
+        vec[h] += 0.5
     norm = sum(v*v for v in vec) ** 0.5
     if norm > 0:
         vec = [v/norm for v in vec]
     return vec
 
-def search_rag(query, api_key, top_k=3):
+def search_rag(query, api_key, top_k=5):
     data = load_rag()
     if not data["documents"]:
         return []
-    query_vec = get_embedding(query, api_key)
+    query_vec = get_embedding(query)
     scored = []
     for doc in data["documents"]:
         if "embedding" in doc:
@@ -120,11 +123,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Search RAG for relevant context
     rag_context = ""
     try:
-        relevant_docs = search_rag(contract_text[:1000], api_key, top_k=3)
+        relevant_docs = search_rag(contract_text[:2000], api_key, top_k=5)
         if relevant_docs:
-            rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE:\n"
+            rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE (utilise ces documents pour renforcer tes modifications):\n"
             for doc in relevant_docs:
-                rag_context += f"\n--- {doc.get('title', 'Document')} ---\n{doc.get('content', '')[:500]}\n"
+                title = doc.get("title", "Document")
+                content_preview = doc.get("content", "")[:800]
+                rag_context += f"\n=== {title} ===\n{content_preview}\n"
+            rag_context += "\n(FIN DES DOCUMENTS DE RÉFÉRENCE — cite-les explicitement dans tes modifications)\n"
     except:
         pass
 
@@ -135,15 +141,15 @@ Partie à protéger: {partie} — toutes les modifications doivent favoriser les
 {rag_context}
 
 Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
-{{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Une phrase expliquant le risque.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée"}}]}}
+{{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Explication du risque avec référence au document de référence si applicable.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée, inspirée des documents de référence si disponibles"}}]}}
 
 Règles STRICTES:
-- Exactement 5 modifications
+- Entre 5 et 10 modifications selon la complexité du contrat
 - original: copie mot pour mot du contrat, max 50 mots
-- proposed: clause complète et professionnelle, max 60 mots
-- reason: 1 phrase claire
+- proposed: clause complète et professionnelle, max 80 mots
+- reason: 1-2 phrases claires, cite le document de référence pertinent si disponible (ex: "Selon le Code des Obligations, art. X...")
 - clause_name: max 5 mots
-- Si tu as des documents de référence, cite-les dans tes propositions"""
+- OBLIGATOIRE: si des documents de référence sont fournis, utilise-les activement dans tes propositions et mentionne-les explicitement"""
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -326,7 +332,7 @@ def rag_upload():
         data = load_rag()
         import uuid
         for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk, api_key)
+            embedding = get_embedding(chunk)
             data["documents"].append({
                 "id": str(uuid.uuid4()),
                 "title": f"{title} (partie {i+1})" if len(chunks) > 1 else title,
