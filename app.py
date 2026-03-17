@@ -163,7 +163,7 @@ def analyze():
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "") or "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"
         result = analyze_contract(contract_text, lang, contract_type, api_key)
         return jsonify(result)
 
