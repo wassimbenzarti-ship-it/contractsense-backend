@@ -171,6 +171,21 @@ Règles STRICTES:
         raise ValueError("Réponse invalide de l'IA")
     return json.loads(match.group(0))
 
+def fuzzy_match(original, para_text, threshold=0.6):
+    """Check if original text roughly matches para_text"""
+    original = original.lower().strip()
+    para_text = para_text.lower().strip()
+    # Exact match
+    if original in para_text:
+        return True
+    # Partial match: check if >60% of words from original appear in para
+    orig_words = set(re.findall(r'\w+', original))
+    para_words = set(re.findall(r'\w+', para_text))
+    if not orig_words:
+        return False
+    overlap = len(orig_words & para_words) / len(orig_words)
+    return overlap >= threshold
+
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
     author = "ContractSense"
@@ -178,18 +193,28 @@ def apply_track_changes(file_bytes, modifications, decisions):
     rev_id = 1
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+    applied = set()
 
     for para in doc.paragraphs:
-        para_text = para.text
+        para_text = para.text.strip()
+        if not para_text:
+            continue
         for mod in accepted:
+            mod_id = mod.get("id")
+            if mod_id in applied:
+                continue
             original = mod.get("original", "").strip()
             proposed = mod.get("proposed", "").strip()
             if not original or not proposed:
                 continue
-            if original in para_text:
+            # Use fuzzy matching to find the right paragraph
+            if fuzzy_match(original, para_text):
+                # Clear all runs
                 for run in para.runs:
                     run.text = ""
                 p = para._p
+
+                # Del element - use actual para text for accuracy
                 del_elem = OxmlElement('w:del')
                 del_elem.set(qn('w:id'), str(rev_id))
                 del_elem.set(qn('w:author'), author)
@@ -199,11 +224,13 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 del_run.append(del_rpr)
                 del_text = OxmlElement('w:delText')
                 del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                del_text.text = original
+                del_text.text = para_text  # use full para text
                 del_run.append(del_text)
                 del_elem.append(del_run)
                 p.append(del_elem)
                 rev_id += 1
+
+                # Ins element
                 ins_elem = OxmlElement('w:ins')
                 ins_elem.set(qn('w:id'), str(rev_id))
                 ins_elem.set(qn('w:author'), author)
@@ -216,6 +243,8 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 ins_elem.append(ins_run)
                 p.append(ins_elem)
                 rev_id += 1
+
+                applied.add(mod_id)
                 break
 
     output = io.BytesIO()
