@@ -201,7 +201,6 @@ def export():
                 p_del = doc.add_paragraph()
                 run_del = p_del.add_run(m.get("original", ""))
                 run_del.font.color.rgb = None
-                from docx.util import Pt
                 from docx.oxml.ns import qn as qname
                 rpr = run_del._r.get_or_add_rPr()
                 strike = OxmlElement('w:strike')
