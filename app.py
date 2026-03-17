@@ -42,7 +42,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key):
     client = anthropic.Anthropic(api_key=api_key)
 
     system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger la partie bénéficiaire.
-LANGUE: Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'}, sans mélange de langues.
+LANGUE OBLIGATOIRE: Détecte automatiquement la langue du contrat et réponds UNIQUEMENT dans cette même langue, sans aucun mélange. Si le contrat est en anglais, réponds en anglais. Si en français, en français. Si en arabe, en arabe. Etc.
 Type de contrat: {contract_type}
 
 Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
@@ -163,7 +163,7 @@ def analyze():
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Le fichier semble vide ou illisible"}), 400
 
-        api_key = request.form.get("api_key", "")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         result = analyze_contract(contract_text, lang, contract_type, api_key)
         return jsonify(result)
 
