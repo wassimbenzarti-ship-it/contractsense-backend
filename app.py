@@ -213,7 +213,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
-    return jsonify({"status": "ok", "rag_documents": len(rag["documents"])})
+    return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
 @app.route("/identify-parties", methods=["POST"])
 def identify_parties_route():
@@ -299,8 +299,8 @@ def export():
 def rag_upload():
     try:
         file = request.files.get("file")
-        title = request.form.get("title", "Document")
-        category = request.form.get("category", "general")
+        title = request.form.get("source_name") or request.form.get("title", "Document")
+        category = request.form.get("doc_type") or request.form.get("category", "general")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
@@ -336,7 +336,7 @@ def rag_upload():
             })
 
         save_rag(data)
-        return jsonify({"success": True, "chunks_added": len(chunks), "total_documents": len(data["documents"])})
+        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(data["documents"])})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -345,16 +345,36 @@ def rag_upload():
 def rag_list():
     try:
         data = load_rag()
-        docs = [{"id": d["id"], "title": d["title"], "category": d["category"]} for d in data["documents"]]
-        return jsonify({"documents": docs, "total": len(docs)})
+        import re as _re
+        sources = {}
+        for d in data["documents"]:
+            base = _re.sub(r" \(partie \d+\)$", "", d.get("title", "Document"))
+            if base not in sources:
+                sources[base] = {"source": base, "type": d.get("category", "law"), "chunks": 0}
+            sources[base]["chunks"] += 1
+        docs = list(sources.values())
+        return jsonify({"documents": docs, "total": len(data["documents"])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
-def rag_delete(doc_id):
+def rag_delete_by_id(doc_id):
     try:
         data = load_rag()
         data["documents"] = [d for d in data["documents"] if d["id"] != doc_id]
+        save_rag(data)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/rag/delete", methods=["POST"])
+def rag_delete():
+    try:
+        import re as _re
+        body = request.get_json()
+        source = body.get("source", "")
+        data = load_rag()
+        data["documents"] = [d for d in data["documents"] if _re.sub(r" \(partie \d+\)$", "", d.get("title", "")) != source]
         save_rag(data)
         return jsonify({"success": True})
     except Exception as e:
