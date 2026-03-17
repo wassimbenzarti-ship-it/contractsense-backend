@@ -15,7 +15,7 @@ import datetime
 app = Flask(__name__)
 CORS(app)
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 def extract_text_from_docx(file_bytes):
     try:
