@@ -397,7 +397,7 @@ Score faible = contrat trop basique ou incomplet."""
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
             system=scoring_prompt,
-          messages=[{"role": "user", "content": "Contrat:\n\n" + contract_text[:5000]}]
+            messages=[{"role": "user", "content": "Contrat:\n\n" + contract_text[:5000]}]
         )
         raw = message.content[0].text
         match = re.search(r'\{[\s\S]*\}', raw)
@@ -487,8 +487,7 @@ def queue_validate():
 
         # Also index accepted modifications as separate entries
         for mod in contract.get("accepted_modifications", []):
-           mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
-
+            mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
             embedding = get_embedding(mod_text, voyage_key)
             data["documents"].append({
                 "id": str(uuid.uuid4()),
