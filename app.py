@@ -9,6 +9,7 @@ import zipfile
 import datetime
 import numpy as np
 import voyageai
+from supabase import create_client
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -16,20 +17,45 @@ from docx.oxml import OxmlElement
 app = Flask(__name__)
 CORS(app)
 
-# ── RAG: Simple JSON-based vector store ───────────────────
-RAG_PATH = os.environ.get("RAG_PATH", "/data/rag.json")
-os.makedirs(os.path.dirname(RAG_PATH), exist_ok=True)
+# ── Supabase client ──────────────────────────────────────
+def get_supabase():
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_KEY", "")
+    if not url or not key:
+        raise ValueError("SUPABASE_URL et SUPABASE_KEY requis")
+    return create_client(url, key)
 
+# ── RAG: Supabase storage ─────────────────────────────────
 def load_rag():
     try:
-        with open(RAG_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
+        sb = get_supabase()
+        result = sb.table("rag_documents").select("*").execute()
+        return {"documents": result.data or []}
+    except Exception as e:
+        print(f"load_rag error: {e}")
         return {"documents": []}
 
-def save_rag(data):
-    with open(RAG_PATH, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_rag_doc(doc):
+    try:
+        sb = get_supabase()
+        sb.table("rag_documents").upsert(doc).execute()
+    except Exception as e:
+        print(f"save_rag_doc error: {e}")
+
+def delete_rag_by_source(source):
+    try:
+        sb = get_supabase()
+        import re as _re
+        # Get all docs and filter by source title
+        result = sb.table("rag_documents").select("id, title").execute()
+        ids = [d["id"] for d in (result.data or []) 
+               if _re.sub(r" \(partie \d+\)$", "", d.get("title", "")) == source]
+        for doc_id in ids:
+            sb.table("rag_documents").delete().eq("id", doc_id).execute()
+        return len(ids)
+    except Exception as e:
+        print(f"delete_rag error: {e}")
+        return 0
 
 def cosine_similarity(a, b):
     a, b = np.array(a), np.array(b)
@@ -67,15 +93,23 @@ def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     query_vec = get_embedding(query, voyage_key)
     scored = []
     for doc in data["documents"]:
-        if "embedding" in doc:
-            score = cosine_similarity(query_vec, doc["embedding"])
-            # Boost score for clauses matching the requested partie
-            if partie and doc.get("partie", "").lower() in partie.lower():
-                score *= 1.3
-            # Boost validated clauses
-            if doc.get("source") == "user_validated":
-                score *= 1.1
-            scored.append((score, doc))
+        emb = doc.get("embedding")
+        if emb is None:
+            continue
+        # Parse embedding from JSON string if needed
+        if isinstance(emb, str):
+            try:
+                emb = json.loads(emb)
+            except:
+                continue
+        score = cosine_similarity(query_vec, emb)
+        # Boost for matching party
+        if partie and doc.get("party_label", "").lower() and partie.lower() in doc.get("party_label", "").lower():
+            score *= 1.3
+        # Boost validated clauses
+        if "validated_clause" in doc.get("source", ""):
+            score *= 1.2
+        scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
 
@@ -308,8 +342,12 @@ def apply_track_changes(file_bytes, modifications, decisions):
 # ── Routes ────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
-    rag = load_rag()
-    return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
+    try:
+        rag = load_rag()
+        rag_count = len(rag["documents"])
+    except:
+        rag_count = 0
+    return jsonify({"status": "ok", "rag_docs": rag_count})
 
 @app.route("/identify-parties", methods=["POST"])
 def identify_parties_route():
@@ -391,20 +429,34 @@ def export():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ── Queue for pending clauses ─────────────────────────────
-QUEUE_PATH = os.environ.get("QUEUE_PATH", "/data/queue.json")
-
+# ── Queue: Supabase storage ──────────────────────────────
 def load_queue():
     try:
-        with open(QUEUE_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
+        sb = get_supabase()
+        result = sb.table("queue_pending").select("*").order("submitted_at", desc=False).execute()
+        return {"pending": result.data or []}
+    except Exception as e:
+        print(f"load_queue error: {e}")
         return {"pending": []}
 
-def save_queue(data):
-    os.makedirs(os.path.dirname(QUEUE_PATH), exist_ok=True)
-    with open(QUEUE_PATH, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_queue_item(item):
+    try:
+        sb = get_supabase()
+        # Convert lists/dicts to JSON for Supabase
+        item_copy = dict(item)
+        for field in ["key_clauses", "accepted_modifications"]:
+            if field in item_copy and not isinstance(item_copy[field], str):
+                item_copy[field] = json.dumps(item_copy.get(field, []))
+        sb.table("queue_pending").upsert(item_copy).execute()
+    except Exception as e:
+        print(f"save_queue_item error: {e}")
+
+def delete_queue_item(item_id):
+    try:
+        sb = get_supabase()
+        sb.table("queue_pending").delete().eq("id", item_id).execute()
+    except Exception as e:
+        print(f"delete_queue_item error: {e}")
 
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
@@ -464,13 +516,13 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
         scoring = json.loads(match.group(0)) if match else {"score": 50, "category": contract_type, "party_label": f"favorable {partie}", "quality_reason": "Scoring indisponible", "key_clauses": []}
 
         import uuid
-        queue = load_queue()
-        queue["pending"].append({
-            "id": str(uuid.uuid4()),
+        import uuid as _uuid
+        save_queue_item({
+            "id": str(_uuid.uuid4()),
             "contract_text": contract_text[:50000],
             "filename": filename,
             "partie": partie,
-            "party_label": scoring.get("party_label", f"favorable {partie}"),
+            "party_label": scoring.get("party_label", "favorable " + partie),
             "contract_type": contract_type,
             "score": scoring.get("score", 50),
             "category": scoring.get("category", contract_type),
@@ -481,7 +533,6 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
             "accepted_modifications": accepted,
             "submitted_at": datetime.datetime.now().isoformat()
         })
-        save_queue(queue)
         return jsonify({"success": True, "score": scoring.get("score", 50)})
 
     except Exception as e:
@@ -509,7 +560,8 @@ def queue_validate():
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
 
         queue = load_queue()
-        contract = next((c for c in queue["pending"] if c["id"] == contract_id), None)
+        pending = queue.get("pending", [])
+        contract = next((c for c in pending if c["id"] == contract_id), None)
         if not contract:
             return jsonify({"error": "Contrat introuvable"}), 404
 
@@ -574,13 +626,11 @@ def queue_validate():
 
 @app.route("/queue/reject", methods=["POST"])
 def queue_reject():
-    """Admin rejects a clause — removes from queue"""
+    """Admin rejects contract — removes from queue"""
     try:
         body = request.get_json()
-        clause_id = body.get("id")
-        queue = load_queue()
-        queue["pending"] = [c for c in queue["pending"] if c["id"] != clause_id]
-        save_queue(queue)
+        contract_id = body.get("id")
+        delete_queue_item(contract_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -642,7 +692,12 @@ def rag_list():
         for d in data["documents"]:
             base = _re.sub(r" \(partie \d+\)$", "", d.get("title", "Document"))
             if base not in sources:
-                sources[base] = {"source": base, "type": d.get("category", "law"), "chunks": 0}
+                sources[base] = {
+                    "source": base,
+                    "type": d.get("category", "law"),
+                    "party_label": d.get("party_label", ""),
+                    "chunks": 0
+                }
             sources[base]["chunks"] += 1
         docs = list(sources.values())
         return jsonify({"documents": docs, "total": len(data["documents"])})
@@ -652,9 +707,8 @@ def rag_list():
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
 def rag_delete_by_id(doc_id):
     try:
-        data = load_rag()
-        data["documents"] = [d for d in data["documents"] if d["id"] != doc_id]
-        save_rag(data)
+        sb = get_supabase()
+        sb.table("rag_documents").delete().eq("id", doc_id).execute()
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -662,13 +716,10 @@ def rag_delete_by_id(doc_id):
 @app.route("/rag/delete", methods=["POST"])
 def rag_delete():
     try:
-        import re as _re
         body = request.get_json()
         source = body.get("source", "")
-        data = load_rag()
-        data["documents"] = [d for d in data["documents"] if _re.sub(r" \(partie \d+\)$", "", d.get("title", "")) != source]
-        save_rag(data)
-        return jsonify({"success": True})
+        count = delete_rag_by_source(source)
+        return jsonify({"success": True, "deleted": count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
