@@ -397,9 +397,7 @@ Score faible = contrat trop basique ou incomplet."""
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
             system=scoring_prompt,
-            messages=[{"role": "user", "content": f"Contrat:
-
-{contract_text[:5000]}"}]
+          messages=[{"role": "user", "content": "Contrat:\n\n" + contract_text[:5000]}]
         )
         raw = message.content[0].text
         match = re.search(r'\{[\s\S]*\}', raw)
