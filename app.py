@@ -488,7 +488,7 @@ def queue_validate():
         # Also index accepted modifications as separate entries
         for mod in contract.get("accepted_modifications", []):
            mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
-{mod.get('proposed','')}"
+
             embedding = get_embedding(mod_text, voyage_key)
             data["documents"].append({
                 "id": str(uuid.uuid4()),
