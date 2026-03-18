@@ -426,17 +426,32 @@ def rag_contribute():
 
         # AI scoring of contract quality for RAG
         client = anthropic.Anthropic(api_key=api_key)
-        scoring_prompt = f"""Évalue ce contrat pour son intérêt dans une base de connaissances juridiques.
-Réponds UNIQUEMENT en JSON valide:
-{{
+        scoring_prompt = """Evalue ce contrat pour une base de connaissances juridiques.
+Reponds UNIQUEMENT en JSON valide, sans markdown:
+{
   "score": 0-100,
-  "category": "nda|saas|purchase|employment|partnership|service|generic",
-  "party_label": "favorable {partie if partie else 'neutre'}",
+  "category": "nda|saas|purchase|employment|partnership|service|collaboration|generic",
+  "party_label": "favorable """ + (partie if partie else "neutre") + """",
   "quality_reason": "1 phrase expliquant le score",
   "key_clauses": ["clause1", "clause2", "clause3"]
-}}
-Score élevé = contrat complet, bien structuré, avec des clauses intéressantes à réutiliser.
-Score faible = contrat trop basique ou incomplet."""
+}
+Regles:
+- category: deduis du CONTENU du contrat, pas du type selectionne par l utilisateur
+  * service = contrat de prestation de services, collaboration, mission
+  * nda = confidentialite
+  * employment = travail, salarie
+  * partnership = association, joint-venture
+  * purchase = achat, vente
+  * saas = logiciel, abonnement
+- party_label: utilise un label GENERIQUE selon le role de la partie
+  * service/prestation/collaboration → "favorable client" ou "favorable prestataire"
+  * travail → "favorable employeur" ou "favorable employe"
+  * nda → "favorable divulgateur" ou "favorable destinataire"
+  * achat/vente → "favorable acheteur" ou "favorable vendeur"
+  * partenariat → "favorable partenaire A" ou "favorable partenaire B"
+  La partie favorisee est: """ + (partie if partie else "neutre") + """
+- score: 0-100 selon la qualite et completude du contrat
+Score eleve = contrat complet avec clauses interessantes a reutiliser."""
 
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
