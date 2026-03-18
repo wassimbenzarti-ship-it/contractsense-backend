@@ -177,20 +177,29 @@ Règles STRICTES:
         raise ValueError("Réponse invalide de l'IA")
     return json.loads(match.group(0))
 
-def fuzzy_match(original, para_text, threshold=0.45):
+def fuzzy_match(original, para_text, threshold=0.65):
     """Check if original text roughly matches para_text"""
     original = original.lower().strip()
     para_text = para_text.lower().strip()
     # Exact match
     if original in para_text:
         return True
-    # Partial match: check if >45% of words from original appear in para
-    orig_words = set(re.findall(r'[a-zA-ZÀ-ÿ]+', original))
-    para_words = set(re.findall(r'[a-zA-ZÀ-ÿ]+', para_text))
-    if not orig_words or len(orig_words) < 3:
+    # Need at least 5 words in original to do fuzzy match
+    orig_words = re.findall(r"[a-zA-ZÀ-ÿ]+", original)
+    para_words_set = set(re.findall(r"[a-zA-ZÀ-ÿ]+", para_text))
+    orig_words_set = set(orig_words)
+    if len(orig_words) < 5:
         return False
-    overlap = len(orig_words & para_words) / len(orig_words)
-    return overlap >= threshold
+    # Use ordered subsequence: check if significant portion of orig words appear in para
+    overlap = len(orig_words_set & para_words_set) / len(orig_words_set)
+    if overlap < threshold:
+        return False
+    # Extra check: at least 3 consecutive words from original must appear in para
+    for i in range(len(orig_words) - 2):
+        trigram = orig_words[i] + " " + orig_words[i+1] + " " + orig_words[i+2]
+        if trigram in para_text:
+            return True
+    return False
 
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
