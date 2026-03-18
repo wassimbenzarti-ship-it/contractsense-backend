@@ -127,11 +127,35 @@ Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON
         raise ValueError("Réponse invalide")
     return json.loads(match.group(0))
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire"):
+def build_numbered_paragraphs(file_bytes, filename):
+    """Build a numbered paragraph index from DOCX for precise matching"""
+    try:
+        if filename.endswith('.docx') or filename.endswith('.doc'):
+            doc = Document(io.BytesIO(file_bytes))
+            paragraphs = []
+            for i, para in enumerate(doc.paragraphs):
+                text = para.text.strip()
+                if text:
+                    paragraphs.append({"idx": i, "text": text})
+            return paragraphs
+    except:
+        pass
+    return []
+
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename=""):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("Clé API manquante")
     client = anthropic.Anthropic(api_key=api_key)
+
+    # Build numbered paragraphs for precise matching
+    paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
+    
+    # Build numbered contract text for AI
+    if paragraphs:
+        numbered_text = "\n".join([f"[P{p['idx']}] {p['text']}" for p in paragraphs[:150]])
+    else:
+        numbered_text = contract_text[:50000]
 
     # Search RAG for relevant context
     rag_context = ""
@@ -139,43 +163,49 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=5, partie=partie)
         if relevant_docs:
-            rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE (utilise ces documents pour renforcer tes modifications):\n"
+            rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE:\n"
             for doc in relevant_docs:
                 title = doc.get("title", "Document")
                 content_preview = doc.get("content", "")[:800]
-                rag_context += f"\n=== {title} ===\n{content_preview}\n"
-            rag_context += "\n(FIN DES DOCUMENTS DE RÉFÉRENCE — cite-les explicitement dans tes modifications)\n"
+                rag_context += "\n=== " + title + " ===\n" + content_preview + "\n"
+            rag_context += "\n(FIN DES DOCUMENTS DE RÉFÉRENCE)\n"
     except:
         pass
 
-    system = f"""Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger {partie}.
-LANGUE OBLIGATOIRE: Détecte automatiquement la langue du contrat et réponds UNIQUEMENT dans cette même langue.
-Type de contrat: {contract_type}
-Partie à protéger: {partie} — toutes les modifications doivent favoriser les intérêts de {partie}.
-{rag_context}
+    system = """Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger """ + partie + """.
+LANGUE OBLIGATOIRE: Réponds UNIQUEMENT dans la langue du contrat.
+Type de contrat: """ + contract_type + """
+Partie à protéger: """ + partie + """
+""" + rag_context + """
 
-Retourne UNIQUEMENT du JSON valide, sans markdown, sans backticks:
-{{"modifications":[{{"id":1,"clause_name":"nom court","risk":"high|medium|low","reason":"Explication du risque avec référence au document de référence si applicable.","original":"texte exact copié du contrat","proposed":"clause complète et professionnelle bien rédigée, inspirée des documents de référence si disponibles"}}]}}
+IMPORTANT: Le contrat est fourni avec des numéros de paragraphes [P0], [P1], etc.
+Tu DOIS utiliser le numéro exact du paragraphe et copier son texte EXACT dans le champ "original".
 
-Règles STRICTES:
-- Identifie TOUTES les clauses problématiques, sans limite de nombre (minimum 5, pas de maximum)
-- original: copie mot pour mot du contrat, max 50 mots
-- proposed: clause complète et professionnelle, max 80 mots
-- reason: 1-2 phrases claires, cite le document de référence pertinent si disponible (ex: "Selon le Code des Obligations, art. X...")
-- clause_name: max 5 mots
-- OBLIGATOIRE: si des documents de référence sont fournis, utilise-les activement dans tes propositions et mentionne-les explicitement"""
+Retourne UNIQUEMENT du JSON valide, sans markdown:
+{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low","reason":"Explication du risque.","original":"texte EXACT du paragraphe [Pxx] copié mot pour mot","proposed":"clause améliorée complète et professionnelle"}]}
+
+Règles:
+- para_idx: numéro du paragraphe [Pxx] que tu modifies
+- original: copie EXACTE du texte du paragraphe, sans rien changer
+- proposed: clause complète, max 80 mots
+- Identifie toutes les clauses problématiques (minimum 5)
+- reason: 1-2 phrases, cite les documents de référence si disponibles"""
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=4000,
         system=system,
-        messages=[{"role": "user", "content": f"Contrat:\n\n{contract_text[:50000]}\n\nRetourne le JSON."}]
+        messages=[{"role": "user", "content": "Contrat:\n\n" + numbered_text + "\n\nRetourne le JSON."}]
     )
     raw = message.content[0].text
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
         raise ValueError("Réponse invalide de l'IA")
-    return json.loads(match.group(0))
+    result = json.loads(match.group(0))
+    
+    # Attach paragraphs for use in apply_track_changes
+    result["_paragraphs"] = paragraphs
+    return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
     """Check if original text roughly matches para_text"""
@@ -201,61 +231,75 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
     applied = set()
+    paragraphs = list(doc.paragraphs)
 
-    for para in doc.paragraphs:
-        para_text = para.text.strip()
-        if not para_text:
+    for mod in accepted:
+        mod_id = mod.get("id")
+        proposed = mod.get("proposed", "").strip()
+        if not proposed:
             continue
-        for mod in accepted:
-            mod_id = mod.get("id")
-            if mod_id in applied:
-                continue
+
+        para = None
+
+        # Method 1: Use para_idx if available (precise)
+        para_idx = mod.get("para_idx")
+        if para_idx is not None and para_idx < len(paragraphs):
+            candidate = paragraphs[para_idx]
+            if candidate.text.strip():
+                para = candidate
+
+        # Method 2: Fuzzy match fallback
+        if para is None:
             original = mod.get("original", "").strip()
-            proposed = mod.get("proposed", "").strip()
-            if not original or not proposed:
-                continue
-            # Use fuzzy matching to find the right paragraph
-            if fuzzy_match(original, para_text):
-                # Clear all runs
-                for run in para.runs:
-                    run.text = ""
-                p = para._p
+            for p in paragraphs:
+                if p.text.strip() and fuzzy_match(original, p.text.strip()):
+                    para = p
+                    break
 
-                # Del element - use actual para text for accuracy
-                del_elem = OxmlElement('w:del')
-                del_elem.set(qn('w:id'), str(rev_id))
-                del_elem.set(qn('w:author'), author)
-                del_elem.set(qn('w:date'), date)
-                del_run = OxmlElement('w:r')
-                del_rpr = OxmlElement('w:rPr')
-                del_run.append(del_rpr)
-                del_text = OxmlElement('w:delText')
-                del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                del_text.text = para_text  # use full para text
-                del_run.append(del_text)
-                del_elem.append(del_run)
-                p.append(del_elem)
-                rev_id += 1
+        if para is None:
+            print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
+            continue
 
-                # Ins element
-                ins_elem = OxmlElement('w:ins')
-                ins_elem.set(qn('w:id'), str(rev_id))
-                ins_elem.set(qn('w:author'), author)
-                ins_elem.set(qn('w:date'), date)
-                ins_run = OxmlElement('w:r')
-                ins_text = OxmlElement('w:t')
-                ins_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                ins_text.text = proposed
-                ins_run.append(ins_text)
-                ins_elem.append(ins_run)
-                p.append(ins_elem)
-                rev_id += 1
+        para_text = para.text.strip()
 
-                applied.add(mod_id)
-                break
+        # Clear all runs
+        for run in para.runs:
+            run.text = ""
+        p = para._p
 
-    # Log how many modifications were applied
-    print(f"Track changes applied: {len(applied)}/{len(accepted)}")
+        # Del element
+        del_elem = OxmlElement('w:del')
+        del_elem.set(qn('w:id'), str(rev_id))
+        del_elem.set(qn('w:author'), author)
+        del_elem.set(qn('w:date'), date)
+        del_run = OxmlElement('w:r')
+        del_rpr = OxmlElement('w:rPr')
+        del_run.append(del_rpr)
+        del_text = OxmlElement('w:delText')
+        del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        del_text.text = para_text
+        del_run.append(del_text)
+        del_elem.append(del_run)
+        p.append(del_elem)
+        rev_id += 1
+
+        # Ins element
+        ins_elem = OxmlElement('w:ins')
+        ins_elem.set(qn('w:id'), str(rev_id))
+        ins_elem.set(qn('w:author'), author)
+        ins_elem.set(qn('w:date'), date)
+        ins_run = OxmlElement('w:r')
+        ins_text_el = OxmlElement('w:t')
+        ins_text_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        ins_text_el.text = proposed
+        ins_run.append(ins_text_el)
+        ins_elem.append(ins_run)
+        p.append(ins_elem)
+        rev_id += 1
+
+        applied.add(mod_id)
+
+    print(f"Track changes: {len(applied)}/{len(accepted)} applied")
     output = io.BytesIO()
     doc.save(output)
     output.seek(0)
@@ -293,10 +337,10 @@ def analyze():
         partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
-        contract_text, _, _ = read_file(file)
+        contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = analyze_contract(contract_text, lang, contract_type, api_key, partie)
+        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
