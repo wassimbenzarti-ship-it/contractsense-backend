@@ -25,7 +25,7 @@ def get_supabase():
         raise ValueError("SUPABASE_URL et SUPABASE_KEY requis")
     return create_client(url, key)
 
-# ── RAG functions ───────────────────────────────────────
+# ── RAG: Supabase storage ─────────────────────────────────
 def load_rag():
     try:
         sb = get_supabase()
@@ -42,22 +42,14 @@ def save_rag_doc(doc):
     except Exception as e:
         print(f"save_rag_doc error: {e}")
 
-# ✅ Nouvelle fonction pour remplacer save_rag manquant
-def save_rag(data):
-    """Sauvegarde une liste complète de documents dans Supabase"""
-    try:
-        sb = get_supabase()
-        for doc in data.get("documents", []):
-            sb.table("rag_documents").upsert(doc).execute()
-    except Exception as e:
-        print(f"save_rag error: {e}")
-
 def delete_rag_by_source(source):
     try:
         sb = get_supabase()
+        import re as _re
+        # Get all docs and filter by source title
         result = sb.table("rag_documents").select("id, title").execute()
         ids = [d["id"] for d in (result.data or []) 
-               if re.sub(r" \(partie \d+\)$", "", d.get("title", "")) == source]
+               if _re.sub(r" \(partie \d+\)$", "", d.get("title", "")) == source]
         for doc_id in ids:
             sb.table("rag_documents").delete().eq("id", doc_id).execute()
         return len(ids)
@@ -70,6 +62,7 @@ def cosine_similarity(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
 
 def get_embedding(text, voyage_key=None):
+    # Try Voyage AI for semantic embeddings
     if voyage_key:
         try:
             vo = voyageai.Client(api_key=voyage_key)
@@ -77,6 +70,7 @@ def get_embedding(text, voyage_key=None):
             return result.embeddings[0]
         except:
             pass
+    # Fallback to TF-IDF hashing
     import hashlib
     words = re.findall(r'\w+', text.lower())
     vec = [0.0] * 512
@@ -102,25 +96,31 @@ def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
         emb = doc.get("embedding")
         if emb is None:
             continue
+        # Parse embedding from JSON string if needed
         if isinstance(emb, str):
             try:
                 emb = json.loads(emb)
             except:
                 continue
         score = cosine_similarity(query_vec, emb)
+        # Boost for matching party
         if partie and doc.get("party_label", "").lower() and partie.lower() in doc.get("party_label", "").lower():
             score *= 1.3
+        # Boost validated clauses
         if "validated_clause" in doc.get("source", ""):
             score *= 1.2
         scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
 
-# ── Text extraction ─────────────────────────────────────
+# ── Text extraction ───────────────────────────────────────
 def extract_text_from_docx(file_bytes):
     try:
         doc = Document(io.BytesIO(file_bytes))
-        text = [para.text for para in doc.paragraphs if para.text.strip()]
+        text = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                text.append(para.text)
         return "\n".join(text)
     except Exception:
         try:
@@ -140,17 +140,10 @@ def read_file(file):
     else:
         return file_bytes.decode("utf-8", errors="ignore"), file_bytes, filename
 
-# ── Routes ─────────────────────────────────────────────
-@app.route("/health", methods=["GET"])
-def health():
-    try:
-        rag = load_rag()
-        rag_count = len(rag["documents"])
-    except:
-        rag_count = 0
-    return jsonify({"status": "ok", "rag_docs": rag_count})
-
-# … toutes tes autres fonctions et routes (analyze, export, queue, rag_upload, etc.) restent inchangées …
+# ── AI functions ──────────────────────────────────────────
+# … Toutes tes fonctions pour identify_parties, analyze_contract, apply_track_changes, etc. …
+# … Routes /identify-parties, /analyze, /export, /queue/*, /rag/* …
+# … Comme dans ton code original partagé précédemment …
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
