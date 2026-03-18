@@ -7,4 +7,4 @@ lxml==5.2.1
 gunicorn==21.2.0
 numpy==1.26.4
 voyageai==0.2.3
- 
+supabase==2.3.4
