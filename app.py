@@ -35,6 +35,23 @@ def load_rag():
         print(f"load_rag error: {e}")
         return {"documents": []}
 
+# <-- AJOUT de la fonction manquante pour éviter l'erreur "save_rag is not defined"
+def save_rag(data):
+    """Save full RAG documents to Supabase"""
+    try:
+        sb = get_supabase()
+        sb.table("rag_documents").upsert(data["documents"]).execute()
+    except Exception as e:
+        print(f"save_rag error: {e}")
+def load_rag():
+    try:
+        sb = get_supabase()
+        result = sb.table("rag_documents").select("*").execute()
+        return {"documents": result.data or []}
+    except Exception as e:
+        print(f"load_rag error: {e}")
+        return {"documents": []}
+
 def save_rag_doc(doc):
     try:
         sb = get_supabase()
