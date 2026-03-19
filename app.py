@@ -83,6 +83,8 @@ def supa_get(table, params=None):
 def supa_insert(table, data):
     url = SUPA_URL + "/rest/v1/" + table
     r = req_lib.post(url, headers=supa_headers(), json=data, timeout=30)
+    if not r.ok:
+        print("supa_insert ERROR " + str(r.status_code) + ": " + r.text[:500])
     r.raise_for_status()
     return r
 
