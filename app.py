@@ -220,35 +220,54 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     rag_context = ""
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=5, partie=partie)
+        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=6, partie=partie)
         if relevant_docs:
-            rag_context = "\n\nDOCUMENTS DE RÉFÉRENCE JURIDIQUE:\n"
-            for doc in relevant_docs:
-                title = doc.get("title", "Document")
-                content_preview = doc.get("content", "")[:800]
-                rag_context += "\n=== " + title + " ===\n" + content_preview + "\n"
-            rag_context += "\n(FIN DES DOCUMENTS DE RÉFÉRENCE)\n"
-    except:
-        pass
+            validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
+            reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
 
-    system = """Tu es un juriste expert. Analyse ce contrat et propose des modifications pour protéger """ + partie + """.
-LANGUE OBLIGATOIRE: Réponds UNIQUEMENT dans la langue du contrat.
-Type de contrat: """ + contract_type + """
-Partie à protéger: """ + partie + """
-""" + rag_context + """
+            if validated_clauses:
+                rag_context += "\n\nCLAUSES VALIDÉES PAR DES JURISTES (utilise ces reformulations comme modèles):\n"
+                for doc in validated_clauses:
+                    content_raw = doc.get("content", "")
+                    rag_context += "\n---\n" + content_raw[:600] + "\n"
+                rag_context += "\n→ Ces clauses ont été validées par des juristes. Inspire-toi directement de leur formulation.\n"
 
-IMPORTANT: Le contrat est fourni avec des numéros de paragraphes [P0], [P1], etc.
-Tu DOIS utiliser le numéro exact du paragraphe et copier son texte EXACT dans le champ "original".
+            if reference_docs:
+                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÉFÉRENCE:\n"
+                for doc in reference_docs:
+                    rag_context += "\n=== " + doc.get("title", "Document") + " ===\n" + doc.get("content", "")[:500] + "\n"
+    except Exception as e:
+        print("RAG search error: " + str(e))
 
-Retourne UNIQUEMENT du JSON valide, sans markdown:
-{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low","reason":"Explication du risque.","original":"texte EXACT du paragraphe [Pxx] copié mot pour mot","proposed":"clause améliorée complète et professionnelle"}]}
-
-Règles:
-- para_idx: numéro du paragraphe [Pxx] que tu modifies
-- original: copie EXACTE du texte du paragraphe, sans rien changer
-- proposed: clause complète, max 80 mots
-- Identifie toutes les clauses problématiques (minimum 5)
-- reason: 1-2 phrases, cite les documents de référence si disponibles"""
+    system = (
+        "Tu es un juriste expert spécialisé en analyse contractuelle. "
+        "Tu analyses ce contrat et proposes des modifications pour protéger " + partie + ".\n\n"
+        "LANGUE: Réponds UNIQUEMENT dans la langue du contrat.\n"
+        "TYPE: " + contract_type + "\n"
+        "PARTIE À PROTÉGER: " + partie + "\n"
+        + rag_context +
+        "\n\nMÉTHODE D'ANALYSE:\n"
+        "1. Identifie chaque clause déséquilibrée ou risquée pour " + partie + "\n"
+        "2. Si une CLAUSE VALIDÉE similaire existe ci-dessus, utilise sa formulation comme base\n"
+        "3. Si un DOCUMENT DE RÉFÉRENCE est pertinent, cite-le explicitement\n"
+        "4. Sinon, propose une reformulation professionnelle standard\n\n"
+        "IMPORTANT: Le contrat est numéroté [P0], [P1], etc. "
+        "Utilise le numéro exact du paragraphe.\n\n"
+        "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
+        '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
+        '"risk":"high|medium|low",'
+        '"reason":"Explication + source si clause validée utilisée",'
+        '"original":"texte EXACT du paragraphe copié mot pour mot",'
+        '"proposed":"clause reformulée, inspirée des clauses validées si disponibles",'
+        '"rag_source":"titre du document RAG utilisé ou null"}]}\n\n'
+        "Règles STRICTES:\n"
+        "- Identifie TOUTES les clauses problématiques (minimum 5, pas de maximum)\n"
+        "- para_idx: numéro entier du paragraphe [Pxx]\n"
+        "- original: copie EXACTE du texte, sans modification\n"
+        "- proposed: max 80 mots, professionnel\n"
+        "- reason: cite explicitement la source RAG si utilisée (ex: 'Basé sur clause validée: Paiement favorable prestataire')\n"
+        "- rag_source: nom du document RAG utilisé, ou null si aucun"
+    )
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -261,8 +280,11 @@ Règles:
     if not match:
         raise ValueError("Réponse invalide de l'IA")
     result = json.loads(match.group(0))
-    
-    # Attach paragraphs for use in apply_track_changes
+
+    # Add confidence score based on RAG usage
+    mods = result.get("modifications", [])
+    rag_backed = sum(1 for m in mods if m.get("rag_source"))
+    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
     result["_paragraphs"] = paragraphs
     return result
 
@@ -505,6 +527,10 @@ def rag_contribute():
         contract_text, _, filename = read_file(file)
         accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
         rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
+
+        # Store rejection signals for learning (silent, no RAG indexing — just metadata)
+        if rejected:
+            print("Rejected clauses (" + str(len(rejected)) + "): " + ", ".join([m.get("clause_name","?") for m in rejected]))
 
         # AI scoring of contract quality for RAG
         client = anthropic.Anthropic(api_key=api_key)
@@ -758,4 +784,4 @@ def rag_delete():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)^plllll
+    app.run(host="0.0.0.0", port=port)
