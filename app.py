@@ -17,6 +17,51 @@ from docx.oxml import OxmlElement
 app = Flask(__name__)
 CORS(app)
 
+# ── Party label normalization ─────────────────────────────
+CONTRACT_CATEGORIES = {
+    "service": "Prestation de services",
+    "saas": "SaaS / Logiciel",
+    "nda": "Confidentialite (NDA)",
+    "employment": "Contrat de travail",
+    "purchase": "Achat / Vente",
+    "partnership": "Partenariat",
+    "collaboration": "Convention de collaboration",
+    "generic": "Generique",
+}
+
+PARTY_KEYWORDS = [
+    (["prestataire", "service provider", "fournisseur", "mandate"], "favorable prestataire"),
+    (["client", "customer", "mandant", "donneur"], "favorable client"),
+    (["employeur", "employer"], "favorable employeur"),
+    (["employe", "employee", "salarie"], "favorable employe"),
+    (["divulgateur", "disclosing"], "favorable divulgateur"),
+    (["destinataire", "receiving"], "favorable destinataire"),
+    (["vendeur", "seller"], "favorable vendeur"),
+    (["acheteur", "buyer"], "favorable acheteur"),
+]
+
+def normalize_party_label(partie, contract_type=None):
+    if not partie:
+        return "neutre"
+    p = partie.lower().strip()
+    for keywords, label in PARTY_KEYWORDS:
+        if any(k in p for k in keywords):
+            return label
+    # Derive from contract type
+    defaults = {
+        "service": "favorable prestataire",
+        "saas": "favorable prestataire",
+        "collaboration": "favorable prestataire",
+        "employment": "favorable employe",
+        "nda": "favorable divulgateur",
+        "purchase": "favorable vendeur",
+    }
+    if contract_type in defaults:
+        return defaults[contract_type]
+    # Clean up — remove company names, keep first word
+    first_word = p.split()[0] if p.split() else p
+    return "favorable " + first_word
+
 # ── Supabase client ──────────────────────────────────────
 SUPA_URL = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI")
