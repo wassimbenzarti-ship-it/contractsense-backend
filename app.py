@@ -174,7 +174,8 @@ def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
                 continue
         score = cosine_similarity(query_vec, emb)
         # Boost for matching party
-        if partie and doc.get("party_label", "").lower() and partie.lower() in doc.get("party_label", "").lower():
+        doc_label = doc.get("party_label") or ""
+        if partie and doc_label and partie.lower() in doc_label.lower():
             score *= 1.3
         # Boost validated clauses
         if "validated_clause" in doc.get("source", ""):
@@ -832,4 +833,4 @@ def rag_delete():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, timeout=120)
