@@ -19,30 +19,15 @@ CORS(app)
 
 # ── Supabase client ──────────────────────────────────────
 def get_supabase():
-    url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_KEY", "")
-    if not url or not key:
-        raise ValueError("SUPABASE_URL et SUPABASE_KEY requis")
+    url = (os.environ.get("SUPABASE_URL") or 
+           os.environ.get("SUPABASE_ANON_KEY") or
+           "https://nezxohrkikgjegnhgpyn.supabase.co")
+    key = (os.environ.get("SUPABASE_KEY") or 
+           os.environ.get("SUPABASE_ANON_KEY") or
+           "sb_publishable_awINabud2tpfSRNY6QY3FA_JF1SCDaO")
     return create_client(url, key)
 
 # ── RAG: Supabase storage ─────────────────────────────────
-def load_rag():
-    try:
-        sb = get_supabase()
-        result = sb.table("rag_documents").select("*").execute()
-        return {"documents": result.data or []}
-    except Exception as e:
-        print(f"load_rag error: {e}")
-        return {"documents": []}
-
-# <-- AJOUT de la fonction manquante pour éviter l'erreur "save_rag is not defined"
-def save_rag(data):
-    """Save full RAG documents to Supabase"""
-    try:
-        sb = get_supabase()
-        sb.table("rag_documents").upsert(data["documents"]).execute()
-    except Exception as e:
-        print(f"save_rag error: {e}")
 def load_rag():
     try:
         sb = get_supabase()
@@ -357,6 +342,14 @@ def apply_track_changes(file_bytes, modifications, decisions):
     return output
 
 # ── Routes ────────────────────────────────────────────────
+@app.route("/debug-env", methods=["GET"])
+def debug_env():
+    return jsonify({
+        "supabase_url": os.environ.get("SUPABASE_URL", "NOT SET")[:30] if os.environ.get("SUPABASE_URL") else "NOT SET",
+        "supabase_key": "SET" if os.environ.get("SUPABASE_KEY") else "NOT SET",
+        "all_env_keys": [k for k in os.environ.keys() if "SUPA" in k or "supa" in k]
+    })
+
 @app.route("/health", methods=["GET"])
 def health():
     try:
