@@ -19,12 +19,8 @@ CORS(app)
 
 # ── Supabase client ──────────────────────────────────────
 def get_supabase():
-    url = (os.environ.get("SUPABASE_URL") or 
-           os.environ.get("SUPABASE_ANON_KEY") or
-           "https://nezxohrkikgjegnhgpyn.supabase.co")
-    key = (os.environ.get("SUPABASE_KEY") or 
-           os.environ.get("SUPABASE_ANON_KEY") or
-           "sb_publishable_awINabud2tpfSRNY6QY3FA_JF1SCDaO")
+    url = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
+    key = os.environ.get("SUPABASE_KEY", "sb_secret_WJancDWtFcP2YcQ7DhgOZA_3TXtagPm")
     return create_client(url, key)
 
 # ── RAG: Supabase storage ─────────────────────────────────
@@ -40,9 +36,15 @@ def load_rag():
 def save_rag_doc(doc):
     try:
         sb = get_supabase()
-        sb.table("rag_documents").upsert(doc).execute()
+        doc_copy = dict(doc)
+        if "embedding" in doc_copy and isinstance(doc_copy["embedding"], list):
+            doc_copy["embedding"] = json.dumps(doc_copy["embedding"])
+        result = sb.table("rag_documents").insert(doc_copy).execute()
+        print("save_rag_doc OK: " + str(doc_copy.get("title","?"))[:50])
+        return result
     except Exception as e:
-        print(f"save_rag_doc error: {e}")
+        print("save_rag_doc ERROR: " + str(type(e).__name__) + ": " + str(e))
+        raise
 
 def delete_rag_by_source(source):
     try:
