@@ -20,7 +20,7 @@ CORS(app)
 # ── Supabase client ──────────────────────────────────────
 def get_supabase():
     url = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
-    key = os.environ.get("SUPABASE_KEY", "sb_secret_WJancDWtFcP2YcQ7DhgOZA_3TXtagPm")
+    key = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI")
     return create_client(url, key)
 
 # ── RAG: Supabase storage ─────────────────────────────────
