@@ -103,9 +103,19 @@ def load_rag():
         print("load_rag error: " + str(e))
         return {"documents": []}
 
+def clean_text(text):
+    """Remove null bytes and invalid unicode for Supabase"""
+    if not isinstance(text, str):
+        return text
+    return text.replace("\x00", "").replace("\u0000", "")
+
 def save_rag_doc(doc):
     try:
         doc_copy = dict(doc)
+        # Clean all string fields
+        for k, v in doc_copy.items():
+            if isinstance(v, str):
+                doc_copy[k] = clean_text(v)
         if "embedding" in doc_copy and isinstance(doc_copy["embedding"], list):
             doc_copy["embedding"] = json.dumps(doc_copy["embedding"])
         supa_insert("rag_documents", doc_copy)
@@ -209,9 +219,12 @@ def read_file(file):
     file_bytes = file.read()
     filename = file.filename.lower()
     if filename.endswith(".docx") or filename.endswith(".doc"):
-        return extract_text_from_docx(file_bytes), file_bytes, filename
+        text = extract_text_from_docx(file_bytes)
     else:
-        return file_bytes.decode("utf-8", errors="ignore"), file_bytes, filename
+        text = file_bytes.decode("utf-8", errors="ignore")
+    # Remove null bytes
+    text = text.replace("\x00", "").replace("\u0000", "") if text else text
+    return text, file_bytes, filename
 
 # ── AI functions ──────────────────────────────────────────
 def identify_parties(contract_text, lang, api_key):
