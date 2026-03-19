@@ -608,25 +608,26 @@ def queue_validate():
             })
 
         # Also index accepted modifications as separate entries
-        for mod in contract.get("accepted_modifications", []):
+        accepted_mods = contract.get("accepted_modifications", [])
+        if isinstance(accepted_mods, str):
+            accepted_mods = json.loads(accepted_mods)
+        for mod in accepted_mods:
             mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
             embedding = get_embedding(mod_text, voyage_key)
-            data["documents"].append({
+            save_rag_doc({
                 "id": str(uuid.uuid4()),
-                "title": f"[CLAUSE] {mod.get('clause_name','')} — {party_label}",
+                "title": "[CLAUSE] " + mod.get('clause_name','') + " — " + party_label,
                 "category": "validated_clause",
                 "party_label": party_label,
                 "partie": contract.get("partie", ""),
                 "contract_type": category,
                 "content": mod_text,
-                "embedding": embedding,
+                "embedding": json.dumps(embedding),
                 "source": "admin_validated_clause",
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
-        save_rag(data)
-        queue["pending"] = [c for c in queue["pending"] if c["id"] != contract_id]
-        save_queue(queue)
+        delete_queue_item(contract_id)
 
         return jsonify({"success": True, "chunks_indexed": len(chunks)})
 
@@ -674,21 +675,23 @@ def rag_upload():
             chunk = " ".join(words[i:i+chunk_size])
             chunks.append(chunk)
 
-        data = load_rag()
         import uuid
+        voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
         for i, chunk in enumerate(chunks):
-            voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
             embedding = get_embedding(chunk, voyage_key)
-            data["documents"].append({
+            chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
+            save_rag_doc({
                 "id": str(uuid.uuid4()),
-                "title": f"{title} (partie {i+1})" if len(chunks) > 1 else title,
+                "title": chunk_title,
                 "category": category,
                 "content": chunk,
-                "embedding": embedding
+                "embedding": json.dumps(embedding),
+                "source": "manual_upload",
+                "validated_at": datetime.datetime.now().isoformat()
             })
 
-        save_rag(data)
-        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(data["documents"])})
+        total = load_rag()
+        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
