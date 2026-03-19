@@ -9,7 +9,7 @@ import zipfile
 import datetime
 import numpy as np
 import voyageai
-from supabase import create_client
+import requests as req_lib
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -18,47 +18,68 @@ app = Flask(__name__)
 CORS(app)
 
 # ── Supabase client ──────────────────────────────────────
-def get_supabase():
-    url = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
-    key = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI")
-    return create_client(url, key)
+SUPA_URL = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
+SUPA_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI")
 
-# ── RAG: Supabase storage ─────────────────────────────────
+def supa_headers():
+    return {
+        "apikey": SUPA_KEY,
+        "Authorization": "Bearer " + SUPA_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+
+def supa_get(table, params=None):
+    url = SUPA_URL + "/rest/v1/" + table
+    r = req_lib.get(url, headers=supa_headers(), params=params, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def supa_insert(table, data):
+    url = SUPA_URL + "/rest/v1/" + table
+    r = req_lib.post(url, headers=supa_headers(), json=data, timeout=30)
+    r.raise_for_status()
+    return r
+
+def supa_delete(table, filters):
+    url = SUPA_URL + "/rest/v1/" + table
+    r = req_lib.delete(url, headers=supa_headers(), params=filters, timeout=30)
+    r.raise_for_status()
+    return r
+
+# ── RAG: Supabase REST storage ────────────────────────────
 def load_rag():
     try:
-        sb = get_supabase()
-        result = sb.table("rag_documents").select("*").execute()
-        return {"documents": result.data or []}
+        docs = supa_get("rag_documents", {"select": "*", "limit": "1000"})
+        return {"documents": docs or []}
     except Exception as e:
-        print(f"load_rag error: {e}")
+        print("load_rag error: " + str(e))
         return {"documents": []}
 
 def save_rag_doc(doc):
     try:
-        sb = get_supabase()
         doc_copy = dict(doc)
         if "embedding" in doc_copy and isinstance(doc_copy["embedding"], list):
             doc_copy["embedding"] = json.dumps(doc_copy["embedding"])
-        result = sb.table("rag_documents").insert(doc_copy).execute()
+        supa_insert("rag_documents", doc_copy)
         print("save_rag_doc OK: " + str(doc_copy.get("title","?"))[:50])
-        return result
     except Exception as e:
-        print("save_rag_doc ERROR: " + str(type(e).__name__) + ": " + str(e))
+        print("save_rag_doc ERROR: " + str(e))
         raise
 
 def delete_rag_by_source(source):
     try:
-        sb = get_supabase()
         import re as _re
-        # Get all docs and filter by source title
-        result = sb.table("rag_documents").select("id, title").execute()
-        ids = [d["id"] for d in (result.data or []) 
-               if _re.sub(r" \(partie \d+\)$", "", d.get("title", "")) == source]
-        for doc_id in ids:
-            sb.table("rag_documents").delete().eq("id", doc_id).execute()
-        return len(ids)
+        docs = supa_get("rag_documents", {"select": "id,title", "limit": "1000"})
+        count = 0
+        for d in (docs or []):
+            base = _re.sub(r" \(partie \d+\)$", "", d.get("title", ""))
+            if base == source:
+                supa_delete("rag_documents", {"id": "eq." + d["id"]})
+                count += 1
+        return count
     except Exception as e:
-        print(f"delete_rag error: {e}")
+        print("delete_rag error: " + str(e))
         return 0
 
 def cosine_similarity(a, b):
@@ -346,20 +367,21 @@ def apply_track_changes(file_bytes, modifications, decisions):
 # ── Routes ────────────────────────────────────────────────
 @app.route("/debug-env", methods=["GET"])
 def debug_env():
+    try:
+        test = supa_get("rag_documents", {"select": "id", "limit": "1"})
+        supa_status = "OK - " + str(len(test)) + " docs"
+    except Exception as e:
+        supa_status = "ERROR: " + str(e)
     return jsonify({
-        "supabase_url": os.environ.get("SUPABASE_URL", "NOT SET")[:30] if os.environ.get("SUPABASE_URL") else "NOT SET",
-        "supabase_key": "SET" if os.environ.get("SUPABASE_KEY") else "NOT SET",
-        "all_env_keys": [k for k in os.environ.keys() if "SUPA" in k or "supa" in k]
+        "supabase_url": SUPA_URL[:40],
+        "supabase_key_set": bool(SUPA_KEY),
+        "supabase_test": supa_status
     })
 
 @app.route("/health", methods=["GET"])
 def health():
-    try:
-        rag = load_rag()
-        rag_count = len(rag["documents"])
-    except:
-        rag_count = 0
-    return jsonify({"status": "ok", "rag_docs": rag_count})
+    rag = load_rag()
+    return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
 @app.route("/identify-parties", methods=["POST"])
 def identify_parties_route():
@@ -441,34 +463,30 @@ def export():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ── Queue: Supabase storage ──────────────────────────────
+# ── Queue: Supabase REST storage ─────────────────────────
 def load_queue():
     try:
-        sb = get_supabase()
-        result = sb.table("queue_pending").select("*").order("submitted_at", desc=False).execute()
-        return {"pending": result.data or []}
+        items = supa_get("queue_pending", {"select": "*", "order": "submitted_at", "limit": "200"})
+        return {"pending": items or []}
     except Exception as e:
-        print(f"load_queue error: {e}")
+        print("load_queue error: " + str(e))
         return {"pending": []}
 
 def save_queue_item(item):
     try:
-        sb = get_supabase()
-        # Convert lists/dicts to JSON for Supabase
         item_copy = dict(item)
         for field in ["key_clauses", "accepted_modifications"]:
             if field in item_copy and not isinstance(item_copy[field], str):
                 item_copy[field] = json.dumps(item_copy.get(field, []))
-        sb.table("queue_pending").upsert(item_copy).execute()
+        supa_insert("queue_pending", item_copy)
     except Exception as e:
-        print(f"save_queue_item error: {e}")
+        print("save_queue_item error: " + str(e))
 
 def delete_queue_item(item_id):
     try:
-        sb = get_supabase()
-        sb.table("queue_pending").delete().eq("id", item_id).execute()
+        supa_delete("queue_pending", {"id": "eq." + item_id})
     except Exception as e:
-        print(f"delete_queue_item error: {e}")
+        print("delete_queue_item error: " + str(e))
 
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
@@ -740,4 +758,4 @@ def rag_delete():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port)^plllll
