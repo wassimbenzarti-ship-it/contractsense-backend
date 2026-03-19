@@ -8,3 +8,4 @@ numpy==1.26.4
 voyageai==0.2.3
 httpx==0.25.2
 supabase==2.7.4
+ 
