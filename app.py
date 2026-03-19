@@ -552,13 +552,14 @@ Regles:
   * partnership = association, joint-venture
   * purchase = achat, vente
   * saas = logiciel, abonnement
-- party_label: utilise un label GENERIQUE selon le role de la partie
-  * service/prestation/collaboration → "favorable client" ou "favorable prestataire"
-  * travail → "favorable employeur" ou "favorable employe"
-  * nda → "favorable divulgateur" ou "favorable destinataire"
+- party_label: utilise un label GENERIQUE selon le role de la partie dans CE contrat
+  * service/prestation/collaboration/mission → "favorable client" ou "favorable prestataire"
+  * travail/salarie → "favorable employeur" ou "favorable employe"
+  * nda/confidentialite → "favorable divulgateur" ou "favorable destinataire"
   * achat/vente → "favorable acheteur" ou "favorable vendeur"
-  * partenariat → "favorable partenaire A" ou "favorable partenaire B"
-  La partie favorisee est: """ + (partie if partie else "neutre") + """
+  * partenariat/association → "favorable partenaire A" ou "favorable partenaire B"
+  NE JAMAIS utiliser le nom d une societe ou d une personne dans party_label.
+  La partie favorisee dans ce contrat est: """ + (partie if partie else "neutre") + """
 - score: 0-100 selon la qualite et completude du contrat
 Score eleve = contrat complet avec clauses interessantes a reutiliser."""
 
@@ -579,7 +580,7 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
             "contract_text": contract_text[:50000],
             "filename": filename,
             "partie": partie,
-            "party_label": scoring.get("party_label", "favorable " + partie),
+            "party_label": normalize_party_label(scoring.get("party_label", partie), contract_type),
             "contract_type": contract_type,
             "score": scoring.get("score", 50),
             "category": scoring.get("category", contract_type),
@@ -661,11 +662,12 @@ def queue_validate():
         for mod in accepted_mods:
             mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
             embedding = get_embedding(mod_text, voyage_key)
+            normalized_label = normalize_party_label(party_label, category)
             save_rag_doc({
                 "id": str(uuid.uuid4()),
-                "title": "[CLAUSE] " + mod.get('clause_name','') + " — " + party_label,
+                "title": "[" + CONTRACT_CATEGORIES.get(category, category.upper()) + "] " + mod.get("clause_name","") + " — " + normalized_label,
                 "category": "validated_clause",
-                "party_label": party_label,
+                "party_label": normalized_label,
                 "partie": contract.get("partie", ""),
                 "contract_type": category,
                 "content": mod_text,
