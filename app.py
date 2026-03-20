@@ -427,6 +427,43 @@ def fuzzy_match(original, para_text, threshold=0.60):
     overlap = len(orig_words_set & para_words_set) / len(orig_words_set)
     return overlap >= threshold
 
+def create_docx_with_changes(contract_text, modifications, decisions):
+    """Create new DOCX for old .doc files that cant be processed directly"""
+    from docx import Document as DocxDocument
+    doc = DocxDocument()
+    doc.add_heading('Document avec modifications ContractSense', 0)
+
+    accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+
+    # Add note
+    note = doc.add_paragraph()
+    note.add_run("Note: Document généré depuis un fichier .doc — modifications acceptées appliquées ci-dessous.").italic = True
+    doc.add_paragraph()
+
+    # Add each accepted modification as track change style
+    for mod in accepted:
+        doc.add_heading(mod.get("clause_name", "Clause"), level=2)
+
+        # Original (strikethrough red)
+        p_orig = doc.add_paragraph()
+        run_orig = p_orig.add_run("ORIGINAL: " + mod.get("original", ""))
+        from docx.shared import RGBColor
+        run_orig.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+        run_orig.font.strike = True
+
+        # Proposed (green)
+        p_prop = doc.add_paragraph()
+        run_prop = p_prop.add_run("MODIFIÉ: " + mod.get("proposed", ""))
+        run_prop.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
+        run_prop.font.bold = True
+
+        doc.add_paragraph()
+
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+    return output
+
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
     author = "ContractSense"
@@ -573,8 +610,12 @@ def export():
         file_bytes = file.read()
         filename = file.filename.lower()
 
-        if filename.endswith(".docx") or filename.endswith(".doc"):
+        if filename.endswith(".docx"):
             output = apply_track_changes(file_bytes, modifications, decisions)
+        elif filename.endswith(".doc"):
+            # Old .doc format — extract text then create new DOCX
+            doc_text = extract_text_from_docx(file_bytes) or ""
+            output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
             doc.add_heading('ContractSense - Modifications acceptées', 0)
