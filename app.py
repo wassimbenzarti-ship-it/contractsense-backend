@@ -152,10 +152,18 @@ def get_embedding(text, voyage_key=None):
     # Try Voyage AI for semantic embeddings
     if voyage_key:
         try:
+            import signal
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Voyage AI timeout")
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(15)  # 15 second timeout
             vo = voyageai.Client(api_key=voyage_key)
-            result = vo.embed([text[:2000]], model="voyage-law-2", input_type="document")
+            result = vo.embed([text[:1000]], model="voyage-law-2", input_type="document")
+            signal.alarm(0)
             return result.embeddings[0]
-        except:
+        except Exception as e:
+            signal.alarm(0)
+            print("Voyage AI error: " + str(e))
             pass
     # Fallback to TF-IDF hashing
     import hashlib
@@ -383,10 +391,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     )
 
     # Limit text to avoid timeout
-    truncated_text = numbered_text[:30000]
+    truncated_text = numbered_text[:15000]
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=3000,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2500,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
