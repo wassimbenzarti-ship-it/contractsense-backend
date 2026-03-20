@@ -368,7 +368,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "RÈGLE ABSOLUE: Chaque modification proposée doit AVANTAGER " + partie + ".\n"
         "Si une clause est déjà favorable à " + partie + ", ne la modifie pas.\n"
         "Si une clause est neutre, modifie-la pour qu'elle favorise " + partie + ".\n"
-        "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n\n"
+        "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n"
+        "CONTRAINTE LÉGALE: Toutes les modifications doivent rester dans le cadre légal applicable.\n"
+        "Ne propose jamais de clauses illégales, abusives ou contraires à l'ordre public.\n"
+        "Pour les contrats de travail, respecte impérativement le Code du Travail (préavis légaux, indemnités minimales, droits fondamentaux du salarié).\n\n"
         + rag_context +
         "\n\nATTENTION sur les clauses validées du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
