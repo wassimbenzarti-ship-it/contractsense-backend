@@ -427,7 +427,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- Minimum 5 modifications, pas de maximum\n"
         "- para_idx: numéro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
-        "- proposed: max 80 mots, favorise explicitement " + partie + "\n"
+        "- proposed: clause juridique complète et professionnelle, rédigée en style contractuel soutenu\n"
+        "- proposed: utilise le vocabulaire juridique approprié (nonobstant, en ce compris, à titre de, ci-après, sous réserve de...)\n"
+        "- proposed: structure avec sujet + verbe + objet + conditions + exceptions si nécessaire\n"
+        "- proposed: max 120 mots, mais suffisamment détaillé pour être opérationnel sans ambiguïté\n"
+        "- proposed: jamais de blancs ou placeholders comme ___ ou [à compléter]\n"
+        "- proposed: rédige comme un avocat d'affaires senior rédigeant pour un client exigeant\n"
         "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
     )
 
