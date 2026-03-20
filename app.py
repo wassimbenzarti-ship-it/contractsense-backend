@@ -22,6 +22,43 @@ from docx.oxml import OxmlElement
 app = Flask(__name__)
 CORS(app)
 
+def get_legal_framework(contract_type):
+    """Return mandatory legal constraints per contract type"""
+    frameworks = {
+        "employment": (
+            "DROIT DU TRAVAIL MAROCAIN — RÈGLES IMPÉRATIVES:\n"
+            "- CDD (contrat de projet/durée déterminée): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+            "- Renouvellement abusif = requalification automatique en CDI\n"
+            "- Préavis légaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
+            "- Préavis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
+            "- Indemnité de licenciement: 96h/an pour les 3 premières années, 144h/an après\n"
+            "- Licenciement abusif interdit — cause réelle et sérieuse obligatoire\n"
+            "- Heures supplémentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
+            "- Congé annuel: 1,5 jour/mois travaillé (min 18 jours/an)\n"
+            "- Toute clause moins favorable que la loi est NULLE de plein droit"
+        ),
+        "nda": (
+            "DROIT MAROCAIN — CONFIDENTIALITÉ:\n"
+            "- Durée maximale raisonnable: 3-5 ans post-contrat\n"
+            "- Clause doit définir précisément les informations confidentielles\n"
+            "- Pénalités doivent être proportionnées (Art. 264 DOC)"
+        ),
+        "service": (
+            "DROIT MAROCAIN — PRESTATION DE SERVICES:\n"
+            "- Délai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
+            "- Pénalités de retard légales: taux directeur BAM + 3 points\n"
+            "- Clauses limitatives de responsabilité admises si non abusives\n"
+            "- Clause de non-concurrence: limitée dans le temps et l'espace"
+        ),
+        "purchase": (
+            "DROIT MAROCAIN — VENTE:\n"
+            "- Garantie des vices cachés: 1 an (Art. 573 DOC)\n"
+            "- Transfert de propriété: à la livraison sauf clause contraire\n"
+            "- Réserve de propriété possible jusqu'au paiement complet"
+        ),
+    }
+    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes généraux du DOC.")
+
 # ── Party label normalization ─────────────────────────────
 CONTRACT_CATEGORIES = {
     "service": "Prestation de services",
@@ -369,9 +406,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "Si une clause est déjà favorable à " + partie + ", ne la modifie pas.\n"
         "Si une clause est neutre, modifie-la pour qu'elle favorise " + partie + ".\n"
         "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n"
-        "CONTRAINTE LÉGALE: Toutes les modifications doivent rester dans le cadre légal applicable.\n"
-        "Ne propose jamais de clauses illégales, abusives ou contraires à l'ordre public.\n"
-        "Pour les contrats de travail, respecte impérativement le Code du Travail (préavis légaux, indemnités minimales, droits fondamentaux du salarié).\n\n"
+        "CONTRAINTE LÉGALE ABSOLUE: Toutes les modifications doivent rester dans le cadre légal.\n"
+        "Ne propose jamais de clauses illégales, abusives ou contraires à l'ordre public.\n\n"
+        + get_legal_framework(contract_type) +
+        "\n\n"
         + rag_context +
         "\n\nATTENTION sur les clauses validées du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
@@ -695,7 +733,12 @@ def rag_contribute():
         accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
         rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
 
-        # Store rejection signals for learning (silent, no RAG indexing — just metadata)
+        # Use user-edited version if available — higher quality for RAG
+        for m in accepted:
+            if m.get("proposed_edited"):
+                m["proposed"] = m["proposed_edited"]
+                m["user_refined"] = True
+
         if rejected:
             print("Rejected clauses (" + str(len(rejected)) + "): " + ", ".join([m.get("clause_name","?") for m in rejected]))
 
