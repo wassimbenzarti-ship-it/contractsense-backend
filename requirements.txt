@@ -9,3 +9,4 @@ numpy==1.26.4
 voyageai==0.2.3
 httpx==0.25.2
 requests==2.31.0
+olefile==0.47
