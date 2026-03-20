@@ -11,6 +11,11 @@ import numpy as np
 import voyageai
 import requests as req_lib
 from docx import Document
+try:
+    import olefile as olefile_lib
+    HAS_OLEFILE = True
+except ImportError:
+    HAS_OLEFILE = False
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
@@ -197,6 +202,30 @@ def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     return [doc for _, doc in scored[:top_k]]
 
 # ── Text extraction ───────────────────────────────────────
+def extract_text_from_doc_ole(file_bytes):
+    """Extract text from old .doc format using olefile"""
+    if not HAS_OLEFILE:
+        return None
+    try:
+        ole = olefile_lib.OleFileIO(io.BytesIO(file_bytes))
+        if not ole.exists('WordDocument'):
+            return None
+        stream = ole.openstream('WordDocument').read()
+        text = stream.decode('latin-1', errors='ignore')
+        clean = re.sub(r'[^\x20-\x7E\x80-\xFF\n\r\t]', ' ', text)
+        clean = re.sub(r' {3,}', ' ', clean)
+        clean = re.sub(r'\n{3,}', '\n\n', clean)
+        # Skip binary header — find first readable content
+        for marker in ['CONTRAT', 'Contrat', 'CONTRACT', 'ACCORD', 'CONVENTION']:
+            idx = clean.find(marker)
+            if idx != -1 and idx < len(clean) // 2:
+                return clean[idx:]
+        # Fallback: skip first third
+        return clean[len(clean)//4:]
+    except Exception as e:
+        print("OLE extract error: " + str(e))
+        return None
+
 def extract_text_from_docx(file_bytes):
     try:
         doc = Document(io.BytesIO(file_bytes))
@@ -206,6 +235,10 @@ def extract_text_from_docx(file_bytes):
                 text.append(para.text)
         return "\n".join(text)
     except Exception:
+        # Try OLE for old .doc format
+        ole_text = extract_text_from_doc_ole(file_bytes)
+        if ole_text:
+            return ole_text
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
                 if 'word/document.xml' in z.namelist():
@@ -213,7 +246,7 @@ def extract_text_from_docx(file_bytes):
                     text = re.sub(r'<[^>]+>', ' ', doc_xml)
                     return re.sub(r'\s+', ' ', text).strip()
         except Exception as e2:
-            raise ValueError(f"Impossible de lire le fichier Word: {str(e2)}")
+            raise ValueError("Impossible de lire le fichier Word: " + str(e2))
 
 def read_file(file):
     file_bytes = file.read()
@@ -300,35 +333,53 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     except Exception as e:
         print("RAG search error: " + str(e))
 
+    # Define what "favorable" means for each role
+    role_objectives = {
+        "employeur": "maximiser la flexibilité opérationnelle, minimiser les obligations et coûts, renforcer le pouvoir de direction et de contrôle, faciliter la résiliation, protéger les intérêts commerciaux",
+        "employe": "garantir la stabilité de l'emploi, maximiser les protections et indemnités, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
+        "prestataire": "garantir le paiement, limiter la responsabilité, protéger la propriété intellectuelle, encadrer les modifications de scope",
+        "client": "garantir la qualité et les délais, maximiser les pénalités, faciliter la résiliation, protéger les données",
+        "acheteur": "garantir la conformité, maximiser les garanties, faciliter les recours",
+        "vendeur": "garantir le paiement, limiter les garanties et responsabilités",
+    }
+    # Extract role from partie label
+    role_key = "employeur"
+    for key in role_objectives:
+        if key in partie.lower():
+            role_key = key
+            break
+    role_obj = role_objectives.get(role_key, "protéger ses intérêts")
+
     system = (
-        "Tu es un juriste expert spécialisé en analyse contractuelle. "
-        "Tu analyses ce contrat et proposes des modifications pour protéger " + partie + ".\n\n"
+        "Tu es un juriste expert spécialisé en analyse contractuelle.\n"
+        "MISSION: Analyser ce contrat et proposer des modifications qui FAVORISENT " + partie + ".\n\n"
         "LANGUE: Réponds UNIQUEMENT dans la langue du contrat.\n"
-        "TYPE: " + contract_type + "\n"
+        "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
+        "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
+        "RÈGLE ABSOLUE: Chaque modification proposée doit AVANTAGER " + partie + ".\n"
+        "Si une clause est déjà favorable à " + partie + ", ne la modifie pas.\n"
+        "Si une clause est neutre, modifie-la pour qu'elle favorise " + partie + ".\n"
+        "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n\n"
         + rag_context +
-        "\n\nMÉTHODE D'ANALYSE (par ordre de priorité):\n"
-        "1. CLAUSES VALIDÉES → si une clause similaire validée existe, utilise-la directement\n"
-        "2. TEXTES DE LOI → cite l'article exact (ex: Art. 230 COC marocain)\n"
-        "3. DOCTRINE → utilise les arguments pour justifier\n"
-        "4. MODÈLES → inspire-toi de la structure des contrats modèles\n"
-        "5. EXPERTISE → si aucune référence, propose une clause professionnelle standard\n\n"
-        "IMPORTANT: Le contrat est numéroté [P0], [P1], etc. "
-        "Utilise le numéro exact du paragraphe.\n\n"
+        "\n\nATTENTION sur les clauses validées du RAG:\n"
+        "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
+        "- Si une clause validée favorise l'autre partie, IGNORE-LA\n"
+        "- Vérifie toujours que ta proposition avantage bien " + partie + "\n\n"
+        "IMPORTANT: Le contrat est numéroté [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
         '"risk":"high|medium|low",'
-        '"reason":"Explication + source si clause validée utilisée",'
-        '"original":"texte EXACT du paragraphe copié mot pour mot",'
-        '"proposed":"clause reformulée, inspirée des clauses validées si disponibles",'
-        '"rag_source":"titre du document RAG utilisé ou null"}]}\n\n'
-        "Règles STRICTES:\n"
-        "- Identifie TOUTES les clauses problématiques (minimum 5, pas de maximum)\n"
-        "- para_idx: numéro entier du paragraphe [Pxx]\n"
-        "- original: copie EXACTE du texte, sans modification\n"
-        "- proposed: max 80 mots, professionnel\n"
-        "- reason: cite explicitement la source RAG si utilisée (ex: 'Basé sur clause validée: Paiement favorable prestataire')\n"
-        "- rag_source: nom du document RAG utilisé, ou null si aucun"
+        '"reason":"Pourquoi cette clause désavantage ' + partie + ' et comment la modification la protège",'
+        '"original":"texte EXACT du paragraphe",'
+        '"proposed":"clause reformulée favorisant ' + partie + '",'
+        '"rag_source":"source RAG utilisée ou null"}]}\n\n'
+        "Règles:\n"
+        "- Minimum 5 modifications, pas de maximum\n"
+        "- para_idx: numéro entier du paragraphe\n"
+        "- original: copie EXACTE sans modification\n"
+        "- proposed: max 80 mots, favorise explicitement " + partie + "\n"
+        "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
     )
 
     message = client.messages.create(
