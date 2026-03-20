@@ -306,9 +306,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     
     # Build numbered contract text for AI
     if paragraphs:
-        numbered_text = "\n".join([f"[P{p['idx']}] {p['text']}" for p in paragraphs[:150]])
+        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:100])
     else:
-        numbered_text = contract_text[:50000]
+        numbered_text = contract_text[:20000]
 
     # Search RAG for relevant context
     rag_context = ""
@@ -382,11 +382,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
     )
 
+    # Limit text to avoid timeout
+    truncated_text = numbered_text[:30000]
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4000,
+        max_tokens=3000,
         system=system,
-        messages=[{"role": "user", "content": "Contrat:\n\n" + numbered_text + "\n\nRetourne le JSON."}]
+        messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
     raw = message.content[0].text
     match = re.search(r'\{[\s\S]*\}', raw)
