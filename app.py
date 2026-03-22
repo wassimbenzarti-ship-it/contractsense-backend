@@ -453,11 +453,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
     raw = message.content[0].text
+    print("RAW RESPONSE (first 500):", raw[:500])
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
         raise ValueError("Réponse invalide de l'IA")
     # Clean common JSON issues
     json_str = match.group(0)
+    # Remove control characters that break JSON
+    json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', json_str)
     json_str = re.sub(r',\s*}', '}', json_str)  # trailing commas
     json_str = re.sub(r',\s*]', ']', json_str)  # trailing commas in arrays
     try:
