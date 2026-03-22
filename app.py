@@ -603,7 +603,9 @@ def debug_env():
     return jsonify({
         "supabase_url": SUPA_URL[:40],
         "supabase_key_set": bool(SUPA_KEY),
-        "supabase_test": supa_status
+        "supabase_test": supa_status,
+        "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "voyage_key_set": bool(os.environ.get("VOYAGE_API_KEY"))
     })
 
 @app.route("/health", methods=["GET"])
