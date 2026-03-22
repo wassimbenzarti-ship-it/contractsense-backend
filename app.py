@@ -187,7 +187,10 @@ def delete_rag_by_source(source):
         return 0
 
 def cosine_similarity(a, b):
-    a, b = np.array(a), np.array(b)
+    a, b = np.array(a, dtype=float), np.array(b, dtype=float)
+    # Skip if different dimensions
+    if a.shape != b.shape:
+        return 0.0
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
 
 def get_embedding(text, voyage_key=None):
@@ -453,7 +456,19 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
         raise ValueError("Réponse invalide de l'IA")
-    result = json.loads(match.group(0))
+    # Clean common JSON issues
+    json_str = match.group(0)
+    json_str = re.sub(r',\s*}', '}', json_str)  # trailing commas
+    json_str = re.sub(r',\s*]', ']', json_str)  # trailing commas in arrays
+    try:
+        result = json.loads(json_str)
+    except json.JSONDecodeError as je:
+        # Try to extract just modifications array
+        m2 = re.search(r'"modifications"\s*:\s*\[[\s\S]*?\](?=\s*[,}])', json_str)
+        if m2:
+            result = json.loads('{' + m2.group(0) + '}')
+        else:
+            raise ValueError("JSON invalide: " + str(je))
 
     # Add confidence score based on RAG usage
     mods = result.get("modifications", [])
