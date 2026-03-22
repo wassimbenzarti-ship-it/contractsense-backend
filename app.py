@@ -406,7 +406,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     system = (
         "Tu es un juriste expert spécialisé en analyse contractuelle.\n"
         "MISSION: Analyser ce contrat et proposer des modifications qui FAVORISENT " + partie + ".\n\n"
-        "LANGUE: Réponds UNIQUEMENT dans la langue du contrat.\n"
+        "LANGUE: Détecte automatiquement la langue du contrat et réponds UNIQUEMENT dans cette même langue. Si le contrat est en anglais, réponds en anglais. Si en français, en français. Si en arabe, en arabe.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
