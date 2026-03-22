@@ -453,6 +453,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
     raw = message.content[0].text
+    print("RAW FULL:", raw[:3000])
 
     # Strip markdown code blocks
     raw = re.sub(r'```(?:json)?\s*', '', raw)
