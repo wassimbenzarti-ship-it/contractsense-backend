@@ -453,23 +453,35 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
     raw = message.content[0].text
-    print("RAW RESPONSE (first 500):", raw[:500])
+
+    # Strip markdown code blocks
+    raw = re.sub(r'```(?:json)?\s*', '', raw)
+    raw = raw.replace('```', '')
+
+    # Find JSON object
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
         raise ValueError("Réponse invalide de l'IA")
-    # Clean common JSON issues
+
     json_str = match.group(0)
-    # Remove control characters that break JSON
+    # Remove control characters
     json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', json_str)
-    json_str = re.sub(r',\s*}', '}', json_str)  # trailing commas
-    json_str = re.sub(r',\s*]', ']', json_str)  # trailing commas in arrays
+    # Remove trailing commas
+    json_str = re.sub(r',\s*}', '}', json_str)
+    json_str = re.sub(r',\s*]', ']', json_str)
+
     try:
         result = json.loads(json_str)
     except json.JSONDecodeError as je:
-        # Try to extract just modifications array
-        m2 = re.search(r'"modifications"\s*:\s*\[[\s\S]*?\](?=\s*[,}])', json_str)
-        if m2:
-            result = json.loads('{' + m2.group(0) + '}')
+        # Last resort: try to manually build modifications from raw text
+        mods = []
+        for i, block in enumerate(re.findall(r'"id"\s*:\s*\d+[\s\S]*?(?="id"|$)', json_str)):
+            try:
+                mods.append(json.loads('{' + block.rstrip(',') + '}'))
+            except:
+                pass
+        if mods:
+            result = {"modifications": mods}
         else:
             raise ValueError("JSON invalide: " + str(je))
 
