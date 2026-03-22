@@ -20,7 +20,12 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[
+    "https://ai.westfieldavocats.com",
+    "https://wassimbenzarti-ship-it.github.io",
+    "http://localhost",
+    "null"
+], supports_credentials=True)
 
 def get_legal_framework(contract_type):
     """Return mandatory legal constraints per contract type"""
