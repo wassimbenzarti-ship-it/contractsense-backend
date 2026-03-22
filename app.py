@@ -459,32 +459,72 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     raw = re.sub(r'```(?:json)?\s*', '', raw)
     raw = raw.replace('```', '')
 
-    # Find JSON object
-    match = re.search(r'\{[\s\S]*\}', raw)
-    if not match:
-        raise ValueError("Réponse invalide de l'IA")
+    # Extract modifications array directly - more robust than full JSON parsing
+    # Find all modification objects
+    mod_pattern = re.compile(
+        r'\{\s*"id"\s*:\s*(\d+)[\s\S]*?"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"',
+        re.DOTALL
+    )
 
-    json_str = match.group(0)
-    # Remove control characters
-    json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', json_str)
-    # Remove trailing commas
-    json_str = re.sub(r',\s*}', '}', json_str)
-    json_str = re.sub(r',\s*]', ']', json_str)
+    # First try standard JSON parsing
+    match = re.search(r'\{[\s\S]*"modifications"[\s\S]*\}', raw)
+    if match:
+        json_str = match.group(0)
+        # Fix double opening braces
+        json_str = re.sub(r'\{\s*\{', '{', json_str)
+        # Remove control characters
+        json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', json_str)
+        # Remove trailing commas
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
+        # Fix missing commas between keys (common Claude mistake)
+        json_str = re.sub(r'("|}|\d|true|false|null)\s*\n\s*"', r'\1,\n"', json_str)
+        try:
+            result = json.loads(json_str)
+        except:
+            result = None
+    else:
+        result = None
 
-    try:
-        result = json.loads(json_str)
-    except json.JSONDecodeError as je:
-        # Last resort: try to manually build modifications from raw text
+    # Fallback: extract individual modification objects
+    if not result or not result.get("modifications"):
         mods = []
-        for i, block in enumerate(re.findall(r'"id"\s*:\s*\d+[\s\S]*?(?="id"|$)', json_str)):
+        # Find each modification block
+        blocks = re.split(r'(?="id"\s*:\s*\d+)', raw)
+        for block in blocks:
             try:
-                mods.append(json.loads('{' + block.rstrip(',') + '}'))
+                # Try to parse as complete object
+                m = re.search(r'\{[^{}]*"id"[^{}]*"proposed"[^{}]*\}', block, re.DOTALL)
+                if m:
+                    obj_str = m.group(0)
+                    obj_str = re.sub(r',\s*}', '}', obj_str)
+                    mods.append(json.loads(obj_str))
             except:
                 pass
+
+        if not mods:
+            # Last resort: regex extraction
+            ids = re.findall(r'"id"\s*:\s*(\d+)', raw)
+            names = re.findall(r'"clause_name"\s*:\s*"([^"]+)"', raw)
+            risks = re.findall(r'"risk"\s*:\s*"([^"]+)"', raw)
+            originals = re.findall(r'"original"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            for i in range(min(len(ids), len(proposeds))):
+                mods.append({
+                    "id": int(ids[i]) if i < len(ids) else i+1,
+                    "clause_name": names[i] if i < len(names) else "Clause",
+                    "risk": risks[i] if i < len(risks) else "medium",
+                    "reason": reasons[i] if i < len(reasons) else "",
+                    "original": originals[i] if i < len(originals) else "",
+                    "proposed": proposeds[i] if i < len(proposeds) else "",
+                    "rag_source": None
+                })
+
         if mods:
             result = {"modifications": mods}
         else:
-            raise ValueError("JSON invalide: " + str(je))
+            raise ValueError("Impossible d'extraire les modifications")
 
     # Add confidence score based on RAG usage
     mods = result.get("modifications", [])
