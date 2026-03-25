@@ -144,8 +144,22 @@ def supa_delete(table, filters):
 # ── RAG: Supabase REST storage ────────────────────────────
 def load_rag():
     try:
-        docs = supa_get("rag_documents", {"select": "*", "limit": "1000"})
-        return {"documents": docs or []}
+        all_docs = []
+        offset = 0
+        batch = 1000
+        while True:
+            docs = supa_get("rag_documents", {
+                "select": "*",
+                "limit": str(batch),
+                "offset": str(offset)
+            })
+            if not docs:
+                break
+            all_docs.extend(docs)
+            if len(docs) < batch:
+                break
+            offset += batch
+        return {"documents": all_docs}
     except Exception as e:
         print("load_rag error: " + str(e))
         return {"documents": []}
