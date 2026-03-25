@@ -154,7 +154,7 @@ def load_rag(contract_type=None, limit=200):
         })
         # Load all docs with limit
         docs = supa_get("rag_documents", {
-            "select": "id,title,content,source,type,category,party_label,embedding",
+            "select": "id,title,content,source,category,party_label,embedding",
             "limit": str(limit),
             "order": "created_at.desc"
         })
