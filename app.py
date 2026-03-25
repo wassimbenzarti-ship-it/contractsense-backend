@@ -183,6 +183,7 @@ def save_rag_doc(doc):
             doc_copy["embedding_vector"] = emb  # pgvector column
             doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
         elif emb and isinstance(emb, list):
+            doc_copy.pop("embedding_vector", None)  # skip pgvector for 512 dims
             doc_copy["embedding"] = json.dumps(emb)
 
         supa_insert("rag_documents", doc_copy)
