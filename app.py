@@ -110,8 +110,8 @@ def normalize_party_label(partie, contract_type=None):
     return "favorable " + first_word
 
 # ── Supabase client ──────────────────────────────────────
-SUPA_URL = os.environ.get("SUPABASE_URL", "https://nezxohrkikgjegnhgpyn.supabase.co")
-SUPA_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI")
+SUPA_URL = os.environ.get("SUPABASE_URL", "")
+SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 
 def supa_headers():
     return {
@@ -918,6 +918,19 @@ def queue_validate():
         contract_text = contract.get("contract_text", "")
         category = admin_category or contract.get("category", "generic")
         party_label = admin_party_label or contract.get("party_label", "")
+
+        # Use admin-edited modifications if provided
+        edited_mods = body.get("edited_modifications", [])
+        if edited_mods:
+            # Merge edited mods back into contract
+            edited_map = {m.get("id"): m for m in edited_mods if m.get("proposed")}
+            accepted_mods = contract.get("accepted_modifications", [])
+            if isinstance(accepted_mods, str):
+                accepted_mods = json.loads(accepted_mods)
+            for mod in accepted_mods:
+                if mod.get("id") in edited_map:
+                    mod.update(edited_map[mod["id"]])
+            contract["accepted_modifications"] = accepted_mods
         title_base = f"[{category.upper()}] {party_label}"
 
         # Split contract into chunks and index
@@ -1008,11 +1021,16 @@ def rag_upload():
         if not content or len(content.strip()) < 50:
             return jsonify({"error": "Document vide ou illisible"}), 400
 
-        # Split into chunks of ~500 words
+        # Limit content size for large documents
+        if len(content) > 200000:
+            content = content[:200000]
+
+        # Split into chunks of ~400 words
         words = content.split()
-        chunk_size = 500
+        chunk_size = 400
+        max_chunks = 50  # Max 50 chunks per upload to avoid timeout
         chunks = []
-        for i in range(0, len(words), chunk_size):
+        for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size):
             chunk = " ".join(words[i:i+chunk_size])
             chunks.append(chunk)
 
