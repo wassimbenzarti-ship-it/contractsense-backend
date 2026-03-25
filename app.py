@@ -181,6 +181,7 @@ def save_rag_doc(doc):
         if emb and isinstance(emb, list) and len(emb) == 1024:
             doc_copy["embedding_vector"] = emb  # pgvector column
             doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
+            print("save_rag_doc: embedding 1024 dims OK")
         elif emb and isinstance(emb, list):
             doc_copy.pop("embedding_vector", None)  # skip pgvector for 512 dims
             doc_copy["embedding"] = json.dumps(emb)
@@ -1001,7 +1002,7 @@ def queue_validate():
                 "contract_type": category,
                 "content": chunk,
                 "embedding": embedding,
-                "source": "admin_validated",
+                "source": title_base,
                 "key_clauses": contract.get("key_clauses", []),
                 "score": contract.get("score", 50),
                 "validated_at": datetime.datetime.now().isoformat()
@@ -1052,8 +1053,9 @@ def queue_reject():
 def rag_upload():
     try:
         file = request.files.get("file")
-        title = request.form.get("source_name") or request.form.get("title", "Document")
+        title = request.form.get("source_name") or request.form.get("title") or (file.filename.rsplit(".",1)[0] if file else "Document")
         category = request.form.get("doc_type") or request.form.get("category", "general")
+        title_base = title  # Use as source key
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
@@ -1092,7 +1094,7 @@ def rag_upload():
                 "category": category,
                 "content": chunk,
                 "embedding": json.dumps(embedding),
-                "source": "manual_upload",
+                "source": title,
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
