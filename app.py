@@ -1,1119 +1,583 @@
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
-import anthropic
-import json
-import os
-import io
-import re
-import zipfile
-import datetime
-import numpy as np
-import voyageai
-import requests as req_lib
-from docx import Document
-try:
-    import olefile as olefile_lib
-    HAS_OLEFILE = True
-except ImportError:
-    HAS_OLEFILE = False
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Omniscient</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0c12; color: #e2e5f0; font-family: system-ui, sans-serif; min-height: 100vh; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.fadein { animation: fadeIn 0.35s ease; }
+.wrap { max-width: 820px; margin: 0 auto; padding: 36px 20px 80px; }
+.logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 19px; margin-bottom: 44px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #5b7cfa; box-shadow: 0 0 14px #5b7cfa; }
+.card { background: #111420; border: 1px solid #1f2537; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+label { display: block; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+input, select, textarea { width: 100%; background: #181c2a; border: 1px solid #1f2537; border-radius: 9px; padding: 10px 13px; color: #e2e5f0; font-size: 13px; font-family: inherit; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #5b7cfa; }
+textarea { min-height: 160px; resize: vertical; line-height: 1.6; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.btn-blue { padding: 10px 18px; background: #5b7cfa; border: none; border-radius: 9px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-main { width: 100%; padding: 15px; background: linear-gradient(135deg, #5b7cfa, #8b5cf6); border: none; border-radius: 11px; color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 4px; }
+.btn-main:disabled { opacity: 0.4; cursor: not-allowed; }
+.tabs { display: flex; gap: 3px; background: #111420; border: 1px solid #1f2537; border-radius: 10px; padding: 3px; width: fit-content; margin-bottom: 16px; }
+.tab { padding: 7px 16px; border-radius: 8px; border: none; background: none; color: #6b7280; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { background: #181c2a; color: #e2e5f0; border-bottom-color: #5b7cfa; }
+.drop { border: 1.5px dashed #1f2537; border-radius: 14px; padding: 38px 24px; text-align: center; cursor: pointer; background: #111420; margin-bottom: 14px; }
+.drop:hover { border-color: #5b7cfa; background: rgba(91,124,250,0.05); }
+.tags { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+.tag { padding: 2px 9px; border-radius: 20px; border: 1px solid #1f2537; color: #6b7280; font-size: 11px; }
+.file-ok { display: flex; align-items: center; gap: 9px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 9px; padding: 11px 15px; margin-bottom: 14px; font-size: 13px; }
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 16px; }
+select { appearance: none; }
+.error { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 9px; padding: 11px 15px; color: #ef4444; font-size: 13px; margin-top: 12px; }
+.loading { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 52px 0; }
+.spinner { width: 36px; height: 36px; border: 2px solid #1f2537; border-top-color: #5b7cfa; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.steps { display: flex; flex-direction: column; gap: 8px; }
+.step { font-size: 13px; color: #6b7280; transition: color 0.4s; }
+.step.done { color: #10b981; }
+.key-saved { display: flex; justify-content: space-between; align-items: center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 9px; padding: 11px 15px; margin-bottom: 20px; font-size: 13px; color: #10b981; }
+h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; margin-bottom: 10px; }
+.accent { background: linear-gradient(135deg, #5b7cfa, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.desc { color: #6b7280; font-size: 14px; line-height: 1.65; max-width: 420px; margin-bottom: 28px; }
+.partie-btn { text-align: left; padding: 18px 20px; background: #111420; border: 1px solid #1f2537; border-radius: 13px; color: #e2e5f0; cursor: pointer; transition: all 0.2s; width: 100%; margin-bottom: 10px; }
+.partie-btn:hover { border-color: #5b7cfa; background: rgba(91,124,250,0.08); }
+.partie-btn .name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.partie-btn .desc2 { color: #6b7280; font-size: 13px; }
+.mod-card { background: #111420; border: 1px solid #1f2537; border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+.mod-card.accepted { border-color: #10b981; }
+.mod-card.rejected { border-color: #ef4444; opacity: 0.6; }
+.mod-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #1f2537; flex-wrap: wrap; gap: 8px; }
+.mod-name { font-weight: 700; font-size: 15px; }
+.risk-pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; white-space: nowrap; }
+.mod-body { padding: 20px; }
+.mod-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+.mod-original { background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 9px; padding: 14px; font-size: 13px; line-height: 1.65; margin-bottom: 12px; }
+.mod-proposed { background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); border-radius: 9px; padding: 14px; font-size: 13px; line-height: 1.65; margin-bottom: 16px; }
+.mod-reason { color: #6b7280; font-size: 12px; line-height: 1.6; margin-bottom: 16px; }
+.mod-actions { display: flex; gap: 10px; }
+.btn-accept { flex: 1; padding: 10px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); border-radius: 9px; color: #10b981; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-accept.active { background: #10b981; color: #fff; }
+.btn-reject { flex: 1; padding: 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 9px; color: #ef4444; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-reject.active { background: #ef4444; color: #fff; }
+.mod-status { text-align: center; padding: 8px; font-size: 12px; font-weight: 600; margin-top: 10px; }
+.review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; padding-bottom: 18px; border-bottom: 1px solid #1f2537; flex-wrap: wrap; gap: 12px; }
+.review-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.stat { padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 12px; }
+.stat-pending { background: rgba(91,124,250,0.15); color: #5b7cfa; }
+.stat-accepted { background: rgba(16,185,129,0.15); color: #10b981; }
+.stat-rejected { background: rgba(239,68,68,0.15); color: #ef4444; }
+.export-section { background: #111420; border: 1px solid #1f2537; border-radius: 14px; padding: 24px; margin-top: 28px; text-align: center; }
+.btn-export { display: inline-block; padding: 13px 28px; background: linear-gradient(135deg, #5b7cfa, #8b5cf6); border: none; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.btn-new { display: block; margin: 12px auto 0; padding: 10px 22px; background: none; border: 1px solid #1f2537; border-radius: 9px; color: #6b7280; font-size: 13px; cursor: pointer; }
+@media (max-width: 580px) { .opts { grid-template-columns: 1fr; } .mod-actions { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><div class="dot"></div>Omniscient</div>
 
-app = Flask(__name__)
-CORS(app, origins=[
-    "https://ai.westfieldavocats.com",
-    "https://wassimbenzarti-ship-it.github.io",
-    "http://localhost",
-    "null"
-], supports_credentials=True)
+  <!-- STEP 2: Upload form -->
+  <div id="step-form">
+    <h1 class="fadein">Révisez vos contrats<br/><span class="accent">avec l'IA.</span></h1>
+    <p class="desc">Uploadez votre contrat. L'IA identifie les parties, vous choisissez laquelle protéger, puis propose des modifications avec Track Changes.</p>
 
-def get_legal_framework(contract_type):
-    """Return mandatory legal constraints per contract type"""
-    frameworks = {
-        "employment": (
-            "DROIT DU TRAVAIL MAROCAIN — RÈGLES IMPÉRATIVES:\n"
-            "- CDD (contrat de projet/durée déterminée): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
-            "- Renouvellement abusif = requalification automatique en CDI\n"
-            "- Préavis légaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
-            "- Préavis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
-            "- Indemnité de licenciement: 96h/an pour les 3 premières années, 144h/an après\n"
-            "- Licenciement abusif interdit — cause réelle et sérieuse obligatoire\n"
-            "- Heures supplémentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
-            "- Congé annuel: 1,5 jour/mois travaillé (min 18 jours/an)\n"
-            "- Toute clause moins favorable que la loi est NULLE de plein droit"
-        ),
-        "nda": (
-            "DROIT MAROCAIN — CONFIDENTIALITÉ:\n"
-            "- Durée maximale raisonnable: 3-5 ans post-contrat\n"
-            "- Clause doit définir précisément les informations confidentielles\n"
-            "- Pénalités doivent être proportionnées (Art. 264 DOC)"
-        ),
-        "service": (
-            "DROIT MAROCAIN — PRESTATION DE SERVICES:\n"
-            "- Délai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
-            "- Pénalités de retard légales: taux directeur BAM + 3 points\n"
-            "- Clauses limitatives de responsabilité admises si non abusives\n"
-            "- Clause de non-concurrence: limitée dans le temps et l'espace"
-        ),
-        "purchase": (
-            "DROIT MAROCAIN — VENTE:\n"
-            "- Garantie des vices cachés: 1 an (Art. 573 DOC)\n"
-            "- Transfert de propriété: à la livraison sauf clause contraire\n"
-            "- Réserve de propriété possible jusqu'au paiement complet"
-        ),
+    <div class="tabs">
+      <button class="tab active" id="tab-upload">📄 Uploader</button>
+      <button class="tab" id="tab-text">✏️ Coller du texte</button>
+    </div>
+
+    <div id="upload-zone">
+      <div class="drop" id="drop-area">
+        <div style="font-size:30px;margin-bottom:10px">📄</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:5px">Déposez votre contrat ici</div>
+        <div style="color:#6b7280;font-size:13px">ou cliquez pour sélectionner</div>
+        <div class="tags"><span class="tag">PDF</span><span class="tag">DOCX</span><span class="tag">TXT</span></div>
+      </div>
+      <input type="file" id="file-input" accept=".pdf,.docx,.txt,.doc" style="display:none"/>
+      <div id="file-ok" style="display:none" class="file-ok">
+        <span>✅</span>
+        <span id="file-name" style="color:#10b981;font-size:13px"></span>
+        <span id="file-size" style="color:#6b7280;font-size:11px;margin-left:auto"></span>
+      </div>
+    </div>
+
+    <div id="text-zone" style="display:none">
+      <textarea id="contract-text" placeholder="Collez le texte de votre contrat ici…" style="margin-bottom:14px"></textarea>
+    </div>
+
+    <div class="opts">
+      <div>
+        <label>Type</label>
+        <select id="type">
+          <option value="generic">Générique</option>
+          <option value="nda">NDA</option>
+          <option value="saas">SaaS</option>
+          <option value="purchase">Achat/Vente</option>
+          <option value="employment">RH</option>
+          <option value="partnership">Partenariat</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-main" id="btn-analyze">⚡ Analyser le contrat</button>
+    <div id="usage-counter" style="text-align:center;font-size:12px;color:#6b7280;margin-top:10px"></div>
+    <div id="form-error" style="display:none" class="error"></div>
+  </div>
+
+  <!-- STEP 3: Loading -->
+  <div id="step-loading" style="display:none" class="loading">
+    <div class="spinner"></div>
+    <div class="steps">
+      <div class="step" id="s0">→ Lecture du document…</div>
+      <div class="step" id="s1">→ Identification des parties…</div>
+      <div class="step" id="s2">→ Analyse des risques…</div>
+      <div class="step" id="s3">→ Rédaction des modifications…</div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Choose partie -->
+  <div id="step-parties" style="display:none" class="fadein">
+    <h2 style="font-size:20px;font-weight:800;margin-bottom:8px">Quelle partie représentez-vous ?</h2>
+    <p style="color:#6b7280;font-size:14px;margin-bottom:24px">L'IA adaptera ses modifications pour protéger vos intérêts.</p>
+    <div id="parties-list"></div>
+    <button id="btn-back" style="display:block;margin:16px auto 0;padding:9px 20px;background:none;border:1px solid #1f2537;border-radius:9px;color:#6b7280;font-size:13px;cursor:pointer">↩ Retour</button>
+  </div>
+
+  <!-- STEP 5: Review modifications -->
+  <div id="step-review" style="display:none" class="fadein">
+    <div class="review-header">
+      <div style="font-size:20px;font-weight:800">Révision du contrat</div>
+      <div class="review-stats" id="review-stats"></div>
+    </div>
+    <div id="mods-list"></div>
+    <div class="export-section">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Générer le document final</div>
+      <div id="export-desc" style="color:#6b7280;font-size:13px;margin-bottom:20px;line-height:1.6"></div>
+      <button class="btn-export" id="btn-export">⬇ Télécharger avec Track Changes</button>
+      <button class="btn-new" id="btn-new">↩ Analyser un autre contrat</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var BACKEND = 'https://web-production-f96f7.up.railway.app';
+var apiKey = '';
+var curFile = null;
+var curMode = 'upload';
+var modifications = [];
+var decisions = {};
+var savedFormData = null;
+var savedLang = "fr";
+var savedType = "generic";
+var savedText = "";
+
+// ── Init ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  // Show usage counter
+  var usage = parseInt(localStorage.getItem('cs_usage') || '0');
+  var remaining = 3 - usage;
+  var counter = document.getElementById('usage-counter');
+  if (counter) {
+    if (remaining > 0) {
+      counter.textContent = remaining + ' analyse' + (remaining > 1 ? 's' : '') + ' gratuite' + (remaining > 1 ? 's' : '') + ' restante' + (remaining > 1 ? 's' : '');
+    } else {
+      counter.textContent = '⚠ Limite atteinte — contactez westfieldavocats.com';
+      counter.style.color = '#ef4444';
     }
-    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes généraux du DOC.")
+  }
 
-# ── Party label normalization ─────────────────────────────
-CONTRACT_CATEGORIES = {
-    "service": "Prestation de services",
-    "saas": "SaaS / Logiciel",
-    "nda": "Confidentialite (NDA)",
-    "employment": "Contrat de travail",
-    "purchase": "Achat / Vente",
-    "partnership": "Partenariat",
-    "collaboration": "Convention de collaboration",
-    "generic": "Generique",
+
+
+
+  // Tabs
+  document.getElementById('tab-upload').addEventListener('click', function() {
+    curMode = 'upload';
+    this.classList.add('active');
+    document.getElementById('tab-text').classList.remove('active');
+    show('upload-zone');
+    hide('text-zone');
+  });
+  document.getElementById('tab-text').addEventListener('click', function() {
+    curMode = 'text';
+    this.classList.add('active');
+    document.getElementById('tab-upload').classList.remove('active');
+    hide('upload-zone');
+    show('text-zone');
+  });
+
+  // Drop zone
+  var drop = document.getElementById('drop-area');
+  drop.addEventListener('click', function() { document.getElementById('file-input').click(); });
+  drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.style.borderColor = '#5b7cfa'; });
+  drop.addEventListener('dragleave', function() { drop.style.borderColor = '#1f2537'; });
+  drop.addEventListener('drop', function(e) {
+    e.preventDefault();
+    drop.style.borderColor = '#1f2537';
+    setFile(e.dataTransfer.files[0]);
+  });
+  document.getElementById('file-input').addEventListener('change', function() {
+    var f = this.files[0];
+    if (f && f.name.toLowerCase().endsWith('.doc') && !f.name.toLowerCase().endsWith('.docx')) {
+      showErr("form-error", "⚠️ Format .doc detecte. Convertissez en .docx pour les Track Changes complets. L'analyse reste possible mais l'export sera limite.");
+    } else {
+      hideErr('form-error');
+    }
+    setFile(f);
+  });
+
+  // Analyze
+  document.getElementById('btn-analyze').addEventListener('click', analyze);
+
+  // Back
+  document.getElementById('btn-back').addEventListener('click', function() {
+    hide('step-parties');
+    show('step-form');
+  });
+
+  // Export + New
+  document.getElementById('btn-export').addEventListener('click', exportDoc);
+  document.getElementById('btn-new').addEventListener('click', reset);
+});
+
+// ── Helpers ───────────────────────────────────────────────
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function showFlex(id) { document.getElementById(id).style.display = 'flex'; }
+function showErr(id, msg) { var el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; }
+function hideErr(id) { document.getElementById(id).style.display = 'none'; }
+
+function showKeyBar() {
+  hide('step-key');
+  show('key-saved-bar');
 }
 
-PARTY_KEYWORDS = [
-    (["prestataire", "service provider", "fournisseur", "mandate"], "favorable prestataire"),
-    (["client", "customer", "mandant", "donneur"], "favorable client"),
-    (["employeur", "employer"], "favorable employeur"),
-    (["employe", "employee", "salarie"], "favorable employe"),
-    (["divulgateur", "disclosing"], "favorable divulgateur"),
-    (["destinataire", "receiving"], "favorable destinataire"),
-    (["vendeur", "seller"], "favorable vendeur"),
-    (["acheteur", "buyer"], "favorable acheteur"),
-]
-
-def normalize_party_label(partie, contract_type=None):
-    if not partie:
-        return "neutre"
-    p = partie.lower().strip()
-    for keywords, label in PARTY_KEYWORDS:
-        if any(k in p for k in keywords):
-            return label
-    # Derive from contract type
-    defaults = {
-        "service": "favorable prestataire",
-        "saas": "favorable prestataire",
-        "collaboration": "favorable prestataire",
-        "employment": "favorable employe",
-        "nda": "favorable divulgateur",
-        "purchase": "favorable vendeur",
-    }
-    if contract_type in defaults:
-        return defaults[contract_type]
-    # Clean up — remove company names, keep first word
-    first_word = p.split()[0] if p.split() else p
-    return "favorable " + first_word
-
-# ── Supabase client ──────────────────────────────────────
-SUPA_URL = os.environ.get("SUPABASE_URL", "")
-SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
-
-def supa_headers():
-    return {
-        "apikey": SUPA_KEY,
-        "Authorization": "Bearer " + SUPA_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-
-def supa_get(table, params=None):
-    url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.get(url, headers=supa_headers(), params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-def supa_insert(table, data):
-    url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.post(url, headers=supa_headers(), json=data, timeout=30)
-    if not r.ok:
-        print("supa_insert ERROR " + str(r.status_code) + ": " + r.text[:500])
-    r.raise_for_status()
-    return r
-
-def supa_delete(table, filters):
-    url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.delete(url, headers=supa_headers(), params=filters, timeout=30)
-    r.raise_for_status()
-    return r
-
-# ── RAG: Supabase REST storage ────────────────────────────
-def load_rag():
-    try:
-        all_docs = []
-        offset = 0
-        batch = 1000
-        while True:
-            docs = supa_get("rag_documents", {
-                "select": "*",
-                "limit": str(batch),
-                "offset": str(offset)
-            })
-            if not docs:
-                break
-            all_docs.extend(docs)
-            if len(docs) < batch:
-                break
-            offset += batch
-        return {"documents": all_docs}
-    except Exception as e:
-        print("load_rag error: " + str(e))
-        return {"documents": []}
-
-def clean_text(text):
-    """Remove null bytes and invalid unicode for Supabase"""
-    if not isinstance(text, str):
-        return text
-    return text.replace("\x00", "").replace("\u0000", "")
-
-def save_rag_doc(doc):
-    try:
-        doc_copy = dict(doc)
-        # Clean all string fields
-        for k, v in doc_copy.items():
-            if isinstance(v, str):
-                doc_copy[k] = clean_text(v)
-        if "embedding" in doc_copy and isinstance(doc_copy["embedding"], list):
-            doc_copy["embedding"] = json.dumps(doc_copy["embedding"])
-        supa_insert("rag_documents", doc_copy)
-        print("save_rag_doc OK: " + str(doc_copy.get("title","?"))[:50])
-    except Exception as e:
-        print("save_rag_doc ERROR: " + str(e))
-        raise
-
-def delete_rag_by_source(source):
-    try:
-        import re as _re
-        docs = supa_get("rag_documents", {"select": "id,title", "limit": "1000"})
-        count = 0
-        for d in (docs or []):
-            base = _re.sub(r" \(partie \d+\)$", "", d.get("title", ""))
-            if base == source:
-                supa_delete("rag_documents", {"id": "eq." + d["id"]})
-                count += 1
-        return count
-    except Exception as e:
-        print("delete_rag error: " + str(e))
-        return 0
-
-def cosine_similarity(a, b):
-    a, b = np.array(a, dtype=float), np.array(b, dtype=float)
-    # Skip if different dimensions
-    if a.shape != b.shape:
-        return 0.0
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
-
-def get_embedding(text, voyage_key=None):
-    # Try Voyage AI for semantic embeddings
-    if voyage_key:
-        try:
-            import signal
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Voyage AI timeout")
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(15)  # 15 second timeout
-            vo = voyageai.Client(api_key=voyage_key)
-            result = vo.embed([text[:1000]], model="voyage-law-2", input_type="document")
-            signal.alarm(0)
-            return result.embeddings[0]
-        except Exception as e:
-            signal.alarm(0)
-            print("Voyage AI error: " + str(e))
-            pass
-    # Fallback to TF-IDF hashing
-    import hashlib
-    words = re.findall(r'\w+', text.lower())
-    vec = [0.0] * 512
-    for word in words:
-        h = int(hashlib.md5(word.encode()).hexdigest(), 16) % 512
-        vec[h] += 1.0
-    for i in range(len(words)-1):
-        bigram = words[i] + '_' + words[i+1]
-        h = int(hashlib.sha256(bigram.encode()).hexdigest(), 16) % 512
-        vec[h] += 0.5
-    norm = sum(v*v for v in vec) ** 0.5
-    if norm > 0:
-        vec = [v/norm for v in vec]
-    return vec
-
-def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
-    data = load_rag()
-    if not data["documents"]:
-        return []
-    query_vec = get_embedding(query, voyage_key)
-    scored = []
-    for doc in data["documents"]:
-        emb = doc.get("embedding")
-        if emb is None:
-            continue
-        # Parse embedding from JSON string if needed
-        if isinstance(emb, str):
-            try:
-                emb = json.loads(emb)
-            except:
-                continue
-        score = cosine_similarity(query_vec, emb)
-        # Boost for matching party
-        doc_label = doc.get("party_label") or ""
-        if partie and doc_label and partie.lower() in doc_label.lower():
-            score *= 1.3
-        # Boost validated clauses
-        if "validated_clause" in doc.get("source", ""):
-            score *= 1.2
-        scored.append((score, doc))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [doc for _, doc in scored[:top_k]]
-
-# ── Text extraction ───────────────────────────────────────
-def extract_text_from_doc_ole(file_bytes):
-    """Extract text from old .doc format using olefile"""
-    if not HAS_OLEFILE:
-        return None
-    try:
-        ole = olefile_lib.OleFileIO(io.BytesIO(file_bytes))
-        if not ole.exists('WordDocument'):
-            return None
-        stream = ole.openstream('WordDocument').read()
-        text = stream.decode('latin-1', errors='ignore')
-        clean = re.sub(r'[^\x20-\x7E\x80-\xFF\n\r\t]', ' ', text)
-        clean = re.sub(r' {3,}', ' ', clean)
-        clean = re.sub(r'\n{3,}', '\n\n', clean)
-        # Skip binary header — find first readable content
-        for marker in ['CONTRAT', 'Contrat', 'CONTRACT', 'ACCORD', 'CONVENTION']:
-            idx = clean.find(marker)
-            if idx != -1 and idx < len(clean) // 2:
-                return clean[idx:]
-        # Fallback: skip first third
-        return clean[len(clean)//4:]
-    except Exception as e:
-        print("OLE extract error: " + str(e))
-        return None
-
-def extract_text_from_docx(file_bytes):
-    try:
-        doc = Document(io.BytesIO(file_bytes))
-        text = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                text.append(para.text)
-        return "\n".join(text)
-    except Exception:
-        # Try OLE for old .doc format
-        ole_text = extract_text_from_doc_ole(file_bytes)
-        if ole_text:
-            return ole_text
-        try:
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-                if 'word/document.xml' in z.namelist():
-                    doc_xml = z.read('word/document.xml').decode('utf-8', errors='ignore')
-                    text = re.sub(r'<[^>]+>', ' ', doc_xml)
-                    return re.sub(r'\s+', ' ', text).strip()
-        except Exception as e2:
-            raise ValueError("Impossible de lire le fichier Word: " + str(e2))
-
-def read_file(file):
-    file_bytes = file.read()
-    filename = file.filename.lower()
-    if filename.endswith(".docx") or filename.endswith(".doc"):
-        text = extract_text_from_docx(file_bytes)
-    else:
-        text = file_bytes.decode("utf-8", errors="ignore")
-    # Remove null bytes
-    text = text.replace("\x00", "").replace("\u0000", "") if text else text
-    return text, file_bytes, filename
-
-# ── AI functions ──────────────────────────────────────────
-def identify_parties(contract_text, lang, api_key):
-    client = anthropic.Anthropic(api_key=api_key)
-    system = f"""Tu es un juriste expert. Identifie les parties dans ce contrat.
-Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON exact, sans markdown:
-{{"parties":[{{"id":"partie_1","name":"Nom exact de la partie 1","description":"Role de cette partie"}},{{"id":"partie_2","name":"Nom exact de la partie 2","description":"Role de cette partie"}}]}}
-- Utilise les vrais noms tels qu'ils apparaissent dans le contrat
-- Maximum 3 parties, description max 10 mots"""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=500,
-        system=system,
-        messages=[{"role": "user", "content": f"Contrat:\n\n{contract_text[:20000]}\n\nIdentifie les parties."}]
-    )
-    raw = message.content[0].text
-    match = re.search(r'\{[\s\S]*\}', raw)
-    if not match:
-        raise ValueError("Réponse invalide")
-    return json.loads(match.group(0))
-
-def build_numbered_paragraphs(file_bytes, filename):
-    """Build a numbered paragraph index from DOCX for precise matching"""
-    try:
-        if filename.endswith('.docx') or filename.endswith('.doc'):
-            doc = Document(io.BytesIO(file_bytes))
-            paragraphs = []
-            for i, para in enumerate(doc.paragraphs):
-                text = para.text.strip()
-                if text:
-                    paragraphs.append({"idx": i, "text": text})
-            return paragraphs
-    except:
-        pass
-    return []
-
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename=""):
-    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise ValueError("Clé API manquante")
-    client = anthropic.Anthropic(api_key=api_key)
-
-    # Build numbered paragraphs for precise matching
-    paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
-    
-    # Build numbered contract text for AI
-    if paragraphs:
-        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:100])
-    else:
-        numbered_text = contract_text[:20000]
-
-    # Search RAG for relevant context
-    rag_context = ""
-    try:
-        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=6, partie=partie)
-        if relevant_docs:
-            validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
-            reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
-
-            if validated_clauses:
-                rag_context += "\n\nCLAUSES VALIDÉES PAR DES JURISTES (utilise ces reformulations comme modèles):\n"
-                for doc in validated_clauses:
-                    content_raw = doc.get("content", "")
-                    rag_context += "\n---\n" + content_raw[:600] + "\n"
-                rag_context += "\n→ Ces clauses ont été validées par des juristes. Inspire-toi directement de leur formulation.\n"
-
-            if reference_docs:
-                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÉFÉRENCE:\n"
-                for doc in reference_docs:
-                    rag_context += "\n=== " + doc.get("title", "Document") + " ===\n" + doc.get("content", "")[:500] + "\n"
-    except Exception as e:
-        print("RAG search error: " + str(e))
-
-    # Define what "favorable" means for each role
-    role_objectives = {
-        "employeur": "maximiser la flexibilité opérationnelle, minimiser les obligations et coûts, renforcer le pouvoir de direction et de contrôle, faciliter la résiliation, protéger les intérêts commerciaux",
-        "employe": "garantir la stabilité de l'emploi, maximiser les protections et indemnités, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
-        "prestataire": "garantir le paiement, limiter la responsabilité, protéger la propriété intellectuelle, encadrer les modifications de scope",
-        "client": "garantir la qualité et les délais, maximiser les pénalités, faciliter la résiliation, protéger les données",
-        "acheteur": "garantir la conformité, maximiser les garanties, faciliter les recours",
-        "vendeur": "garantir le paiement, limiter les garanties et responsabilités",
-    }
-    # Extract role from partie label
-    role_key = "employeur"
-    for key in role_objectives:
-        if key in partie.lower():
-            role_key = key
-            break
-    role_obj = role_objectives.get(role_key, "protéger ses intérêts")
-
-    system = (
-        "Tu es un juriste expert spécialisé en analyse contractuelle.\n"
-        "MISSION: Analyser ce contrat et proposer des modifications qui FAVORISENT " + partie + ".\n\n"
-        "LANGUE: Tu dois IMPÉRATIVEMENT détecter la langue du contrat et répondre dans EXACTEMENT cette même langue.\n"
-        "Si le contrat contient majoritairement des mots anglais → réponds en ANGLAIS.\n"
-        "Si le contrat contient majoritairement des mots français → réponds en FRANÇAIS.\n"
-        "Si le contrat contient majoritairement des mots arabes → réponds en ARABE.\n"
-        "NE JAMAIS répondre dans une langue différente de celle du contrat analysé.\n"
-        "TYPE DE CONTRAT: " + contract_type + "\n"
-        "PARTIE À PROTÉGER: " + partie + "\n"
-        "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
-        "RÈGLE ABSOLUE: Chaque modification proposée doit AVANTAGER " + partie + ".\n"
-        "UTILISATION RAG: Si des textes de loi ou clauses validées sont fournis ci-dessous, tu DOIS les utiliser et les citer dans rag_source et reason. Ne les ignore jamais.\n"
-        "Si une clause est déjà favorable à " + partie + ", ne la modifie pas.\n"
-        "Si une clause est neutre, modifie-la pour qu'elle favorise " + partie + ".\n"
-        "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n"
-        "CONTRAINTE LÉGALE ABSOLUE: Toutes les modifications doivent rester dans le cadre légal.\n"
-        "Ne propose jamais de clauses illégales, abusives ou contraires à l'ordre public.\n\n"
-        + get_legal_framework(contract_type) +
-        "\n\n"
-        + rag_context +
-        "\n\nATTENTION sur les clauses validées du RAG:\n"
-        "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
-        "- Si une clause validée favorise l'autre partie, IGNORE-LA\n"
-        "- Vérifie toujours que ta proposition avantage bien " + partie + "\n\n"
-        "IMPORTANT: Le contrat est numéroté [P0], [P1], etc.\n\n"
-        "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
-        '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
-        '"risk":"high|medium|low",'
-        '"reason":"Pourquoi cette clause désavantage ' + partie + ' et comment la modification la protège",'
-        '"original":"texte EXACT du paragraphe",'
-        '"proposed":"clause reformulée favorisant ' + partie + '",'
-        '"rag_source":"source RAG utilisée ou null"}]}\n\n'
-        "Règles:\n"
-        "- Minimum 5 modifications, pas de maximum\n"
-        "- para_idx: numéro entier du paragraphe\n"
-        "- original: copie EXACTE sans modification\n"
-        "- proposed: clause juridique complète et professionnelle, rédigée en style contractuel soutenu\n"
-        "- proposed: utilise le vocabulaire juridique approprié (nonobstant, en ce compris, à titre de, ci-après, sous réserve de...)\n"
-        "- proposed: structure avec sujet + verbe + objet + conditions + exceptions si nécessaire\n"
-        "- proposed: max 120 mots, mais suffisamment détaillé pour être opérationnel sans ambiguïté\n"
-        "- proposed: jamais de blancs ou placeholders comme ___ ou [à compléter]\n"
-        "- proposed: rédige comme un avocat d'affaires senior rédigeant pour un client exigeant\n"
-        "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
-    )
-
-    # Limit text to avoid timeout
-    truncated_text = numbered_text[:15000]
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2500,
-        system=system,
-        messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
-    )
-    raw = message.content[0].text
-    print("RAW FULL:", raw[:3000])
-
-    # Strip markdown code blocks
-    raw = re.sub(r'```(?:json)?\s*', '', raw)
-    raw = raw.replace('```', '')
-
-    # Extract modifications array directly - more robust than full JSON parsing
-    # Find all modification objects
-    mod_pattern = re.compile(
-        r'\{\s*"id"\s*:\s*(\d+)[\s\S]*?"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"',
-        re.DOTALL
-    )
-
-    # First try standard JSON parsing
-    match = re.search(r'\{[\s\S]*"modifications"[\s\S]*\}', raw)
-    if match:
-        json_str = match.group(0)
-        # Fix double opening braces
-        json_str = re.sub(r'\{\s*\{', '{', json_str)
-        # Remove control characters
-        json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', json_str)
-        # Remove trailing commas
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-        # Fix missing commas between keys (common Claude mistake)
-        json_str = re.sub(r'("|}|\d|true|false|null)\s*\n\s*"', r'\1,\n"', json_str)
-        try:
-            result = json.loads(json_str)
-        except:
-            result = None
-    else:
-        result = None
-
-    # Fallback: extract individual modification objects
-    if not result or not result.get("modifications"):
-        mods = []
-        # Find each modification block
-        blocks = re.split(r'(?="id"\s*:\s*\d+)', raw)
-        for block in blocks:
-            try:
-                # Try to parse as complete object
-                m = re.search(r'\{[^{}]*"id"[^{}]*"proposed"[^{}]*\}', block, re.DOTALL)
-                if m:
-                    obj_str = m.group(0)
-                    obj_str = re.sub(r',\s*}', '}', obj_str)
-                    mods.append(json.loads(obj_str))
-            except:
-                pass
-
-        if not mods:
-            # Last resort: regex extraction
-            ids = re.findall(r'"id"\s*:\s*(\d+)', raw)
-            names = re.findall(r'"clause_name"\s*:\s*"([^"]+)"', raw)
-            risks = re.findall(r'"risk"\s*:\s*"([^"]+)"', raw)
-            originals = re.findall(r'"original"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
-            proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
-            reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
-            for i in range(min(len(ids), len(proposeds))):
-                mods.append({
-                    "id": int(ids[i]) if i < len(ids) else i+1,
-                    "clause_name": names[i] if i < len(names) else "Clause",
-                    "risk": risks[i] if i < len(risks) else "medium",
-                    "reason": reasons[i] if i < len(reasons) else "",
-                    "original": originals[i] if i < len(originals) else "",
-                    "proposed": proposeds[i] if i < len(proposeds) else "",
-                    "rag_source": None
-                })
-
-        if mods:
-            result = {"modifications": mods}
-        else:
-            raise ValueError("Impossible d'extraire les modifications")
-
-    # Add confidence score based on RAG usage
-    mods = result.get("modifications", [])
-    rag_backed = sum(1 for m in mods if m.get("rag_source"))
-    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
-    result["_paragraphs"] = paragraphs
-    return result
-
-def fuzzy_match(original, para_text, threshold=0.60):
-    """Check if original text roughly matches para_text"""
-    original_lower = original.lower().strip()
-    para_lower = para_text.lower().strip()
-    # Exact match
-    if original_lower in para_lower:
-        return True
-    # Extract meaningful words (ignore short words)
-    orig_words = [w for w in re.findall(r"[a-zA-ZÀ-ÿ]{3,}", original_lower)]
-    para_words_set = set(re.findall(r"[a-zA-ZÀ-ÿ]{3,}", para_lower))
-    orig_words_set = set(orig_words)
-    if len(orig_words_set) < 4:
-        return False
-    overlap = len(orig_words_set & para_words_set) / len(orig_words_set)
-    return overlap >= threshold
-
-def create_docx_with_changes(contract_text, modifications, decisions):
-    """Create new DOCX for old .doc files that cant be processed directly"""
-    from docx import Document as DocxDocument
-    doc = DocxDocument()
-    doc.add_heading('Document avec modifications ContractSense', 0)
-
-    accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
-
-    # Add note
-    note = doc.add_paragraph()
-    note.add_run("Note: Document généré depuis un fichier .doc — modifications acceptées appliquées ci-dessous.").italic = True
-    doc.add_paragraph()
-
-    # Add each accepted modification as track change style
-    for mod in accepted:
-        doc.add_heading(mod.get("clause_name", "Clause"), level=2)
-
-        # Original (strikethrough red)
-        p_orig = doc.add_paragraph()
-        run_orig = p_orig.add_run("ORIGINAL: " + mod.get("original", ""))
-        from docx.shared import RGBColor
-        run_orig.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
-        run_orig.font.strike = True
-
-        # Proposed (green)
-        p_prop = doc.add_paragraph()
-        run_prop = p_prop.add_run("MODIFIÉ: " + mod.get("proposed", ""))
-        run_prop.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
-        run_prop.font.bold = True
-
-        doc.add_paragraph()
-
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    return output
-
-def apply_track_changes(file_bytes, modifications, decisions):
-    doc = Document(io.BytesIO(file_bytes))
-    author = "ContractSense"
-    date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    rev_id = 1
-
-    accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
-    applied = set()
-    paragraphs = list(doc.paragraphs)
-
-    for mod in accepted:
-        mod_id = mod.get("id")
-        proposed = mod.get("proposed", "").strip()
-        if not proposed:
-            continue
-
-        para = None
-
-        # Method 1: Use para_idx if available (precise)
-        para_idx = mod.get("para_idx")
-        if para_idx is not None and para_idx < len(paragraphs):
-            candidate = paragraphs[para_idx]
-            if candidate.text.strip():
-                para = candidate
-
-        # Method 2: Fuzzy match fallback
-        if para is None:
-            original = mod.get("original", "").strip()
-            for p in paragraphs:
-                if p.text.strip() and fuzzy_match(original, p.text.strip()):
-                    para = p
-                    break
-
-        if para is None:
-            print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
-            continue
-
-        para_text = para.text.strip()
-
-        # Clear all runs
-        for run in para.runs:
-            run.text = ""
-        p = para._p
-
-        # Del element
-        del_elem = OxmlElement('w:del')
-        del_elem.set(qn('w:id'), str(rev_id))
-        del_elem.set(qn('w:author'), author)
-        del_elem.set(qn('w:date'), date)
-        del_run = OxmlElement('w:r')
-        del_rpr = OxmlElement('w:rPr')
-        del_run.append(del_rpr)
-        del_text = OxmlElement('w:delText')
-        del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-        del_text.text = para_text
-        del_run.append(del_text)
-        del_elem.append(del_run)
-        p.append(del_elem)
-        rev_id += 1
-
-        # Ins element
-        ins_elem = OxmlElement('w:ins')
-        ins_elem.set(qn('w:id'), str(rev_id))
-        ins_elem.set(qn('w:author'), author)
-        ins_elem.set(qn('w:date'), date)
-        ins_run = OxmlElement('w:r')
-        ins_text_el = OxmlElement('w:t')
-        ins_text_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-        ins_text_el.text = proposed
-        ins_run.append(ins_text_el)
-        ins_elem.append(ins_run)
-        p.append(ins_elem)
-        rev_id += 1
-
-        applied.add(mod_id)
-
-    print(f"Track changes: {len(applied)}/{len(accepted)} applied")
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    return output
-
-# ── Routes ────────────────────────────────────────────────
-@app.route("/debug-env", methods=["GET"])
-def debug_env():
-    try:
-        test = supa_get("rag_documents", {"select": "id", "limit": "1"})
-        supa_status = "OK - " + str(len(test)) + " docs"
-    except Exception as e:
-        supa_status = "ERROR: " + str(e)
-    return jsonify({
-        "supabase_url": SUPA_URL[:40],
-        "supabase_key_set": bool(SUPA_KEY),
-        "supabase_test": supa_status,
-        "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
-        "voyage_key_set": bool(os.environ.get("VOYAGE_API_KEY"))
-    })
-
-@app.route("/health", methods=["GET"])
-def health():
-    rag = load_rag()
-    return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
-
-@app.route("/identify-parties", methods=["POST"])
-def identify_parties_route():
-    try:
-        file = request.files.get("file")
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        lang = request.form.get("lang", "fr")
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-        contract_text, _, _ = read_file(file)
-        if not contract_text or len(contract_text.strip()) < 50:
-            return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = identify_parties(contract_text, lang, api_key)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    try:
-        file = request.files.get("file")
-        lang = request.form.get("lang", "fr")
-        contract_type = request.form.get("type", "generic")
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-        contract_text, file_bytes, filename = read_file(file)
-        if not contract_text or len(contract_text.strip()) < 50:
-            return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/export", methods=["POST"])
-def export():
-    try:
-        file = request.files.get("file")
-        modifications = json.loads(request.form.get("modifications", "[]"))
-        decisions = json.loads(request.form.get("decisions", "{}"))
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-        file_bytes = file.read()
-        filename = file.filename.lower()
-
-        if filename.endswith(".docx"):
-            output = apply_track_changes(file_bytes, modifications, decisions)
-        elif filename.endswith(".doc"):
-            # Old .doc format — extract text then create new DOCX
-            doc_text = extract_text_from_docx(file_bytes) or ""
-            output = create_docx_with_changes(doc_text, modifications, decisions)
-        else:
-            doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptées', 0)
-            accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
-            for i, m in enumerate(accepted):
-                doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
-                p_del = doc.add_paragraph()
-                run_del = p_del.add_run(m.get("original", ""))
-                rpr = run_del._r.get_or_add_rPr()
-                strike = OxmlElement('w:strike')
-                rpr.append(strike)
-                color = OxmlElement('w:color')
-                color.set(qn('w:val'), 'FF0000')
-                rpr.append(color)
-                p_ins = doc.add_paragraph()
-                run_ins = p_ins.add_run(m.get("proposed", ""))
-                rpr2 = run_ins._r.get_or_add_rPr()
-                color2 = OxmlElement('w:color')
-                color2.set(qn('w:val'), '008000')
-                rpr2.append(color2)
-            output = io.BytesIO()
-            doc.save(output)
-            output.seek(0)
-
-        return send_file(
-            output,
-            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            as_attachment=True,
-            download_name="contrat-track-changes.docx"
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ── Queue: Supabase REST storage ─────────────────────────
-def load_queue():
-    try:
-        items = supa_get("queue_pending", {"select": "*", "order": "submitted_at", "limit": "200"})
-        return {"pending": items or []}
-    except Exception as e:
-        print("load_queue error: " + str(e))
-        return {"pending": []}
-
-def save_queue_item(item):
-    try:
-        item_copy = dict(item)
-        for field in ["key_clauses", "accepted_modifications"]:
-            if field in item_copy and not isinstance(item_copy[field], str):
-                item_copy[field] = json.dumps(item_copy.get(field, []))
-        supa_insert("queue_pending", item_copy)
-    except Exception as e:
-        print("save_queue_item error: " + str(e))
-
-def delete_queue_item(item_id):
-    try:
-        supa_delete("queue_pending", {"id": "eq." + item_id})
-    except Exception as e:
-        print("delete_queue_item error: " + str(e))
-
-@app.route("/rag/contribute", methods=["POST"])
-def rag_contribute():
-    """Auto-queue full contract with AI scoring for admin validation"""
-    try:
-        file = request.files.get("file")
-        modifications = json.loads(request.form.get("modifications", "[]"))
-        decisions = json.loads(request.form.get("decisions", "{}"))
-        partie = request.form.get("partie", "")
-        contract_type = request.form.get("contract_type", "generic")
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-
-        contract_text, _, filename = read_file(file)
-        accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
-        rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
-
-        # Use user-edited version if available — higher quality for RAG
-        for m in accepted:
-            if m.get("proposed_edited"):
-                m["proposed"] = m["proposed_edited"]
-                m["user_refined"] = True
-
-        if rejected:
-            print("Rejected clauses (" + str(len(rejected)) + "): " + ", ".join([m.get("clause_name","?") for m in rejected]))
-
-        # AI scoring of contract quality for RAG
-        client = anthropic.Anthropic(api_key=api_key)
-        scoring_prompt = """Evalue ce contrat pour une base de connaissances juridiques.
-Reponds UNIQUEMENT en JSON valide, sans markdown:
-{
-  "score": 0-100,
-  "category": "nda|saas|purchase|employment|partnership|service|collaboration|generic",
-  "party_label": "favorable """ + (partie if partie else "neutre") + """",
-  "quality_reason": "1 phrase expliquant le score",
-  "key_clauses": ["clause1", "clause2", "clause3"]
+function setFile(f) {
+  if (!f) return;
+  curFile = f;
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('file-size').textContent = (f.size/1024).toFixed(0) + ' KB';
+  show('file-ok');
 }
-Regles:
-- category: deduis du CONTENU du contrat, pas du type selectionne par l utilisateur
-  * service = contrat de prestation de services, collaboration, mission
-  * nda = confidentialite
-  * employment = travail, salarie
-  * partnership = association, joint-venture
-  * purchase = achat, vente
-  * saas = logiciel, abonnement
-- party_label: utilise un label GENERIQUE selon le role de la partie dans CE contrat
-  * service/prestation/collaboration/mission → "favorable client" ou "favorable prestataire"
-  * travail/salarie → "favorable employeur" ou "favorable employe"
-  * nda/confidentialite → "favorable divulgateur" ou "favorable destinataire"
-  * achat/vente → "favorable acheteur" ou "favorable vendeur"
-  * partenariat/association → "favorable partenaire A" ou "favorable partenaire B"
-  NE JAMAIS utiliser le nom d une societe ou d une personne dans party_label.
-  La partie favorisee dans ce contrat est: """ + (partie if partie else "neutre") + """
-- score: 0-100 selon la qualite et completude du contrat
-Score eleve = contrat complet avec clauses interessantes a reutiliser."""
 
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            system=scoring_prompt,
-            messages=[{"role": "user", "content": "Contrat:\n\n" + contract_text[:5000]}]
-        )
-        raw = message.content[0].text
-        match = re.search(r'\{[\s\S]*\}', raw)
-        scoring = json.loads(match.group(0)) if match else {"score": 50, "category": contract_type, "party_label": f"favorable {partie}", "quality_reason": "Scoring indisponible", "key_clauses": []}
+function saveKey() {
+  var k = document.getElementById('api-key').value.trim();
+  if (!k || k.indexOf('sk-') !== 0) {
+    showErr('key-error', '⚠ Clé invalide — doit commencer par sk-');
+    return;
+  }
+  apiKey = k;
+  localStorage.setItem('cs_key', k);
+  hideErr('key-error');
+  showKeyBar();
+  show('step-form');
+}
 
-        import uuid
-        import uuid as _uuid
-        save_queue_item({
-            "id": str(_uuid.uuid4()),
-            "contract_text": contract_text[:50000],
-            "filename": filename,
-            "partie": partie,
-            "party_label": normalize_party_label(scoring.get("party_label", partie), contract_type),
-            "contract_type": contract_type,
-            "score": scoring.get("score", 50),
-            "category": scoring.get("category", contract_type),
-            "quality_reason": scoring.get("quality_reason", ""),
-            "key_clauses": scoring.get("key_clauses", []),
-            "accepted_count": len(accepted),
-            "rejected_count": len(rejected),
-            "accepted_modifications": accepted,
-            "submitted_at": datetime.datetime.now().isoformat()
-        })
-        return jsonify({"success": True, "score": scoring.get("score", 50)})
+function stepDone(i) {
+  var el = document.getElementById('s' + i);
+  var labels = ['Lecture du document…','Identification des parties…','Analyse des risques…','Rédaction des modifications…'];
+  if (el) { el.classList.add('done'); el.textContent = '✓ ' + labels[i]; }
+}
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+function stepReset() {
+  var labels = ['Lecture du document…','Identification des parties…','Analyse des risques…','Rédaction des modifications…'];
+  for (var i = 0; i < 4; i++) {
+    var el = document.getElementById('s' + i);
+    if (el) { el.classList.remove('done'); el.textContent = '→ ' + labels[i]; }
+  }
+}
 
+function rc(r) { return r === 'high' ? '#ef4444' : r === 'medium' ? '#f59e0b' : '#10b981'; }
+function rl(r) { return r === 'high' ? 'Risque élevé' : r === 'medium' ? 'Risque modéré' : 'Faible risque'; }
 
-@app.route("/queue/list", methods=["GET"])
-def queue_list():
-    """List pending clauses for admin review"""
-    try:
-        queue = load_queue()
-        return jsonify({"pending": queue["pending"], "total": len(queue["pending"])})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+function buildFormData() {
+  var fd = new FormData();
+  fd.append('lang', 'auto');
+  fd.append('type', document.getElementById('type').value);
+  fd.append('api_key', apiKey);
+  if (curMode === 'upload' && curFile) {
+    fd.append('file', curFile);
+  } else {
+    var txt = document.getElementById('contract-text').value || savedText;
+    fd.append('file', new Blob([txt], {type:'text/plain'}), 'contract.txt');
+  }
+  return fd;
+}
 
+// ── Step 1: Analyze → identify parties ───────────────────
+async function analyze() {
+  hideErr('form-error');
 
-@app.route("/queue/validate", methods=["POST"])
-def queue_validate():
-    """Admin validates contract — indexes full text into RAG"""
-    try:
-        body = request.get_json()
-        contract_id = body.get("id")
-        admin_category = body.get("category", "")
-        admin_party_label = body.get("party_label", "")
-        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+  // Check free usage limit
+  var usage = parseInt(localStorage.getItem('cs_usage') || '0');
+  if (usage >= 3) {
+    showErr('form-error', '⚠ Vous avez utilisé vos 3 analyses gratuites. Contactez-nous sur westfieldavocats.com pour un accès illimité.');
+    return;
+  }
 
-        queue = load_queue()
-        pending = queue.get("pending", [])
-        contract = next((c for c in pending if c["id"] == contract_id), None)
-        if not contract:
-            return jsonify({"error": "Contrat introuvable"}), 404
+  var txt = document.getElementById('contract-text').value;
+  if (curMode === 'upload' && !curFile) { showErr('form-error', '⚠ Uploade un fichier.'); return; }
+  if (curMode === 'text' && txt.trim().length < 50) { showErr('form-error', '⚠ Colle au moins 50 caractères.'); return; }
 
-        contract_text = contract.get("contract_text", "")
-        category = admin_category or contract.get("category", "generic")
-        party_label = admin_party_label or contract.get("party_label", "")
+  hide('step-form');
+  showFlex('step-loading');
+  stepReset();
+  stepDone(0);
+  setTimeout(function() { stepDone(1); }, 800);
 
-        # Use admin-edited modifications if provided
-        edited_mods = body.get("edited_modifications", [])
-        if edited_mods:
-            # Merge edited mods back into contract
-            edited_map = {m.get("id"): m for m in edited_mods if m.get("proposed")}
-            accepted_mods = contract.get("accepted_modifications", [])
-            if isinstance(accepted_mods, str):
-                accepted_mods = json.loads(accepted_mods)
-            for mod in accepted_mods:
-                if mod.get("id") in edited_map:
-                    mod.update(edited_map[mod["id"]])
-            contract["accepted_modifications"] = accepted_mods
-        title_base = f"[{category.upper()}] {party_label}"
+  // Save params for later reuse
+  savedLang = 'auto';
+  savedType = document.getElementById('type').value;
+  savedText = document.getElementById('contract-text').value;
 
-        # Split contract into chunks and index
-        import uuid
-        words = contract_text.split()
-        chunk_size = 400
-        chunks = []
-        for i in range(0, len(words), chunk_size):
-            chunks.append(" ".join(words[i:i+chunk_size]))
+  try {
+    var fd2 = buildFormData();
+    var resp = await fetch(BACKEND + '/identify-parties', { method: 'POST', body: fd2 });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Erreur serveur');
 
-        data = load_rag()
-        for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk, voyage_key)
-            title = f"{title_base} (partie {i+1})" if len(chunks) > 1 else title_base
-            data["documents"].append({
-                "id": str(uuid.uuid4()),
-                "title": title,
-                "category": category,
-                "party_label": party_label,
-                "partie": contract.get("partie", ""),
-                "contract_type": category,
-                "content": chunk,
-                "embedding": embedding,
-                "source": "admin_validated",
-                "key_clauses": contract.get("key_clauses", []),
-                "score": contract.get("score", 50),
-                "validated_at": datetime.datetime.now().isoformat()
-            })
+    hide('step-loading');
+    renderParties(data.parties || []);
+  } catch(e) {
+    hide('step-loading');
+    show('step-form');
+    showErr('form-error', '⚠ ' + (e.message || 'Erreur inattendue.'));
+  }
+}
 
-        # Also index accepted modifications as separate entries
-        accepted_mods = contract.get("accepted_modifications", [])
-        if isinstance(accepted_mods, str):
-            accepted_mods = json.loads(accepted_mods)
-        for mod in accepted_mods:
-            mod_text = "CLAUSE VALIDEE [" + party_label + "]: " + mod.get('clause_name','') + "\n" + mod.get('proposed','')
-            embedding = get_embedding(mod_text, voyage_key)
-            normalized_label = normalize_party_label(party_label, category)
-            save_rag_doc({
-                "id": str(uuid.uuid4()),
-                "title": "[" + CONTRACT_CATEGORIES.get(category, category.upper()) + "] " + mod.get("clause_name","") + " — " + normalized_label,
-                "category": "validated_clause",
-                "party_label": normalized_label,
-                "partie": contract.get("partie", ""),
-                "contract_type": category,
-                "content": mod_text,
-                "embedding": json.dumps(embedding),
-                "source": "admin_validated_clause",
-                "validated_at": datetime.datetime.now().isoformat()
-            })
+// ── Step 2: Show parties ──────────────────────────────────
+function renderParties(parties) {
+  var list = document.getElementById('parties-list');
+  list.innerHTML = '';
+  parties.forEach(function(p) {
+    var btn = document.createElement('button');
+    btn.className = 'partie-btn';
+    // Show name + generic role
+    var roleLabel = p.party_label || p.description || p.role || '';
+    btn.innerHTML = 
+      '<div class="name">' + p.name + '</div>' +
+      '<div class="desc2">' + p.description + '</div>' +
+      (roleLabel ? '<div style="margin-top:4px;font-size:11px;color:#5b7cfa;font-weight:600">' + roleLabel + '</div>' : '');
+    // Pass party_label (generic role) not company name
+    btn.addEventListener('click', function() { analyzeWithPartie(p.party_label || p.description || p.name); });
+    list.appendChild(btn);
+  });
+  show('step-parties');
+}
 
-        delete_queue_item(contract_id)
+// ── Step 3: Analyze with selected partie ─────────────────
+async function analyzeWithPartie(partieName) {
+  selectedPartie = partieName;
+  hide('step-parties');
+  showFlex('step-loading');
+  stepDone(2);
+  setTimeout(function() { stepDone(3); }, 1400);
 
-        return jsonify({"success": True, "chunks_indexed": len(chunks)})
+  try {
+    var fd = buildFormData();
+    fd.append('partie', partieName);
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    var resp = await fetch(BACKEND + '/analyze', { method: 'POST', body: fd });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Erreur serveur');
 
+    modifications = data.modifications || [];
+    decisions = {};
+    modifications.forEach(function(m) { decisions[m.id] = 'pending'; });
 
-@app.route("/queue/reject", methods=["POST"])
-def queue_reject():
-    """Admin rejects contract — removes from queue"""
-    try:
-        body = request.get_json()
-        contract_id = body.get("id")
-        delete_queue_item(contract_id)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    hide('step-loading');
+    renderReview();
+  } catch(e) {
+    hide('step-loading');
+    show('step-form');
+    showErr('form-error', '⚠ ' + (e.message || 'Erreur inattendue.'));
+  }
+}
 
+// ── Step 4: Review ────────────────────────────────────────
+function onProposedEdit(id, el) {
+  // Save user-edited version
+  var mod = modifications.find(function(m) { return m.id === id; });
+  if (mod) {
+    mod.proposed_user = el.innerText.trim();
+    // Visual feedback
+    el.style.borderColor = '#f59e0b';
+    el.style.background = 'rgba(245,158,11,0.06)';
+  }
+}
 
-@app.route("/rag/upload", methods=["POST"])
-def rag_upload():
-    try:
-        file = request.files.get("file")
-        title = request.form.get("source_name") or request.form.get("title", "Document")
-        category = request.form.get("doc_type") or request.form.get("category", "general")
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
+function decide(id, decision) {
+  // If user edited the proposed text, save it back to modifications
+  var mod = modifications.find(function(m) { return m.id === id; });
+  if (mod && decision === 'accepted') {
+    var editedEl = document.getElementById('proposed-' + id);
+    if (editedEl) {
+      var edited = editedEl.innerText.trim();
+      if (edited && edited !== mod.proposed) {
+        mod.proposed_edited = edited;
+        mod.proposed = edited; // Use edited version for export
+      }
+    }
+  }
+  decisions[id] = decision;
+  var card = document.getElementById('card-' + id);
+  var btnA = document.getElementById('ba-' + id);
+  var btnR = document.getElementById('br-' + id);
+  var status = document.getElementById('st-' + id);
+  card.classList.remove('accepted','rejected');
+  btnA.classList.remove('active');
+  btnR.classList.remove('active');
+  if (decision === 'accepted') {
+    card.classList.add('accepted');
+    btnA.classList.add('active');
+    status.textContent = '✅ Modification acceptée';
+    status.style.color = '#10b981';
+  } else {
+    card.classList.add('rejected');
+    btnR.classList.add('active');
+    status.textContent = '❌ Texte original conservé';
+    status.style.color = '#ef4444';
+  }
+  updateStats();
+}
 
-        file_bytes = file.read()
-        filename = file.filename.lower()
-        if filename.endswith(".docx") or filename.endswith(".doc"):
-            content = extract_text_from_docx(file_bytes)
-        else:
-            content = file_bytes.decode("utf-8", errors="ignore")
+function updateStats() {
+  var a = Object.values(decisions).filter(function(d){return d==='accepted';}).length;
+  var r = Object.values(decisions).filter(function(d){return d==='rejected';}).length;
+  var p = Object.values(decisions).filter(function(d){return d==='pending';}).length;
+  document.getElementById('review-stats').innerHTML =
+    '<span class="stat stat-pending">' + p + ' en attente</span>' +
+    '<span class="stat stat-accepted">' + a + ' acceptées</span>' +
+    '<span class="stat stat-rejected">' + r + ' refusées</span>';
+}
 
-        if not content or len(content.strip()) < 50:
-            return jsonify({"error": "Document vide ou illisible"}), 400
+function renderReview() {
+  var list = document.getElementById('mods-list');
+  list.innerHTML = '';
+  modifications.forEach(function(m) {
+    var color = rc(m.risk);
+    var div = document.createElement('div');
+    div.className = 'mod-card';
+    div.id = 'card-' + m.id;
+    div.innerHTML =
+      '<div class="mod-header">' +
+        '<div class="mod-name">' + m.clause_name + '</div>' +
+        '<span class="risk-pill" style="background:' + color + '20;color:' + color + '">' + rl(m.risk) + '</span>' +
+      '</div>' +
+      '<div class="mod-body">' +
+        (m.rag_source ? '<div style="background:rgba(91,124,250,0.08);border:1px solid rgba(91,124,250,0.2);border-radius:7px;padding:5px 10px;font-size:11px;color:#5b7cfa;margin-bottom:10px;">🧠 Basé sur: ' + m.rag_source + '</div>' : '') +
+        '<div class="mod-reason">💡 ' + m.reason + '</div>' +
+        '<div class="mod-label" style="color:#ef4444">📄 Texte original</div>' +
+        '<div class="mod-original">' + m.original + '</div>' +
+        '<div class="mod-label" style="color:#10b981">✏ Modification proposée <span style="color:#6b7280;font-size:10px;font-weight:400">(éditable)</span></div>' +
+        '<div class="mod-proposed" id="proposed-' + m.id + '" contenteditable="true" spellcheck="true" style="cursor:text;outline:none;" oninput="onProposedEdit(' + m.id + ', this)">' + m.proposed + '</div>' +
+        '<div class="mod-actions">' +
+          '<button class="btn-accept" id="ba-' + m.id + '" onclick="decide(' + m.id + ',\'accepted\')">✅ Accepter</button>' +
+          '<button class="btn-reject" id="br-' + m.id + '" onclick="decide(' + m.id + ',\'rejected\')">❌ Refuser</button>' +
+        '</div>' +
+        '<div class="mod-status" id="st-' + m.id + '"></div>' +
+      '</div>';
+    list.appendChild(div);
+  });
 
-        # Limit content size for large documents
-        if len(content) > 200000:
-            content = content[:200000]
+  var isDocx = curFile && (curFile.name.endsWith('.docx') || curFile.name.endsWith('.doc'));
+  document.getElementById('export-desc').innerHTML = isDocx
+    ? 'Le fichier DOCX original sera téléchargé avec les <strong>vraies Track Changes Word</strong> — mise en forme préservée.'
+    : 'Un document Word sera généré avec les modifications acceptées en Track Changes.';
 
-        # Split into chunks of ~400 words
-        words = content.split()
-        chunk_size = 400
-        max_chunks = 50  # Max 50 chunks per upload to avoid timeout
-        chunks = []
-        for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size):
-            chunk = " ".join(words[i:i+chunk_size])
-            chunks.append(chunk)
+  updateStats();
+  show('step-review');
+}
 
-        import uuid
-        voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
-        for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk, voyage_key)
-            chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
-            save_rag_doc({
-                "id": str(uuid.uuid4()),
-                "title": chunk_title,
-                "category": category,
-                "content": chunk,
-                "embedding": json.dumps(embedding),
-                "source": "manual_upload",
-                "validated_at": datetime.datetime.now().isoformat()
-            })
+// ── Export ────────────────────────────────────────────────
+async function exportDoc() {
+  var btn = document.getElementById('btn-export');
+  btn.textContent = '⏳ Génération en cours…';
+  btn.disabled = true;
+  try {
+    var fd = buildFormData();
+    fd.append('modifications', JSON.stringify(modifications));
+    fd.append('decisions', JSON.stringify(decisions));
+    var resp = await fetch(BACKEND + '/export', { method: 'POST', body: fd });
+    if (!resp.ok) { var e = await resp.json(); throw new Error(e.error); }
+    var blob = await resp.blob();
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'contrat-track-changes.docx';
+    a.click();
+    btn.textContent = '✅ Téléchargé !';
+    btn.style.background = '#10b981';
+    setTimeout(function() {
+      btn.textContent = '⬇ Télécharger avec Track Changes';
+      btn.style.background = '';
+      btn.disabled = false;
+    }, 3000);
 
-        total = load_rag()
-        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
+    // Silent auto-contribute full contract to queue
+    contributeToQueue();
+  } catch(e) {
+    alert('⚠ ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '⬇ Télécharger avec Track Changes';
+  }
+}
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+// ── Reset ─────────────────────────────────────────────────
+async function contributeToQueue() {
+  try {
+    console.log('contributeToQueue: start', {
+      curFile: curFile ? curFile.name : null,
+      savedText: savedText ? savedText.length + ' chars' : null,
+      selectedPartie: selectedPartie,
+      modifications: modifications.length,
+      decisions: Object.keys(decisions).length
+    });
 
-@app.route("/rag/list", methods=["GET"])
-def rag_list():
-    try:
-        data = load_rag()
-        import re as _re
-        sources = {}
-        for d in data["documents"]:
-            base = _re.sub(r" \(partie \d+\)$", "", d.get("title", "Document"))
-            if base not in sources:
-                sources[base] = {
-                    "source": base,
-                    "type": d.get("category", "law"),
-                    "party_label": d.get("party_label", ""),
-                    "chunks": 0
-                }
-            sources[base]["chunks"] += 1
-        docs = list(sources.values())
-        return jsonify({"documents": docs, "total": len(data["documents"])})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    var fd = new FormData();
+    fd.append('lang', 'auto');
+    fd.append('type', savedType || 'generic');
+    fd.append('partie', selectedPartie || '');
+    fd.append('contract_type', savedType || 'generic');
+    fd.append('modifications', JSON.stringify(modifications));
+    fd.append('decisions', JSON.stringify(decisions));
 
-@app.route("/rag/delete/<doc_id>", methods=["DELETE"])
-def rag_delete_by_id(doc_id):
-    try:
-        sb = get_supabase()
-        sb.table("rag_documents").delete().eq("id", doc_id).execute()
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if (curFile) {
+      fd.append('file', curFile);
+      console.log('contributeToQueue: using curFile', curFile.name);
+    } else if (savedText && savedText.length > 50) {
+      fd.append('file', new Blob([savedText], {type:'text/plain'}), 'contract.txt');
+      console.log('contributeToQueue: using savedText');
+    } else {
+      console.log('contributeToQueue: no file available, skipping');
+      return;
+    }
 
-@app.route("/rag/delete", methods=["POST"])
-def rag_delete():
-    try:
-        body = request.get_json()
-        source = body.get("source", "")
-        count = delete_rag_by_source(source)
-        return jsonify({"success": True, "deleted": count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    var resp = await fetch(BACKEND + '/rag/contribute', { method: 'POST', body: fd });
+    var data = await resp.json();
+    console.log('contributeToQueue: response', resp.status, data);
+  } catch(e) {
+    console.log('contributeToQueue ERROR:', e.message);
+  }
+}
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, timeout=120)
+function reset() {
+  curFile = null;
+  modifications = [];
+  decisions = {};
+  savedFormData = null;
+  hide('step-review');
+  hide('step-parties');
+  hide('step-loading');
+  hide('file-ok');
+  document.getElementById('contract-text').value = '';
+  document.getElementById('file-input').value = '';
+  hideErr('form-error');
+  stepReset();
+  show('step-form');
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
