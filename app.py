@@ -176,8 +176,15 @@ def save_rag_doc(doc):
         for k, v in doc_copy.items():
             if isinstance(v, str):
                 doc_copy[k] = clean_text(v)
-        if "embedding" in doc_copy and isinstance(doc_copy["embedding"], list):
-            doc_copy["embedding"] = json.dumps(doc_copy["embedding"])
+        
+        # Save embedding both as JSON (legacy) and as vector (pgvector)
+        emb = doc_copy.get("embedding")
+        if emb and isinstance(emb, list) and len(emb) == 1024:
+            doc_copy["embedding_vector"] = emb  # pgvector column
+            doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
+        elif emb and isinstance(emb, list):
+            doc_copy["embedding"] = json.dumps(emb)
+
         supa_insert("rag_documents", doc_copy)
         print("save_rag_doc OK: " + str(doc_copy.get("title","?"))[:50])
     except Exception as e:
@@ -238,6 +245,28 @@ def get_embedding(text, voyage_key=None):
     if norm > 0:
         vec = [v/norm for v in vec]
     return vec
+
+def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
+    """Search RAG using pgvector directly in Supabase — fast semantic search"""
+    try:
+        # Call the search_rag SQL function we created
+        url = SUPA_URL + "/rest/v1/rpc/search_rag"
+        payload = {
+            "query_embedding": query_embedding,
+            "match_count": top_k,
+            "filter_type": doc_type
+        }
+        r = req_lib.post(url, headers=supa_headers(), json=payload, timeout=15)
+        if r.ok:
+            results = r.json()
+            print(f"pgvector search: {len(results)} results")
+            return results or []
+        else:
+            print("pgvector search error: " + r.text[:200])
+            return []
+    except Exception as e:
+        print("pgvector search exception: " + str(e))
+        return []
 
 def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     data = load_rag()
