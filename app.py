@@ -504,7 +504,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     truncated_text = numbered_text[:15000]
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=4000,
+        max_tokens=3000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
