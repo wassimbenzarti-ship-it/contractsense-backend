@@ -396,11 +396,17 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         numbered_text = contract_text[:20000]
 
-    # Search RAG for relevant context
+    # Search RAG using pgvector — fast semantic search
     rag_context = ""
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        relevant_docs = search_rag(contract_text[:2000], api_key, voyage_key, top_k=6, partie=partie)
+        # Get embedding for search query
+        search_query = contract_type + " " + partie + " " + contract_text[:500]
+        query_vec = get_embedding(search_query, voyage_key)
+        relevant_docs = []
+        if query_vec and len(query_vec) == 1024:
+            relevant_docs = search_rag_pgvector(query_vec, top_k=15)
+            print(f"pgvector: {len(relevant_docs)} docs found")
         if relevant_docs:
             validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
             reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
