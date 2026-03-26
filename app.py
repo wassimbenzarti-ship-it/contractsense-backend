@@ -539,21 +539,32 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         result = None
 
-    # Fallback: extract individual modification objects
+    # Fallback: extract individual modification objects using brace tracking
     if not result or not result.get("modifications"):
         mods = []
-        # Find each modification block
-        blocks = re.split(r'(?="id"\s*:\s*\d+)', raw)
-        for block in blocks:
-            try:
-                # Try to parse as complete object
-                m = re.search(r'\{[^{}]*"id"[^{}]*"proposed"[^{}]*\}', block, re.DOTALL)
-                if m:
-                    obj_str = m.group(0)
-                    obj_str = re.sub(r',\s*}', '}', obj_str)
-                    mods.append(json.loads(obj_str))
-            except:
-                pass
+        # Track braces to find complete objects
+        depth = 0
+        start = -1
+        for i, c in enumerate(raw):
+            if c == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    obj_str = raw[start:i+1]
+                    if '"id"' in obj_str and '"proposed"' in obj_str:
+                        try:
+                            clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', obj_str)
+                            clean = re.sub(r',\s*}', '}', clean)
+                            clean = re.sub(r',\s*]', ']', clean)
+                            obj = json.loads(clean)
+                            if obj.get("proposed"):
+                                mods.append(obj)
+                        except:
+                            pass
+                    start = -1
 
         if not mods:
             # Last resort: regex extraction
@@ -563,6 +574,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             originals = re.findall(r'"original"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            rag_sources = re.findall(r'"rag_source"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
             for i in range(min(len(ids), len(proposeds))):
                 mods.append({
                     "id": int(ids[i]) if i < len(ids) else i+1,
@@ -571,7 +583,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "reason": reasons[i] if i < len(reasons) else "",
                     "original": originals[i] if i < len(originals) else "",
                     "proposed": proposeds[i] if i < len(proposeds) else "",
-                    "rag_source": None
+                    "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None
                 })
 
         if mods:
