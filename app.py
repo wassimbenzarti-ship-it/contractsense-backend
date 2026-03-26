@@ -243,10 +243,14 @@ def get_embedding(text, voyage_key=None):
 def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
     """Search RAG using pgvector directly in Supabase — fast semantic search"""
     try:
-        # Call the search_rag SQL function we created
         url = SUPA_URL + "/rest/v1/rpc/search_rag"
+        # Convert embedding list to pgvector string format
+        if isinstance(query_embedding, list):
+            vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        else:
+            vec_str = str(query_embedding)
         payload = {
-            "query_embedding": query_embedding,
+            "query_embedding": vec_str,
             "match_count": top_k,
             "filter_type": doc_type
         }
@@ -256,7 +260,7 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
             print(f"pgvector search: {len(results)} results")
             return results or []
         else:
-            print("pgvector search error: " + r.text[:200])
+            print("pgvector search error " + str(r.status_code) + ": " + r.text[:300])
             return []
     except Exception as e:
         print("pgvector search exception: " + str(e))
