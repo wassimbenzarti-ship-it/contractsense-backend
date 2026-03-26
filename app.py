@@ -414,8 +414,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
             if reference_docs:
                 rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÉFÉRENCE:\n"
+                protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
                 for doc in reference_docs:
-                    rag_context += "\n=== " + doc.get("title", "Document") + " ===\n" + doc.get("content", "")[:500] + "\n"
+                    title = doc.get("title", "Document")
+                    src = doc.get("source", "")
+                    is_protected = any(p in (title + src).lower() for p in protected_kw)
+                    rag_context += "\n=== " + title + " ===\n" + doc.get("content", "")[:500] + "\n"
+                    if is_protected:
+                        rag_context += "→ SOURCE PROTÉGÉE — utilise le contenu mais écris null dans rag_source\n"
+                    else:
+                        rag_context += "→ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
     except Exception as e:
         print("RAG search error: " + str(e))
 
@@ -454,7 +462,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
         "3. CLAUSES MANQUANTES: Signale aussi les protections ABSENTES du contrat (pas seulement les clauses mauvaises) — ex: absence de clause de révision de prix, absence de limitation de responsabilité, absence de clause de confidentialité\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
-        "5. RAG OBLIGATOIRE: Pour chaque modification, vérifie les textes de loi fournis et cite-les dans rag_source\n"
+        "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquées === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protégée ou absente du contexte → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
         "PROCESSUS D'ANALYSE:\n"
         "Étape 1: Lis tout le contrat\n"
@@ -476,7 +484,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"reason":"Pourquoi cette clause désavantage ' + partie + ' et comment la modification la protège",'
         '"original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
-        '"rag_source":"source RAG utilisée ou null"}]}\n\n'
+        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
         "- MINIMUM 8 modifications obligatoires — un juriste qui en trouve moins de 8 n'a pas analysé exhaustivement\n"
         "- para_idx: numéro entier du paragraphe\n"
@@ -1117,23 +1125,50 @@ def rag_upload():
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
     try:
-        data = load_rag()
-        import re as _re
-        sources = {}
-        for d in data["documents"]:
-            base = _re.sub(r" \(partie \d+\)$", "", d.get("title", "Document"))
-            if base not in sources:
-                sources[base] = {
-                    "source": base,
-                    "type": d.get("category", "law"),
-                    "party_label": d.get("party_label", ""),
-                    "chunks": 0
+        # Load ALL docs from Supabase with pagination
+        all_docs = []
+        offset = 0
+        while True:
+            batch = supa_get("rag_documents", {
+                "select": "id,source,category,party_label",
+                "limit": "1000",
+                "offset": str(offset)
+            })
+            if not batch:
+                break
+            all_docs.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset += 1000
+
+        grouped = {}
+        for doc in all_docs:
+            src = re.sub(r" \(partie \d+/\d+\)$", "", doc.get("source",""))
+            src = re.sub(r" — partie \d+/\d+$", "", src)
+            if src not in grouped:
+                grouped[src] = {
+                    "source": src,
+                    "chunks": 0,
+                    "type": doc.get("category",""),
+                    "party_label": doc.get("party_label",""),
+                    "warning": False
                 }
-            sources[base]["chunks"] += 1
-        docs = list(sources.values())
-        return jsonify({"documents": docs, "total": len(data["documents"])})
+            grouped[src]["chunks"] += 1
+
+        for src, d in grouped.items():
+            if d["chunks"] < 5:
+                d["warning"] = True
+                d["warning_msg"] = "Trop peu de chunks"
+
+        result = sorted(grouped.values(), key=lambda x: (x.get("type",""), x.get("source","")))
+        return jsonify({
+            "documents": result,
+            "total": sum(d["chunks"] for d in result),
+            "total_docs": len(result)
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
 def rag_delete_by_id(doc_id):
