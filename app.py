@@ -402,7 +402,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     
     # Build numbered contract text for AI
     if paragraphs:
-        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:100])
+        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:150])
     else:
         numbered_text = contract_text[:20000]
 
@@ -447,8 +447,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     role_obj = role_objectives.get(role_key, "protéger ses intérêts")
 
     system = (
-        "Tu es un juriste expert spécialisé en analyse contractuelle.\n"
-        "MISSION: Analyser ce contrat et proposer des modifications qui FAVORISENT " + partie + ".\n\n"
+        "Tu es un avocat d'affaires senior avec 20 ans d'expérience en droit des contrats. Ta responsabilité professionnelle est engagée.\n"
+        "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
+        "OBLIGATION D'EXHAUSTIVITÉ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
+        "FAVORISER: " + partie + "\n\n"
         "LANGUE: Tu dois IMPÉRATIVEMENT détecter la langue du contrat et répondre dans EXACTEMENT cette même langue.\n"
         "Si le contrat contient majoritairement des mots anglais → réponds en ANGLAIS.\n"
         "Si le contrat contient majoritairement des mots français → réponds en FRANÇAIS.\n"
@@ -457,17 +459,19 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
-        "RÈGLE ABSOLUE: Chaque modification proposée doit AVANTAGER " + partie + ".\n"
-        "UTILISATION RAG OBLIGATOIRE: Le contexte RAG fourni ci-dessous contient des textes de loi et clauses validées. Tu DOIS:\n"
-        "1. Lire attentivement chaque document RAG\n"
-        "2. Pour chaque modification, vérifier si un document RAG est pertinent\n"
-        "3. Si oui, citer la source dans rag_source ET utiliser le contenu dans la modification\n"
-        "4. Pour un contrat en anglais avec des lois marocaines en français: applique quand même les principes juridiques marocains et cite-les\n"
-        "Si une clause est déjà favorable à " + partie + ", ne la modifie pas.\n"
-        "Si une clause est neutre, modifie-la pour qu'elle favorise " + partie + ".\n"
-        "Si une clause désavantage " + partie + ", reformule-la pour rééquilibrer en sa faveur.\n"
-        "CONTRAINTE LÉGALE ABSOLUE: Toutes les modifications doivent rester dans le cadre légal.\n"
-        "Ne propose jamais de clauses illégales, abusives ou contraires à l'ordre public.\n\n"
+        "RÈGLES D'ANALYSE PROFESSIONNELLE:\n"
+        "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
+        "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
+        "3. CLAUSES MANQUANTES: Signale aussi les protections ABSENTES du contrat (pas seulement les clauses mauvaises) — ex: absence de clause de révision de prix, absence de limitation de responsabilité, absence de clause de confidentialité\n"
+        "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
+        "5. RAG OBLIGATOIRE: Pour chaque modification, vérifie les textes de loi fournis et cite-les dans rag_source\n"
+        "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
+        "PROCESSUS D'ANALYSE:\n"
+        "Étape 1: Lis tout le contrat\n"
+        "Étape 2: Pour chaque paragraphe, demande-toi: Cette clause est-elle favorable, neutre ou défavorable à " + partie + " ?\n"
+        "Étape 3: Pour chaque clause défavorable ou neutre améliorable → propose une modification\n"
+        "Étape 4: Vérifie les protections manquantes → propose des clauses additionnelles\n"
+        "Étape 5: Vérifie chaque modification contre le RAG pour citer les sources\n\n"
         + get_legal_framework(contract_type) +
         "\n\n"
         + rag_context +
@@ -484,7 +488,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"clause reformulée favorisant ' + partie + '",'
         '"rag_source":"source RAG utilisée ou null"}]}\n\n'
         "Règles:\n"
-        "- Minimum 5 modifications, pas de maximum\n"
+        "- MINIMUM 8 modifications obligatoires — un juriste qui en trouve moins de 8 n'a pas analysé exhaustivement\n"
         "- para_idx: numéro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
         "- proposed: clause juridique complète et professionnelle, rédigée en style contractuel soutenu\n"
@@ -500,7 +504,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     truncated_text = numbered_text[:15000]
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=2500,
+        max_tokens=4000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     )
