@@ -143,18 +143,11 @@ def supa_delete(table, filters):
 
 # ── RAG: Supabase REST storage ────────────────────────────
 def load_rag(contract_type=None, limit=200):
-    """Load RAG docs — limited to avoid memory/timeout issues"""
+    """Load RAG docs — load a sample from each category for /rag/list endpoint only"""
     try:
-        all_docs = []
-        # Load validated clauses first (most relevant)
-        validated = supa_get("rag_documents", {
-            "select": "*",
-            "limit": "50",
-            "source": f"like.*validated*" if False else None,  # placeholder
-        })
-        # Load all docs with limit
+        # Load sample from each category for display
         docs = supa_get("rag_documents", {
-            "select": "id,title,content,source,category,party_label,embedding",
+            "select": "id,title,content,source,category,party_label",
             "limit": str(limit)
         })
         return {"documents": docs or []}
