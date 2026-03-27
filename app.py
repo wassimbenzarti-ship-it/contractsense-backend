@@ -31,40 +31,40 @@ def get_legal_framework(contract_type):
     """Return mandatory legal constraints per contract type"""
     frameworks = {
         "employment": (
-            "DROIT DU TRAVAIL MAROCAIN â RÃGLES IMPÃRATIVES:\n"
-            "- CDD (contrat de projet/durÃ©e dÃ©terminÃ©e): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+            "DROIT DU TRAVAIL MAROCAIN Ã¢ÂÂ RÃÂGLES IMPÃÂRATIVES:\n"
+            "- CDD (contrat de projet/durÃÂ©e dÃÂ©terminÃÂ©e): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
             "- Renouvellement abusif = requalification automatique en CDI\n"
-            "- PrÃ©avis lÃ©gaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
-            "- PrÃ©avis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
-            "- IndemnitÃ© de licenciement: 96h/an pour les 3 premiÃ¨res annÃ©es, 144h/an aprÃ¨s\n"
-            "- Licenciement abusif interdit â cause rÃ©elle et sÃ©rieuse obligatoire\n"
-            "- Heures supplÃ©mentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
-            "- CongÃ© annuel: 1,5 jour/mois travaillÃ© (min 18 jours/an)\n"
+            "- PrÃÂ©avis lÃÂ©gaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
+            "- PrÃÂ©avis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
+            "- IndemnitÃÂ© de licenciement: 96h/an pour les 3 premiÃÂ¨res annÃÂ©es, 144h/an aprÃÂ¨s\n"
+            "- Licenciement abusif interdit Ã¢ÂÂ cause rÃÂ©elle et sÃÂ©rieuse obligatoire\n"
+            "- Heures supplÃÂ©mentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
+            "- CongÃÂ© annuel: 1,5 jour/mois travaillÃÂ© (min 18 jours/an)\n"
             "- Toute clause moins favorable que la loi est NULLE de plein droit"
         ),
         "nda": (
-            "DROIT MAROCAIN â CONFIDENTIALITÃ:\n"
-            "- DurÃ©e maximale raisonnable: 3-5 ans post-contrat\n"
-            "- Clause doit dÃ©finir prÃ©cisÃ©ment les informations confidentielles\n"
-            "- PÃ©nalitÃ©s doivent Ãªtre proportionnÃ©es (Art. 264 DOC)"
+            "DROIT MAROCAIN Ã¢ÂÂ CONFIDENTIALITÃÂ:\n"
+            "- DurÃÂ©e maximale raisonnable: 3-5 ans post-contrat\n"
+            "- Clause doit dÃÂ©finir prÃÂ©cisÃÂ©ment les informations confidentielles\n"
+            "- PÃÂ©nalitÃÂ©s doivent ÃÂªtre proportionnÃÂ©es (Art. 264 DOC)"
         ),
         "service": (
-            "DROIT MAROCAIN â PRESTATION DE SERVICES:\n"
-            "- DÃ©lai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
-            "- PÃ©nalitÃ©s de retard lÃ©gales: taux directeur BAM + 3 points\n"
-            "- Clauses limitatives de responsabilitÃ© admises si non abusives\n"
-            "- Clause de non-concurrence: limitÃ©e dans le temps et l'espace"
+            "DROIT MAROCAIN Ã¢ÂÂ PRESTATION DE SERVICES:\n"
+            "- DÃÂ©lai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
+            "- PÃÂ©nalitÃÂ©s de retard lÃÂ©gales: taux directeur BAM + 3 points\n"
+            "- Clauses limitatives de responsabilitÃÂ© admises si non abusives\n"
+            "- Clause de non-concurrence: limitÃÂ©e dans le temps et l'espace"
         ),
         "purchase": (
-            "DROIT MAROCAIN â VENTE:\n"
-            "- Garantie des vices cachÃ©s: 1 an (Art. 573 DOC)\n"
-            "- Transfert de propriÃ©tÃ©: Ã  la livraison sauf clause contraire\n"
-            "- RÃ©serve de propriÃ©tÃ© possible jusqu'au paiement complet"
+            "DROIT MAROCAIN Ã¢ÂÂ VENTE:\n"
+            "- Garantie des vices cachÃÂ©s: 1 an (Art. 573 DOC)\n"
+            "- Transfert de propriÃÂ©tÃÂ©: ÃÂ  la livraison sauf clause contraire\n"
+            "- RÃÂ©serve de propriÃÂ©tÃÂ© possible jusqu'au paiement complet"
         ),
     }
-    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes gÃ©nÃ©raux du DOC.")
+    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes gÃÂ©nÃÂ©raux du DOC.")
 
-# ââ Party label normalization âââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ Party label normalization Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 CONTRACT_CATEGORIES = {
     "service": "Prestation de services",
     "saas": "SaaS / Logiciel",
@@ -105,11 +105,11 @@ def normalize_party_label(partie, contract_type=None):
     }
     if contract_type in defaults:
         return defaults[contract_type]
-    # Clean up â remove company names, keep first word
+    # Clean up Ã¢ÂÂ remove company names, keep first word
     first_word = p.split()[0] if p.split() else p
     return "favorable " + first_word
 
-# ââ Supabase client ââââââââââââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ Supabase client Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -141,9 +141,9 @@ def supa_delete(table, filters):
     r.raise_for_status()
     return r
 
-# ââ RAG: Supabase REST storage ââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ RAG: Supabase REST storage Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 def load_rag(contract_type=None, limit=200):
-    """Load RAG docs â load a sample from each category for /rag/list endpoint only"""
+    """Load RAG docs Ã¢ÂÂ load a sample from each category for /rag/list endpoint only"""
     try:
         # Load sample from each category for display
         docs = supa_get("rag_documents", {
@@ -234,7 +234,7 @@ def get_embedding(text, voyage_key=None):
     return vec
 
 def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
-    """Search RAG using pgvector directly in Supabase â fast semantic search"""
+    """Search RAG using pgvector directly in Supabase Ã¢ÂÂ fast semantic search"""
     try:
         url = SUPA_URL + "/rest/v1/rpc/search_rag"
         # Convert embedding list to pgvector string format
@@ -287,7 +287,7 @@ def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     scored.sort(key=lambda x: x[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
 
-# ââ Text extraction âââââââââââââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ Text extraction Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 def extract_text_from_doc_ole(file_bytes):
     """Extract text from old .doc format using olefile"""
     if not HAS_OLEFILE:
@@ -301,7 +301,7 @@ def extract_text_from_doc_ole(file_bytes):
         clean = re.sub(r'[^\x20-\x7E\x80-\xFF\n\r\t]', ' ', text)
         clean = re.sub(r' {3,}', ' ', clean)
         clean = re.sub(r'\n{3,}', '\n\n', clean)
-        # Skip binary header â find first readable content
+        # Skip binary header Ã¢ÂÂ find first readable content
         for marker in ['CONTRAT', 'Contrat', 'CONTRACT', 'ACCORD', 'CONVENTION']:
             idx = clean.find(marker)
             if idx != -1 and idx < len(clean) // 2:
@@ -345,11 +345,11 @@ def read_file(file):
     text = text.replace("\x00", "").replace("\u0000", "") if text else text
     return text, file_bytes, filename
 
-# ââ AI functions ââââââââââââââââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ AI functions Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 def identify_parties(contract_text, lang, api_key):
     client = anthropic.Anthropic(api_key=api_key)
     system = f"""Tu es un juriste expert. Identifie les parties dans ce contrat.
-RÃ©ponds UNIQUEMENT en {'anglais' if lang == 'en' else 'franÃ§ais'} avec ce JSON exact, sans markdown:
+RÃÂ©ponds UNIQUEMENT en {'anglais' if lang == 'en' else 'franÃÂ§ais'} avec ce JSON exact, sans markdown:
 {{"parties":[{{"id":"partie_1","name":"Nom exact de la partie 1","description":"Role de cette partie"}},{{"id":"partie_2","name":"Nom exact de la partie 2","description":"Role de cette partie"}}]}}
 - Utilise les vrais noms tels qu'ils apparaissent dans le contrat
 - Maximum 3 parties, description max 10 mots"""
@@ -363,7 +363,7 @@ RÃ©ponds UNIQUEMENT en {'anglais' if lang == 'en' else 'franÃ§ais'} avec ce 
     raw = message.content[0].text
     match = re.search(r'\{[\s\S]*\}', raw)
     if not match:
-        raise ValueError("RÃ©ponse invalide")
+        raise ValueError("RÃÂ©ponse invalide")
     return json.loads(match.group(0))
 
 def build_numbered_paragraphs(file_bytes, filename):
@@ -381,10 +381,10 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bÃ©nÃ©ficiaire", file_bytes=None, filename=""):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bÃÂ©nÃÂ©ficiaire", file_bytes=None, filename=""):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        raise ValueError("ClÃ© API manquante")
+        raise ValueError("ClÃÂ© API manquante")
     client = anthropic.Anthropic(api_key=api_key)
 
     # Build numbered paragraphs for precise matching
@@ -396,7 +396,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         numbered_text = contract_text[:20000]
 
-    # Search RAG using pgvector â fast semantic search
+    # Search RAG using pgvector Ã¢ÂÂ fast semantic search
     rag_context = ""
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
@@ -412,14 +412,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
 
             if validated_clauses:
-                rag_context += "\n\nCLAUSES VALIDÃES PAR DES JURISTES (utilise ces reformulations comme modÃ¨les):\n"
+                rag_context += "\n\nCLAUSES VALIDÃÂES PAR DES JURISTES (utilise ces reformulations comme modÃÂ¨les):\n"
                 for doc in validated_clauses:
                     content_raw = doc.get("content", "")
                     rag_context += "\n---\n" + content_raw[:600] + "\n"
-                rag_context += "\nâ Ces clauses ont Ã©tÃ© validÃ©es par des juristes. Inspire-toi directement de leur formulation.\n"
+                rag_context += "\nÃ¢ÂÂ Ces clauses ont ÃÂ©tÃÂ© validÃÂ©es par des juristes. Inspire-toi directement de leur formulation.\n"
 
             if reference_docs:
-                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÃFÃRENCE:\n"
+                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÃÂFÃÂRENCE:\n"
                 protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
                 for doc in reference_docs:
                     title = doc.get("title", "Document")
@@ -427,15 +427,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     is_protected = any(p in (title + src).lower() for p in protected_kw)
                     rag_context += "\n=== " + title + " ===\n" + doc.get("content", "")[:500] + "\n"
                     if is_protected:
-                        rag_context += "â SOURCE PROTÃGÃE â utilise le contenu mais Ã©cris null dans rag_source\n"
+                        rag_context += "Ã¢ÂÂ SOURCE PROTÃÂGÃÂE Ã¢ÂÂ utilise le contenu mais ÃÂ©cris null dans rag_source\n"
                     else:
-                        rag_context += "â Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
+                        rag_context += "Ã¢ÂÂ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
     except Exception as e:
         print("RAG search error: " + str(e))
 
     # Detect contract language
     english_words = len([w for w in contract_text[:2000].lower().split() if w in ['the','and','of','to','in','for','is','this','agreement','shall','party','parties','contract','hereby','whereas','including','provided','subject','pursuant','accordance','obligation','represent','warrant','indemnify','liability','termination','governing','arbitration','confidential']])
-    french_words = len([w for w in contract_text[:2000].lower().split() if w in ['le','la','les','de','du','des','en','et','est','que','qui','une','par','pour','sur','dans','avec','aux','au','contrat','sociÃ©tÃ©','article','prÃ©sent','parties','prestataire','client','mandant','mandataire','clause','accord','convention','rÃ©siliation','responsabilitÃ©','confidentialitÃ©']])
+    french_words = len([w for w in contract_text[:2000].lower().split() if w in ['le','la','les','de','du','des','en','et','est','que','qui','une','par','pour','sur','dans','avec','aux','au','contrat','sociÃÂ©tÃÂ©','article','prÃÂ©sent','parties','prestataire','client','mandant','mandataire','clause','accord','convention','rÃÂ©siliation','responsabilitÃÂ©','confidentialitÃÂ©']])
     arabic_words = len([w for w in contract_text[:2000].split() if any(0x0600 <= ord(c) <= 0x06FF for c in w)])
     
     if arabic_words > 10:
@@ -449,12 +449,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Define what "favorable" means for each role
     role_objectives = {
-        "employeur": "maximiser la flexibilitÃ© opÃ©rationnelle, minimiser les obligations et coÃ»ts, renforcer le pouvoir de direction et de contrÃ´le, faciliter la rÃ©siliation, protÃ©ger les intÃ©rÃªts commerciaux",
-        "employe": "garantir la stabilitÃ© de l'emploi, maximiser les protections et indemnitÃ©s, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
-        "prestataire": "garantir le paiement, limiter la responsabilitÃ©, protÃ©ger la propriÃ©tÃ© intellectuelle, encadrer les modifications de scope",
-        "client": "garantir la qualitÃ© et les dÃ©lais, maximiser les pÃ©nalitÃ©s, faciliter la rÃ©siliation, protÃ©ger les donnÃ©es",
-        "acheteur": "garantir la conformitÃ©, maximiser les garanties, faciliter les recours",
-        "vendeur": "garantir le paiement, limiter les garanties et responsabilitÃ©s",
+        "employeur": "maximiser la flexibilitÃÂ© opÃÂ©rationnelle, minimiser les obligations et coÃÂ»ts, renforcer le pouvoir de direction et de contrÃÂ´le, faciliter la rÃÂ©siliation, protÃÂ©ger les intÃÂ©rÃÂªts commerciaux",
+        "employe": "garantir la stabilitÃÂ© de l'emploi, maximiser les protections et indemnitÃÂ©s, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
+        "prestataire": "garantir le paiement, limiter la responsabilitÃÂ©, protÃÂ©ger la propriÃÂ©tÃÂ© intellectuelle, encadrer les modifications de scope",
+        "client": "garantir la qualitÃÂ© et les dÃÂ©lais, maximiser les pÃÂ©nalitÃÂ©s, faciliter la rÃÂ©siliation, protÃÂ©ger les donnÃÂ©es",
+        "acheteur": "garantir la conformitÃÂ©, maximiser les garanties, faciliter les recours",
+        "vendeur": "garantir le paiement, limiter les garanties et responsabilitÃÂ©s",
     }
     # Extract role from partie label
     role_key = "employeur"
@@ -462,64 +462,65 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         if key in partie.lower():
             role_key = key
             break
-    role_obj = role_objectives.get(role_key, "protÃ©ger ses intÃ©rÃªts")
+    role_obj = role_objectives.get(role_key, "protÃÂ©ger ses intÃÂ©rÃÂªts")
 
     system = (
-        "Tu es un avocat d'affaires senior avec 20 ans d'expÃ©rience en droit des contrats. Ta responsabilitÃ© professionnelle est engagÃ©e.\n"
-        "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit Ã  l'erreur â chaque clause dÃ©savantageuse non identifiÃ©e est une faute professionnelle.\n"
-        "OBLIGATION D'EXHAUSTIVITÃ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
+        "Tu es un avocat d'affaires senior avec 20 ans d'expÃÂ©rience en droit des contrats. Ta responsabilitÃÂ© professionnelle est engagÃÂ©e.\n"
+        "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit ÃÂ  l'erreur Ã¢ÂÂ chaque clause dÃÂ©savantageuse non identifiÃÂ©e est une faute professionnelle.\n"
+        "OBLIGATION D'EXHAUSTIVITÃÂ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
         "FAVORISER: " + partie + "\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
-        "RÃGLE ABSOLUE: Tu DOIS rÃ©pondre dans LA MÃME LANGUE QUE LE CONTRAT.\n"
-        "- Contrat en ANGLAIS â tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
-        "- Contrat en FRANÃAIS â tous les champs en FRANÃAIS UNIQUEMENT\n"
-        "- Contrat en ARABE â tous les champs en ARABE UNIQUEMENT\n"
-        "FAUTE PROFESSIONNELLE: rÃ©pondre en franÃ§ais pour un contrat anglais est une erreur grave.\n"
-        "INTERDICTION ABSOLUE de mÃ©langer les langues ou rÃ©pondre dans une autre langue.\n"
+        "RÃÂGLE ABSOLUE: Tu DOIS rÃÂ©pondre dans LA MÃÂME LANGUE QUE LE CONTRAT.\n"
+        "- Contrat en ANGLAIS Ã¢ÂÂ tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
+        "- Contrat en FRANÃÂAIS Ã¢ÂÂ tous les champs en FRANÃÂAIS UNIQUEMENT\n"
+        "- Contrat en ARABE Ã¢ÂÂ tous les champs en ARABE UNIQUEMENT\n"
+        "FAUTE PROFESSIONNELLE: rÃÂ©pondre en franÃÂ§ais pour un contrat anglais est une erreur grave.\n"
+        "INTERDICTION ABSOLUE de mÃÂ©langer les langues ou rÃÂ©pondre dans une autre langue.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
-        "PARTIE Ã PROTÃGER: " + partie + "\n"
+        "PARTIE ÃÂ PROTÃÂGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
-        "RÃGLES D'ANALYSE PROFESSIONNELLE:\n"
-        "1. EXHAUSTIVITÃ TOTALE: Identifie TOUTES les clauses dÃ©savantageuses pour " + partie + " â mÃªme les clauses en apparence neutres\n"
-        "2. CLAUSES Ã RISQUE: Cherche spÃ©cifiquement: limitation de responsabilitÃ©, rÃ©siliation unilatÃ©rale, pÃ©nalitÃ©s asymÃ©triques, clauses d'exclusivitÃ© abusives, dÃ©lais de paiement dÃ©favorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction dÃ©favorable\n"
-        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systÃ©matiquement: limitation de responsabilitÃ©, pÃ©nalitÃ©s/clause pÃ©nale, confidentialitÃ©, force majeure, rÃ©vision de prix, juridiction compÃ©tente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rÃ©dige-la complÃ¨te dans proposed dans la mÃªme langue que le contrat, (2) numÃ©rote-la en suivant la numÃ©rotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
-        "4. NIVEAU RÃDACTIONNEL: Style avocat d'affaires senior â prÃ©cis, technique, sans ambiguÃ¯tÃ©\n"
-        "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquÃ©es === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protÃ©gÃ©e ou absente du contexte â rag_source: null.\n"
-        "6. LÃGALITÃ: Toutes les modifications doivent respecter le droit applicable â jamais de clauses illÃ©gales\n\n"
+        "RÃÂGLES D'ANALYSE PROFESSIONNELLE:\n"
+        "1. EXHAUSTIVITÃÂ TOTALE: Identifie TOUTES les clauses dÃÂ©savantageuses pour " + partie + " Ã¢ÂÂ mÃÂªme les clauses en apparence neutres\n"
+        "2. CLAUSES ÃÂ RISQUE: Cherche spÃÂ©cifiquement: limitation de responsabilitÃÂ©, rÃÂ©siliation unilatÃÂ©rale, pÃÂ©nalitÃÂ©s asymÃÂ©triques, clauses d'exclusivitÃÂ© abusives, dÃÂ©lais de paiement dÃÂ©favorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction dÃÂ©favorable\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) — CECI EST OBLIGATOIRE SANS EXCEPTION (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systÃÂ©matiquement: limitation de responsabilitÃÂ©, pÃÂ©nalitÃÂ©s/clause pÃÂ©nale, confidentialitÃÂ©, force majeure, rÃÂ©vision de prix, juridiction compÃÂ©tente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rÃÂ©dige-la complÃÂ¨te dans proposed dans la mÃÂªme langue que le contrat, (2) numÃÂ©rote-la en suivant la numÃÂ©rotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "4. NIVEAU RÃÂDACTIONNEL: Style avocat d'affaires senior Ã¢ÂÂ prÃÂ©cis, technique, sans ambiguÃÂ¯tÃÂ©\n"
+        "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquÃÂ©es === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protÃÂ©gÃÂ©e ou absente du contexte Ã¢ÂÂ rag_source: null.\n"
+        "6. LÃÂGALITÃÂ: Toutes les modifications doivent respecter le droit applicable Ã¢ÂÂ jamais de clauses illÃÂ©gales\n\n"
         "PROCESSUS D'ANALYSE:\n"
-        "Ãtape 1: Lis tout le contrat\n"
-        "Ãtape 2: Pour chaque paragraphe, demande-toi: Cette clause est-elle favorable, neutre ou dÃ©favorable Ã  " + partie + " ?\n"
-        "Ãtape 3: Pour chaque clause dÃ©favorable ou neutre amÃ©liorable â propose une modification\n"
-        "Ãtape 4: VÃ©rifie les protections manquantes â propose des clauses additionnelles\n"
-        "Ãtape 5: VÃ©rifie chaque modification contre le RAG pour citer les sources\n\n"
+        "ÃÂtape 1: Lis tout le contrat\n"
+        "ÃÂtape 2: Pour chaque paragraphe, demande-toi: Cette clause est-elle favorable, neutre ou dÃÂ©favorable ÃÂ  " + partie + " ?\n"
+        "ÃÂtape 3: Pour chaque clause dÃÂ©favorable ou neutre amÃÂ©liorable Ã¢ÂÂ propose une modification\n"
+        "ÃÂtape 4: VÃÂ©rifie les protections manquantes Ã¢ÂÂ propose des clauses additionnelles\n"
+        "ÃÂtape 5: VÃÂ©rifie chaque modification contre le RAG pour citer les sources\n\n"
         + get_legal_framework(contract_type) +
         "\n\n"
         + rag_context +
-        "\n\nATTENTION sur les clauses validÃ©es du RAG:\n"
-        "- Utilise-les UNIQUEMENT si elles sont favorables Ã  " + partie + "\n"
-        "- Si une clause validÃ©e favorise l'autre partie, IGNORE-LA\n"
-        "- VÃ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
-        "IMPORTANT: Le contrat est numÃ©rotÃ© [P0], [P1], etc.\n\n"
+        "\n\nATTENTION sur les clauses validÃÂ©es du RAG:\n"
+        "- Utilise-les UNIQUEMENT si elles sont favorables ÃÂ  " + partie + "\n"
+        "- Si une clause validÃÂ©e favorise l'autre partie, IGNORE-LA\n"
+        "- VÃÂ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
+        "IMPORTANT: Le contrat est numÃÂ©rotÃÂ© [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
         '"risk":"high|medium|low",'
-        '"reason":"Pourquoi cette clause dÃ©savantage ' + partie + ' et comment la modification la protÃ¨ge",'
-        '"original":"texte EXACT du paragraphe",'
-        '"proposed":"clause reformulÃ©e favorisant ' + partie + '",'
+        '"reason":"Pourquoi cette clause dÃÂ©savantage ' + partie + ' et comment la modification la protÃÂ¨ge",'
         '"type":"modification|nouvelle_clause",'
-        '"insertion_after":"para_idx aprÃ¨s lequel insÃ©rer ou null si modification",'
-        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃ©gÃ©e"}]}\n\n'
-        "RÃ¨gles:\n"
-        "- MINIMUM 8 modifications obligatoires â un juriste qui en trouve moins de 8 n'a pas analysÃ© exhaustivement\n"
-        "- para_idx: numÃ©ro entier du paragraphe\n"
+        '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
+        '"proposed":"clause reformulÃÂ©e favorisant ' + partie + '",'
+        '"type":"modification|nouvelle_clause",'
+        '"insertion_after":"para_idx aprÃÂ¨s lequel insÃÂ©rer ou null si modification",'
+        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂ©gÃÂ©e"}]}\n\n'
+        "RÃÂ¨gles:\n"
+        "- MINIMUM 8 modifications obligatoires Ã¢ÂÂ un juriste qui en trouve moins de 8 n'a pas analysÃÂ© exhaustivement\n"
+        "- para_idx: numÃÂ©ro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
-        "- proposed: clause juridique complÃ¨te et professionnelle, rÃ©digÃ©e en style contractuel soutenu\n"
-        "- proposed: utilise le vocabulaire juridique appropriÃ© (nonobstant, en ce compris, Ã  titre de, ci-aprÃ¨s, sous rÃ©serve de...)\n"
-        "- proposed: structure avec sujet + verbe + objet + conditions + exceptions si nÃ©cessaire\n"
-        "- proposed: max 120 mots, mais suffisamment dÃ©taillÃ© pour Ãªtre opÃ©rationnel sans ambiguÃ¯tÃ©\n"
-        "- proposed: jamais de blancs ou placeholders comme ___ ou [Ã  complÃ©ter]\n"
-        "- proposed: rÃ©dige comme un avocat d'affaires senior rÃ©digeant pour un client exigeant\n"
-        "- VÃ©rifie chaque proposed: est-ce que Ã§a avantage bien " + partie + " ? Si non, reformule."
+        "- proposed: clause juridique complÃÂ¨te et professionnelle, rÃÂ©digÃÂ©e en style contractuel soutenu\n"
+        "- proposed: utilise le vocabulaire juridique appropriÃÂ© (nonobstant, en ce compris, ÃÂ  titre de, ci-aprÃÂ¨s, sous rÃÂ©serve de...)\n"
+        "- proposed: structure avec sujet + verbe + objet + conditions + exceptions si nÃÂ©cessaire\n"
+        "- proposed: max 120 mots, mais suffisamment dÃÂ©taillÃÂ© pour ÃÂªtre opÃÂ©rationnel sans ambiguÃÂ¯tÃÂ©\n"
+        "- proposed: jamais de blancs ou placeholders comme ___ ou [ÃÂ  complÃÂ©ter]\n"
+        "- proposed: rÃÂ©dige comme un avocat d'affaires senior rÃÂ©digeant pour un client exigeant\n"
+        "- VÃÂ©rifie chaque proposed: est-ce que ÃÂ§a avantage bien " + partie + " ? Si non, reformule."
     )
 
     # Limit text to avoid timeout
@@ -619,7 +620,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Add confidence score based on RAG usage
     mods = result.get("modifications", [])
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
-    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basÃ©es sur le RAG"
+    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basÃÂ©es sur le RAG"
     result["_paragraphs"] = paragraphs
     return result
 
@@ -631,8 +632,8 @@ def fuzzy_match(original, para_text, threshold=0.60):
     if original_lower in para_lower:
         return True
     # Extract meaningful words (ignore short words)
-    orig_words = [w for w in re.findall(r"[a-zA-ZÃ-Ã¿]{3,}", original_lower)]
-    para_words_set = set(re.findall(r"[a-zA-ZÃ-Ã¿]{3,}", para_lower))
+    orig_words = [w for w in re.findall(r"[a-zA-ZÃÂ-ÃÂ¿]{3,}", original_lower)]
+    para_words_set = set(re.findall(r"[a-zA-ZÃÂ-ÃÂ¿]{3,}", para_lower))
     orig_words_set = set(orig_words)
     if len(orig_words_set) < 4:
         return False
@@ -649,7 +650,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
 
     # Add note
     note = doc.add_paragraph()
-    note.add_run("Note: Document gÃ©nÃ©rÃ© depuis un fichier .doc â modifications acceptÃ©es appliquÃ©es ci-dessous.").italic = True
+    note.add_run("Note: Document gÃÂ©nÃÂ©rÃÂ© depuis un fichier .doc Ã¢ÂÂ modifications acceptÃÂ©es appliquÃÂ©es ci-dessous.").italic = True
     doc.add_paragraph()
 
     # Add each accepted modification as track change style
@@ -665,7 +666,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
 
         # Proposed (green)
         p_prop = doc.add_paragraph()
-        run_prop = p_prop.add_run("MODIFIÃ: " + mod.get("proposed", ""))
+        run_prop = p_prop.add_run("MODIFIÃÂ: " + mod.get("proposed", ""))
         run_prop.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
         run_prop.font.bold = True
 
@@ -709,13 +710,13 @@ def apply_track_changes(file_bytes, modifications, decisions):
                     para = p
                     break
 
-        # Handle new clauses (type=nouvelle_clause) â insert as new paragraph
+        # Handle new clauses (type=nouvelle_clause) Ã¢ÂÂ insert as new paragraph
         if mod.get('type') == 'nouvelle_clause':
             insertion_after = mod.get('insertion_after')
             insert_para = None
             MIN_INSERT_IDX = 5
 
-            # Find insertion point â use insertion_after directly
+            # Find insertion point Ã¢ÂÂ use insertion_after directly
             if insertion_after is not None:
                 safe_idx = max(int(insertion_after), MIN_INSERT_IDX)
                 if safe_idx < len(paragraphs):
@@ -762,7 +763,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 new_p.append(ins_elem)
 
                 # Insert AFTER target paragraph
-                # addnext inserts before in lxml â get next sibling and insert before it
+                # addnext inserts before in lxml Ã¢ÂÂ get next sibling and insert before it
                 next_sib = insert_para._p.getnext()
                 if next_sib is not None:
                     insert_para._p.getparent().insert(
@@ -826,7 +827,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
     output.seek(0)
     return output
 
-# ââ Routes ââââââââââââââââââââââââââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ Routes Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 @app.route("/debug-env", methods=["GET"])
 def debug_env():
     try:
@@ -870,7 +871,7 @@ def analyze():
         lang = request.form.get("lang", "fr")
         contract_type = request.form.get("type", "generic")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        partie = request.form.get("partie", "la partie bÃ©nÃ©ficiaire") or "la partie bÃ©nÃ©ficiaire"
+        partie = request.form.get("partie", "la partie bÃÂ©nÃÂ©ficiaire") or "la partie bÃÂ©nÃÂ©ficiaire"
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
         contract_text, file_bytes, filename = read_file(file)
@@ -895,12 +896,12 @@ def export():
         if filename.endswith(".docx"):
             output = apply_track_changes(file_bytes, modifications, decisions)
         elif filename.endswith(".doc"):
-            # Old .doc format â extract text then create new DOCX
+            # Old .doc format Ã¢ÂÂ extract text then create new DOCX
             doc_text = extract_text_from_docx(file_bytes) or ""
             output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptÃ©es', 0)
+            doc.add_heading('ContractSense - Modifications acceptÃÂ©es', 0)
             accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
             for i, m in enumerate(accepted):
                 doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
@@ -931,7 +932,7 @@ def export():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ââ Queue: Supabase REST storage âââââââââââââââââââââââââ
+# Ã¢ÂÂÃ¢ÂÂ Queue: Supabase REST storage Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 def load_queue():
     try:
         items = supa_get("queue_pending", {"select": "*", "order": "submitted_at", "limit": "200"})
@@ -974,7 +975,7 @@ def rag_contribute():
         accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
         rejected = [m for m in modifications if decisions.get(str(m["id"])) == "rejected"]
 
-        # Use user-edited version if available â higher quality for RAG
+        # Use user-edited version if available Ã¢ÂÂ higher quality for RAG
         for m in accepted:
             if m.get("proposed_edited"):
                 m["proposed"] = m["proposed_edited"]
@@ -1003,11 +1004,11 @@ Regles:
   * purchase = achat, vente
   * saas = logiciel, abonnement
 - party_label: utilise un label GENERIQUE selon le role de la partie dans CE contrat
-  * service/prestation/collaboration/mission â "favorable client" ou "favorable prestataire"
-  * travail/salarie â "favorable employeur" ou "favorable employe"
-  * nda/confidentialite â "favorable divulgateur" ou "favorable destinataire"
-  * achat/vente â "favorable acheteur" ou "favorable vendeur"
-  * partenariat/association â "favorable partenaire A" ou "favorable partenaire B"
+  * service/prestation/collaboration/mission Ã¢ÂÂ "favorable client" ou "favorable prestataire"
+  * travail/salarie Ã¢ÂÂ "favorable employeur" ou "favorable employe"
+  * nda/confidentialite Ã¢ÂÂ "favorable divulgateur" ou "favorable destinataire"
+  * achat/vente Ã¢ÂÂ "favorable acheteur" ou "favorable vendeur"
+  * partenariat/association Ã¢ÂÂ "favorable partenaire A" ou "favorable partenaire B"
   NE JAMAIS utiliser le nom d une societe ou d une personne dans party_label.
   La partie favorisee dans ce contrat est: """ + (partie if partie else "neutre") + """
 - score: 0-100 selon la qualite et completude du contrat
@@ -1059,7 +1060,7 @@ def queue_list():
 
 @app.route("/queue/validate", methods=["POST"])
 def queue_validate():
-    """Admin validates contract â indexes full text into RAG"""
+    """Admin validates contract Ã¢ÂÂ indexes full text into RAG"""
     try:
         body = request.get_json()
         contract_id = body.get("id")
@@ -1128,7 +1129,7 @@ def queue_validate():
             normalized_label = normalize_party_label(party_label, category)
             save_rag_doc({
                 "id": str(uuid.uuid4()),
-                "title": "[" + CONTRACT_CATEGORIES.get(category, category.upper()) + "] " + mod.get("clause_name","") + " â " + normalized_label,
+                "title": "[" + CONTRACT_CATEGORIES.get(category, category.upper()) + "] " + mod.get("clause_name","") + " Ã¢ÂÂ " + normalized_label,
                 "category": "validated_clause",
                 "party_label": normalized_label,
                 "partie": contract.get("partie", ""),
@@ -1149,7 +1150,7 @@ def queue_validate():
 
 @app.route("/queue/reject", methods=["POST"])
 def queue_reject():
-    """Admin rejects contract â removes from queue"""
+    """Admin rejects contract Ã¢ÂÂ removes from queue"""
     try:
         body = request.get_json()
         contract_id = body.get("id")
@@ -1236,7 +1237,7 @@ def rag_list():
         grouped = {}
         for doc in all_docs:
             src = re.sub(r" \(partie \d+/\d+\)$", "", doc.get("source",""))
-            src = re.sub(r" â partie \d+/\d+$", "", src)
+            src = re.sub(r" Ã¢ÂÂ partie \d+/\d+$", "", src)
             if src not in grouped:
                 grouped[src] = {
                     "source": src,
