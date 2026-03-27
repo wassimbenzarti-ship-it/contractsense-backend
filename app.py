@@ -466,7 +466,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "RÈGLES D'ANALYSE PROFESSIONNELLE:\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES: Signale aussi les protections ABSENTES du contrat (pas seulement les clauses mauvaises) — ex: absence de clause de révision de prix, absence de limitation de responsabilité, absence de clause de confidentialité\n"
+        "3. CLAUSES MANQUANTES: Identifie les protections ABSENTES du contrat et PROPOSE-LES comme nouvelles clauses (type=nouvelle_clause). Exemples: absence de limitation de responsabilité, clause pénale, confidentialité, force majeure, révision de prix, juridiction, non-sollicitation. Pour chaque protection manquante: rédige la clause complète dans proposed (avec numéro d'article qui suit la numérotation existante), et indique dans insertion_after le para_idx après lequel insérer. La nouvelle clause s'insère naturellement dans le contrat en Track Changes, sans mention spéciale.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquées === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protégée ou absente du contexte → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
@@ -490,6 +490,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"reason":"Pourquoi cette clause désavantage ' + partie + ' et comment la modification la protège",'
         '"original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
+        '"type":"modification|nouvelle_clause",'
+        '"insertion_after":"para_idx après lequel insérer ou null si modification",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
         "- MINIMUM 8 modifications obligatoires — un juriste qui en trouve moins de 8 n'a pas analysé exhaustivement\n"
@@ -690,6 +692,36 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 if p.text.strip() and fuzzy_match(original, p.text.strip()):
                     para = p
                     break
+
+        # Handle new clauses (type=nouvelle_clause) — insert as new paragraph
+        if mod.get('type') == 'nouvelle_clause':
+            insertion_after = mod.get('insertion_after')
+            insert_para = None
+            if insertion_after is not None and insertion_after < len(paragraphs):
+                insert_para = paragraphs[insertion_after]
+            elif para is not None:
+                insert_para = para
+
+            if insert_para is not None:
+                # Insert new paragraph after insert_para with Track Changes ins mark
+                new_p = OxmlElement('w:p')
+                ins_elem = OxmlElement('w:ins')
+                ins_elem.set(qn('w:id'), str(rev_id))
+                ins_elem.set(qn('w:author'), author)
+                ins_elem.set(qn('w:date'), date)
+                rev_id += 1
+                new_r = OxmlElement('w:r')
+                new_t = OxmlElement('w:t')
+                new_t.text = proposed
+                new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                new_r.append(new_t)
+                ins_elem.append(new_r)
+                new_p.append(ins_elem)
+                # Insert after the target paragraph
+                insert_para._p.addnext(new_p)
+                applied.add(mod_id)
+                print(f"Inserted new clause after para {insertion_after}: {mod.get('clause_name')}")
+            continue
 
         if para is None:
             print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
