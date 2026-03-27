@@ -433,6 +433,20 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     except Exception as e:
         print("RAG search error: " + str(e))
 
+    # Detect contract language
+    english_words = len([w for w in contract_text[:2000].lower().split() if w in ['the','and','of','to','in','for','is','this','agreement','shall','party','parties','contract','hereby','whereas','including','provided','subject','pursuant','accordance','obligation','represent','warrant','indemnify','liability','termination','governing','arbitration','confidential']])
+    french_words = len([w for w in contract_text[:2000].lower().split() if w in ['le','la','les','de','du','des','en','et','est','que','qui','une','par','pour','sur','dans','avec','aux','au','contrat','société','article','présent','parties','prestataire','client','mandant','mandataire','clause','accord','convention','résiliation','responsabilité','confidentialité']])
+    arabic_words = len([w for w in contract_text[:2000].split() if any(0x0600 <= ord(c) <= 0x06FF for c in w)])
+    
+    if arabic_words > 10:
+        detected_lang = "AR (Arabic)"
+    elif english_words > french_words:
+        detected_lang = "EN (English)"
+    else:
+        detected_lang = "FR (French)"
+    
+    print(f"Detected language: {detected_lang} (en={english_words}, fr={french_words}, ar={arabic_words})")
+
     # Define what "favorable" means for each role
     role_objectives = {
         "employeur": "maximiser la flexibilité opérationnelle, minimiser les obligations et coûts, renforcer le pouvoir de direction et de contrôle, faciliter la résiliation, protéger les intérêts commerciaux",
@@ -455,18 +469,20 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
         "OBLIGATION D'EXHAUSTIVITÉ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
         "FAVORISER: " + partie + "\n\n"
-        "LANGUE: Tu dois IMPÉRATIVEMENT détecter la langue du contrat et répondre dans EXACTEMENT cette même langue.\n"
-        "Si le contrat contient majoritairement des mots anglais → réponds en ANGLAIS.\n"
-        "Si le contrat contient majoritairement des mots français → réponds en FRANÇAIS.\n"
-        "Si le contrat contient majoritairement des mots arabes → réponds en ARABE.\n"
-        "NE JAMAIS répondre dans une langue différente de celle du contrat analysé.\n"
+        "LANGUE DU CONTRAT: " + detected_lang + "\n"
+        "RÈGLE ABSOLUE: Tu DOIS répondre dans LA MÊME LANGUE QUE LE CONTRAT.\n"
+        "- Contrat en ANGLAIS → tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
+        "- Contrat en FRANÇAIS → tous les champs en FRANÇAIS UNIQUEMENT\n"
+        "- Contrat en ARABE → tous les champs en ARABE UNIQUEMENT\n"
+        "FAUTE PROFESSIONNELLE: répondre en français pour un contrat anglais est une erreur grave.\n"
+        "INTERDICTION ABSOLUE de mélanger les langues ou répondre dans une autre langue.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
         "RÈGLES D'ANALYSE PROFESSIONNELLE:\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES: Identifie les protections ABSENTES du contrat et PROPOSE-LES comme nouvelles clauses (type=nouvelle_clause). Exemples: absence de limitation de responsabilité, clause pénale, confidentialité, force majeure, révision de prix, juridiction, non-sollicitation. Pour chaque protection manquante: rédige la clause complète dans proposed (avec numéro d'article qui suit la numérotation existante), et indique dans insertion_after le para_idx après lequel insérer. La nouvelle clause s'insère naturellement dans le contrat en Track Changes, sans mention spéciale.\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer AU MINIMUM 3 nouvelles clauses (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquées === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protégée ou absente du contexte → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
