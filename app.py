@@ -713,10 +713,24 @@ def apply_track_changes(file_bytes, modifications, decisions):
         if mod.get('type') == 'nouvelle_clause':
             insertion_after = mod.get('insertion_after')
             insert_para = None
-            if insertion_after is not None and insertion_after < len(paragraphs):
-                insert_para = paragraphs[insertion_after]
-            elif para is not None:
-                insert_para = para
+
+            # Never insert before para 5 (skip title/preamble)
+            MIN_INSERT_IDX = 5
+            if insertion_after is not None:
+                safe_idx = max(insertion_after, MIN_INSERT_IDX)
+                if safe_idx < len(paragraphs):
+                    insert_para = paragraphs[safe_idx]
+            if insert_para is None and para is not None:
+                # Use the matched para but ensure it's not in preamble
+                para_idx_val = list(paragraphs).index(para) if para in paragraphs else -1
+                if para_idx_val >= MIN_INSERT_IDX:
+                    insert_para = para
+                else:
+                    # Find last substantive paragraph
+                    for p in reversed(paragraphs):
+                        if p.text.strip() and len(p.text.strip()) > 20:
+                            insert_para = p
+                            break
 
             if insert_para is not None:
                 # Insert new paragraph after insert_para with Track Changes ins mark
