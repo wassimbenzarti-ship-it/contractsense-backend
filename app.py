@@ -713,44 +713,60 @@ def apply_track_changes(file_bytes, modifications, decisions):
         if mod.get('type') == 'nouvelle_clause':
             insertion_after = mod.get('insertion_after')
             insert_para = None
-
-            # Never insert before para 5 (skip title/preamble)
             MIN_INSERT_IDX = 5
+
+            # Find insertion point — use insertion_after directly
             if insertion_after is not None:
-                safe_idx = max(insertion_after, MIN_INSERT_IDX)
+                safe_idx = max(int(insertion_after), MIN_INSERT_IDX)
                 if safe_idx < len(paragraphs):
                     insert_para = paragraphs[safe_idx]
-            if insert_para is None and para is not None:
-                # Use the matched para but ensure it's not in preamble
-                para_idx_val = list(paragraphs).index(para) if para in paragraphs else -1
-                if para_idx_val >= MIN_INSERT_IDX:
-                    insert_para = para
-                else:
-                    # Find last substantive paragraph
-                    for p in reversed(paragraphs):
-                        if p.text.strip() and len(p.text.strip()) > 20:
-                            insert_para = p
-                            break
+
+            # Fallback: insert before last paragraph
+            if insert_para is None:
+                for p in reversed(paragraphs):
+                    if p.text.strip() and len(p.text.strip()) > 10:
+                        insert_para = p
+                        break
 
             if insert_para is not None:
-                # Insert new paragraph after insert_para with Track Changes ins mark
+                # Copy formatting from insert_para run
+                ref_rpr = None
+                if insert_para.runs:
+                    ref_rpr = insert_para.runs[0]._r.find(qn('w:rPr'))
+
+                # Build new paragraph with Track Changes ins
                 new_p = OxmlElement('w:p')
+
+                # Copy paragraph properties if available
+                if insert_para._p.find(qn('w:pPr')) is not None:
+                    import copy
+                    new_ppr = copy.deepcopy(insert_para._p.find(qn('w:pPr')))
+                    new_p.append(new_ppr)
+
                 ins_elem = OxmlElement('w:ins')
                 ins_elem.set(qn('w:id'), str(rev_id))
                 ins_elem.set(qn('w:author'), author)
                 ins_elem.set(qn('w:date'), date)
                 rev_id += 1
+
                 new_r = OxmlElement('w:r')
+                # Copy run formatting
+                if ref_rpr is not None:
+                    import copy
+                    new_r.append(copy.deepcopy(ref_rpr))
                 new_t = OxmlElement('w:t')
                 new_t.text = proposed
                 new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
                 new_r.append(new_t)
                 ins_elem.append(new_r)
                 new_p.append(ins_elem)
+
                 # Insert after the target paragraph
                 insert_para._p.addnext(new_p)
                 applied.add(mod_id)
-                print(f"Inserted new clause after para {insertion_after}: {mod.get('clause_name')}")
+                print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
+            else:
+                print(f"Could not find insertion point for new clause: {mod.get('clause_name')}")
             continue
 
         if para is None:
