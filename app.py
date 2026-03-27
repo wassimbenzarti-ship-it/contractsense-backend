@@ -482,7 +482,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "RÈGLES D'ANALYSE PROFESSIONNELLE:\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer AU MINIMUM 3 nouvelles clauses (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquées === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protégée ou absente du contexte → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
@@ -761,8 +761,16 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 ins_elem.append(new_r)
                 new_p.append(ins_elem)
 
-                # Insert after the target paragraph
-                insert_para._p.addnext(new_p)
+                # Insert AFTER target paragraph
+                # addnext inserts before in lxml — get next sibling and insert before it
+                next_sib = insert_para._p.getnext()
+                if next_sib is not None:
+                    insert_para._p.getparent().insert(
+                        list(insert_para._p.getparent()).index(next_sib),
+                        new_p
+                    )
+                else:
+                    insert_para._p.getparent().append(new_p)
                 applied.add(mod_id)
                 print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
             else:
