@@ -850,6 +850,31 @@ def debug_env():
         "voyage_key_set": bool(os.environ.get("VOYAGE_API_KEY"))
     })
 
+
+@app.route("/queue/add", methods=["POST", "OPTIONS"])
+def queue_add():
+    """Add analysis to admin queue from user app"""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data"}), 400
+        pending_queue.append({
+            "id": str(len(pending_queue) + 1),
+            "filename": data.get("filename", "Contrat"),
+            "contract_type": data.get("contract_type", ""),
+            "partie": data.get("partie", ""),
+            "accepted_modifications": data.get("accepted_modifications", "[]"),
+            "decisions": data.get("decisions", "{}"),
+            "submitted_by": data.get("submitted_by", "user"),
+            "score": data.get("score", 75),
+            "submitted_at": datetime.datetime.now().isoformat()
+        })
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
