@@ -875,6 +875,52 @@ def queue_add():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/export-mods", methods=["POST", "OPTIONS"])
+def export_mods():
+    """Generate DOCX from modifications without original file"""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        data = request.get_json()
+        modifications = data.get("modifications", [])
+        filename = data.get("filename", "contrat")
+        
+        doc = Document()
+        doc.add_heading("Analyse contractuelle — Omniscient by Westfield", 0)
+        doc.add_paragraph(f"Fichier : {filename}")
+        doc.add_paragraph("")
+        
+        for i, mod in enumerate(modifications):
+            doc.add_heading(f"{i+1}. {mod.get('clause_name', 'Clause')}", level=2)
+            risk = mod.get('risk', 'medium')
+            risk_label = {'high': 'ELEVE', 'medium': 'MODERE', 'low': 'FAIBLE'}.get(risk, 'MODERE')
+            doc.add_paragraph(f"Risque : {risk_label}")
+            doc.add_paragraph(f"Justification : {mod.get('reason', '')}")
+            doc.add_paragraph("")
+            p_orig = doc.add_paragraph()
+            run = p_orig.add_run("TEXTE ORIGINAL : ")
+            run.bold = True
+            p_orig.add_run(mod.get('original', '') or 'N/A')
+            doc.add_paragraph("")
+            p_prop = doc.add_paragraph()
+            run2 = p_prop.add_run("PROPOSITION : ")
+            run2.bold = True
+            run2.font.color.rgb = RGBColor(0x00, 0x70, 0xC0)
+            p_prop.add_run(mod.get('proposed', ''))
+            doc.add_paragraph("")
+            if mod.get('rag_source'):
+                doc.add_paragraph(f"Source RAG : {mod['rag_source']}")
+            doc.add_paragraph("---")
+        
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        safe_name = filename.replace('.docx','').replace('.pdf','') + '-analyse.docx'
+        return send_file(buf, as_attachment=True, download_name=safe_name, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
