@@ -921,6 +921,75 @@ def export_mods():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/rag/suggest", methods=["POST", "OPTIONS"])
+def rag_suggest():
+    """Reçoit les modèles soumis par les utilisateurs → pending_suggestions"""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        filename = request.form.get("source", request.form.get("filename", "inconnu"))
+        category = request.form.get("category", "contract")
+        suggested_by = request.form.get("suggested_by", "anonyme")
+        file = request.files.get("file")
+        content_text = ""
+        if file:
+            try:
+                content_text = file.read().decode("utf-8", errors="ignore")[:50000]
+            except:
+                content_text = ""
+        doc = {
+            "filename": filename,
+            "content": content_text,
+            "category": category,
+            "suggested_by": suggested_by,
+            "status": "pending"
+        }
+        supa_insert("pending_suggestions", doc)
+        return jsonify({"status": "ok", "message": "Soumis pour validation admin"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/list", methods=["GET"])
+def suggestions_list():
+    """Liste les suggestions en attente pour l'admin"""
+    try:
+        docs = supa_get("pending_suggestions", {
+            "select": "id,filename,category,suggested_by,status,submitted_at",
+            "order": "submitted_at.desc",
+            "limit": "100"
+        })
+        return jsonify({"suggestions": docs or []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/approve/<suggestion_id>", methods=["POST", "OPTIONS"])
+def suggestion_approve(suggestion_id):
+    """Approuve une suggestion et l'ajoute au RAG"""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        docs = supa_get("pending_suggestions", {"select": "*", "id": f"eq.{suggestion_id}"})
+        if not docs:
+            return jsonify({"error": "Non trouvé"}), 404
+        doc = docs[0]
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        emb = get_embedding((doc.get("content") or "")[:1000], voyage_key)
+        rag_doc = {
+            "source": doc["filename"],
+            "title": doc["filename"],
+            "content": doc.get("content", ""),
+            "category": doc.get("category", "contract"),
+        }
+        if emb and len(emb) == 1024:
+            vec_str = "[" + ",".join(str(x) for x in emb) + "]"
+            rag_doc["embedding_vector"] = vec_str
+        supa_insert("rag_documents", rag_doc)
+        supa_update("pending_suggestions", suggestion_id, {"status": "approved"})
+        return jsonify({"status": "ok", "message": "Approuvé et ajouté au RAG"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
