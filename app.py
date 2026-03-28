@@ -853,15 +853,12 @@ def debug_env():
 
 @app.route("/queue/add", methods=["POST", "OPTIONS"])
 def queue_add():
-    """Add analysis to admin queue from user app"""
+    """Ajoute une analyse à la queue admin — stocké en Supabase"""
     if request.method == "OPTIONS":
         return "", 204
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No data"}), 400
-        pending_queue.append({
-            "id": str(len(pending_queue) + 1),
+        data = request.get_json() or {}
+        doc = {
             "filename": data.get("filename", "Contrat"),
             "contract_type": data.get("contract_type", ""),
             "partie": data.get("partie", ""),
@@ -869,124 +866,10 @@ def queue_add():
             "decisions": data.get("decisions", "{}"),
             "submitted_by": data.get("submitted_by", "user"),
             "score": data.get("score", 75),
-            "submitted_at": datetime.datetime.now().isoformat()
-        })
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/export-mods", methods=["POST", "OPTIONS"])
-def export_mods():
-    """Generate DOCX from modifications without original file"""
-    if request.method == "OPTIONS":
-        return "", 204
-    try:
-        data = request.get_json()
-        modifications = data.get("modifications", [])
-        filename = data.get("filename", "contrat")
-        
-        doc = Document()
-        doc.add_heading("Analyse contractuelle — Omniscient by Westfield", 0)
-        doc.add_paragraph(f"Fichier : {filename}")
-        doc.add_paragraph("")
-        
-        for i, mod in enumerate(modifications):
-            doc.add_heading(f"{i+1}. {mod.get('clause_name', 'Clause')}", level=2)
-            risk = mod.get('risk', 'medium')
-            risk_label = {'high': 'ELEVE', 'medium': 'MODERE', 'low': 'FAIBLE'}.get(risk, 'MODERE')
-            doc.add_paragraph(f"Risque : {risk_label}")
-            doc.add_paragraph(f"Justification : {mod.get('reason', '')}")
-            doc.add_paragraph("")
-            p_orig = doc.add_paragraph()
-            run = p_orig.add_run("TEXTE ORIGINAL : ")
-            run.bold = True
-            p_orig.add_run(mod.get('original', '') or 'N/A')
-            doc.add_paragraph("")
-            p_prop = doc.add_paragraph()
-            run2 = p_prop.add_run("PROPOSITION : ")
-            run2.bold = True
-            run2.font.color.rgb = RGBColor(0x00, 0x70, 0xC0)
-            p_prop.add_run(mod.get('proposed', ''))
-            doc.add_paragraph("")
-            if mod.get('rag_source'):
-                doc.add_paragraph(f"Source RAG : {mod['rag_source']}")
-            doc.add_paragraph("---")
-        
-        buf = io.BytesIO()
-        doc.save(buf)
-        buf.seek(0)
-        safe_name = filename.replace('.docx','').replace('.pdf','') + '-analyse.docx'
-        return send_file(buf, as_attachment=True, download_name=safe_name, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/rag/suggest", methods=["POST", "OPTIONS"])
-def rag_suggest():
-    """Reçoit les modèles soumis par les utilisateurs → pending_suggestions"""
-    if request.method == "OPTIONS":
-        return "", 204
-    try:
-        filename = request.form.get("source", request.form.get("filename", "inconnu"))
-        category = request.form.get("category", "contract")
-        suggested_by = request.form.get("suggested_by", "anonyme")
-        file = request.files.get("file")
-        content_text = ""
-        if file:
-            try:
-                content_text = file.read().decode("utf-8", errors="ignore")[:50000]
-            except:
-                content_text = ""
-        doc = {
-            "filename": filename,
-            "content": content_text,
-            "category": category,
-            "suggested_by": suggested_by,
             "status": "pending"
         }
-        supa_insert("pending_suggestions", doc)
-        return jsonify({"status": "ok", "message": "Soumis pour validation admin"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/suggestions/list", methods=["GET"])
-def suggestions_list():
-    """Liste les suggestions en attente pour l'admin"""
-    try:
-        docs = supa_get("pending_suggestions", {
-            "select": "id,filename,category,suggested_by,status,submitted_at",
-            "order": "submitted_at.desc",
-            "limit": "100"
-        })
-        return jsonify({"suggestions": docs or []})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/suggestions/approve/<suggestion_id>", methods=["POST", "OPTIONS"])
-def suggestion_approve(suggestion_id):
-    """Approuve une suggestion et l'ajoute au RAG"""
-    if request.method == "OPTIONS":
-        return "", 204
-    try:
-        docs = supa_get("pending_suggestions", {"select": "*", "id": f"eq.{suggestion_id}"})
-        if not docs:
-            return jsonify({"error": "Non trouvé"}), 404
-        doc = docs[0]
-        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        emb = get_embedding((doc.get("content") or "")[:1000], voyage_key)
-        rag_doc = {
-            "source": doc["filename"],
-            "title": doc["filename"],
-            "content": doc.get("content", ""),
-            "category": doc.get("category", "contract"),
-        }
-        if emb and len(emb) == 1024:
-            vec_str = "[" + ",".join(str(x) for x in emb) + "]"
-            rag_doc["embedding_vector"] = vec_str
-        supa_insert("rag_documents", rag_doc)
-        supa_update("pending_suggestions", suggestion_id, {"status": "approved"})
-        return jsonify({"status": "ok", "message": "Approuvé et ajouté au RAG"})
+        supa_insert("analyses_queue", doc)
+        return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1197,13 +1080,40 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
 
 @app.route("/queue/list", methods=["GET"])
 def queue_list():
-    """List pending clauses for admin review"""
+    """Liste les analyses en attente de validation admin"""
     try:
-        queue = load_queue()
-        return jsonify({"pending": queue["pending"], "total": len(queue["pending"])})
+        # Try analyses_queue table first
+        docs = supa_get("analyses_queue", {
+            "select": "id,filename,contract_type,partie,submitted_by,score,status,accepted_modifications,decisions,created_at",
+            "status": "eq.pending",
+            "order": "created_at.desc",
+            "limit": "100"
+        })
+        if docs is None:
+            docs = []
+        # Parse modifications
+        result = []
+        for d in docs:
+            try:
+                mods = json.loads(d.get("accepted_modifications") or "[]")
+            except:
+                mods = []
+            result.append({
+                "id": d.get("id"),
+                "filename": d.get("filename", "Contrat"),
+                "contract_type": d.get("contract_type", ""),
+                "partie": d.get("partie", ""),
+                "submitted_by": d.get("submitted_by", ""),
+                "score": d.get("score", 0),
+                "status": d.get("status", "pending"),
+                "modifications": mods,
+                "decisions": json.loads(d.get("decisions") or "{}"),
+                "created_at": d.get("created_at", "")
+            })
+        return jsonify({"pending": result, "total": len(result)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+        print(f"queue_list error: {e}")
+        return jsonify({"pending": [], "total": 0, "error": str(e)})
 
 @app.route("/queue/validate", methods=["POST"])
 def queue_validate():
