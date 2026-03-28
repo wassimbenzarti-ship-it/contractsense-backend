@@ -233,7 +233,7 @@ def get_embedding(text, voyage_key=None):
         vec = [v/norm for v in vec]
     return vec
 
-def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
+def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
     """Search RAG using pgvector directly in Supabase ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ fast semantic search"""
     try:
         url = SUPA_URL + "/rest/v1/rpc/search_rag"
@@ -247,6 +247,9 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None):
             "match_count": top_k,
             "filter_type": doc_type
         }
+        # If user_id provided, search only their models
+        if user_id:
+            payload["filter_user_id"] = user_id
         r = req_lib.post(url, headers=supa_headers(), json=payload, timeout=15)
         if r.ok:
             results = r.json()
