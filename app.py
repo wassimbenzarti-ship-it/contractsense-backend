@@ -127,6 +127,12 @@ def supa_get(table, params=None):
     r.raise_for_status()
     return r.json()
 
+def supa_update(table, record_id, updates):
+    url = SUPABASE_URL + f"/rest/v1/{table}?id=eq.{record_id}"
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+    r = requests.patch(url, json=updates, headers=headers, timeout=10)
+    return r.json()
+
 def supa_insert(table, data):
     url = SUPA_URL + "/rest/v1/" + table
     r = req_lib.post(url, headers=supa_headers(), json=data, timeout=30)
@@ -870,6 +876,71 @@ def queue_add():
         }
         supa_insert("analyses_queue", doc)
         return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/rag/suggest", methods=["POST", "OPTIONS"])
+def rag_suggest():
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        filename = request.form.get("source", request.form.get("filename", "inconnu"))
+        category = request.form.get("category", "contract")
+        suggested_by = request.form.get("suggested_by", "anonyme")
+        file = request.files.get("file")
+        content_text = ""
+        if file:
+            try:
+                content_text = file.read().decode("utf-8", errors="ignore")[:50000]
+            except:
+                content_text = ""
+        supa_insert("pending_suggestions", {
+            "filename": filename,
+            "content": content_text,
+            "category": category,
+            "suggested_by": suggested_by,
+            "status": "pending"
+        })
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/list", methods=["GET"])
+def suggestions_list():
+    try:
+        url = SUPABASE_URL + "/rest/v1/pending_suggestions?order=submitted_at.desc&limit=100&select=id,filename,category,suggested_by,status,submitted_at"
+        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        r = requests.get(url, headers=headers, timeout=10)
+        return jsonify({"suggestions": r.json() if r.ok else []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/approve/<suggestion_id>", methods=["POST", "OPTIONS"])
+def suggestion_approve(suggestion_id):
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        url = SUPABASE_URL + f"/rest/v1/pending_suggestions?id=eq.{suggestion_id}&select=*"
+        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        r = requests.get(url, headers=headers, timeout=10)
+        docs = r.json()
+        if not docs:
+            return jsonify({"error": "Non trouve"}), 404
+        doc = docs[0]
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        emb = get_embedding((doc.get("content") or "")[:1000], voyage_key)
+        rag_doc = {
+            "source": doc["filename"],
+            "title": doc["filename"],
+            "content": doc.get("content", ""),
+            "category": doc.get("category", "contract"),
+        }
+        if emb and len(emb) == 1024:
+            rag_doc["embedding_vector"] = "[" + ",".join(str(x) for x in emb) + "]"
+        supa_insert("rag_documents", rag_doc)
+        supa_update("pending_suggestions", suggestion_id, {"status": "approved"})
+        return jsonify({"status": "ok", "message": "Approuve et ajoute au RAG"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
