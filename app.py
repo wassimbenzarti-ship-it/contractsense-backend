@@ -9,7 +9,7 @@ import zipfile
 import datetime
 import numpy as np
 import voyageai
-import requests as req_lib
+import requests
 from docx import Document
 try:
     import olefile as olefile_lib
@@ -123,7 +123,7 @@ def supa_headers():
 
 def supa_get(table, params=None):
     url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.get(url, headers=supa_headers(), params=params, timeout=30)
+    r = requests.get(url, headers=supa_headers(), params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -135,7 +135,7 @@ def supa_update(table, record_id, updates):
 
 def supa_insert(table, data):
     url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.post(url, headers=supa_headers(), json=data, timeout=30)
+    r = requests.post(url, headers=supa_headers(), json=data, timeout=30)
     if not r.ok:
         print("supa_insert ERROR " + str(r.status_code) + ": " + r.text[:500])
     r.raise_for_status()
@@ -143,7 +143,7 @@ def supa_insert(table, data):
 
 def supa_delete(table, filters):
     url = SUPA_URL + "/rest/v1/" + table
-    r = req_lib.delete(url, headers=supa_headers(), params=filters, timeout=30)
+    r = requests.delete(url, headers=supa_headers(), params=filters, timeout=30)
     r.raise_for_status()
     return r
 
@@ -256,7 +256,7 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         # If user_id provided, search only their models
         if user_id:
             payload["filter_user_id"] = user_id
-        r = req_lib.post(url, headers=supa_headers(), json=payload, timeout=15)
+        r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
         if r.ok:
             results = r.json()
             print(f"pgvector search: {len(results)} results")
