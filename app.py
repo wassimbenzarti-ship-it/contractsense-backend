@@ -943,7 +943,14 @@ def suggestion_approve(suggestion_id):
         return jsonify({"status": "ok", "message": "Approuve et ajoute au RAG"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+@app.route("/suggestions/reject/<suggestion_id>", methods=["POST", "OPTIONS"])
+def suggestion_reject(suggestion_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        supa_update("pending_suggestions", suggestion_id, {"status": "rejected"})
+        return jsonify({"status": "ok", "message": "Suggestion rejetee"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
