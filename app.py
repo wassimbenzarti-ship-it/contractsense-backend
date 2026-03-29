@@ -909,8 +909,8 @@ def rag_suggest():
 @app.route("/suggestions/list", methods=["GET"])
 def suggestions_list():
     try:
-        url = SUPABASE_URL + "/rest/v1/pending_suggestions?order=submitted_at.desc&limit=100&select=id,filename,category,suggested_by,status,submitted_at"
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        url = SUPA_URL + "/rest/v1/pending_suggestions?order=submitted_at.desc&limit=100&select=id,filename,category,suggested_by,status,submitted_at"
+        headers = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
         r = requests.get(url, headers=headers, timeout=10)
         return jsonify({"suggestions": r.json() if r.ok else []})
     except Exception as e:
@@ -921,8 +921,8 @@ def suggestion_approve(suggestion_id):
     if request.method == "OPTIONS":
         return "", 204
     try:
-        url = SUPABASE_URL + f"/rest/v1/pending_suggestions?id=eq.{suggestion_id}&select=*"
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        url = SUPA_URL + f"/rest/v1/pending_suggestions?id=eq.{suggestion_id}&select=*"
+        headers = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
         r = requests.get(url, headers=headers, timeout=10)
         docs = r.json()
         if not docs:
