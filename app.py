@@ -885,7 +885,12 @@ def rag_suggest():
     if request.method == "OPTIONS":
         return "", 204
     try:
-        filename = request.form.get("source", request.form.get("filename", "inconnu"))
+        filename = request.form.get("source") or request.form.get("filename") or ""
+        file_obj = request.files.get("file")
+        if not filename and file_obj:
+            filename = file_obj.filename or "inconnu"
+        if not filename:
+            filename = "inconnu"
         category = request.form.get("category", "contract")
         suggested_by = request.form.get("suggested_by", "anonyme")
         file = request.files.get("file")
@@ -913,6 +918,27 @@ def suggestions_list():
         headers = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
         r = requests.get(url, headers=headers, timeout=10)
         return jsonify({"suggestions": r.json() if r.ok else []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/preview/<suggestion_id>", methods=["GET", "OPTIONS"])
+def suggestion_preview(suggestion_id):
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        url = SUPA_URL + "/rest/v1/pending_suggestions?id=eq." + suggestion_id + "&select=filename,content,category,suggested_by"
+        r = requests.get(url, headers=SUPA_HEADERS, timeout=15)
+        data = r.json()
+        if not data:
+            return jsonify({"error": "Suggestion non trouvee"}), 404
+        s = data[0]
+        content = s.get("content", "") or ""
+        filename = s.get("filename", "document") or "document"
+        # Return as downloadable text
+        from flask import Response
+        resp = Response(content, mimetype="text/plain; charset=utf-8")
+        resp.headers["Content-Disposition"] = "inline; filename=" + filename
+        return resp
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1002,7 +1028,12 @@ def export():
         filename = file.filename.lower()
 
         if filename.endswith(".docx"):
-            output = apply_track_changes(file_bytes, modifications, decisions)
+            try:
+                output = apply_track_changes(file_bytes, modifications, decisions)
+            except Exception as zip_err:
+                # File is not a valid DOCX (e.g. text content with .docx extension)
+                text_content = file_bytes.decode("utf-8", errors="ignore")
+                output = create_docx_with_changes(text_content, modifications, decisions)
         elif filename.endswith(".doc"):
             # Old .doc format ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ extract text then create new DOCX
             doc_text = extract_text_from_docx(file_bytes) or ""
