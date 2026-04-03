@@ -977,6 +977,103 @@ def suggestion_reject(suggestion_id):
         return jsonify({"status": "ok", "message": "Suggestion rejetee"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ===== DIRECTOR SUGGESTIONS (juriste -> directeur -> admin) =====
+
+@app.route("/rag/suggest-to-director", methods=["POST", "OPTIONS"])
+def suggest_to_director():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        file_obj = request.files.get("file")
+        filename = request.form.get("source", "") or (file_obj.filename if file_obj else "inconnu")
+        if not filename or filename == "inconnu":
+            filename = file_obj.filename if file_obj else "inconnu"
+        category = request.form.get("category", "contract")
+        suggested_by = request.form.get("suggested_by", "")
+        target_email = request.form.get("target_email", "")
+        content_text = ""
+        if file_obj:
+            try:
+                raw = file_obj.read()
+                try:
+                    import zipfile as zf
+                    from docx import Document
+                    import io as sio
+                    doc_obj = Document(sio.BytesIO(raw))
+                    content_text = "\n".join([p.text for p in doc_obj.paragraphs])
+                except:
+                    content_text = raw.decode("utf-8", errors="replace")
+            except: pass
+        supa_insert("pending_suggestions_director", {
+            "filename": filename,
+            "content": content_text,
+            "category": category,
+            "suggested_by": suggested_by,
+            "target_director_email": target_email,
+            "status": "pending"
+        })
+        return jsonify({"status": "ok", "message": "Suggestion envoyee au directeur"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/list-for-director", methods=["GET", "OPTIONS"])
+def suggestions_list_for_director():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        director_email = request.args.get("director_email", "")
+        if not director_email:
+            return jsonify({"suggestions": []})
+        suggestions = supa_get("pending_suggestions_director", {
+            "target_director_email": "eq." + director_email,
+            "status": "eq.pending",
+            "order": "created_at.desc"
+        })
+        result = []
+        for s in (suggestions or []):
+            result.append({
+                "id": s.get("id"),
+                "filename": s.get("filename", "inconnu"),
+                "category": s.get("category", ""),
+                "suggested_by": s.get("suggested_by", ""),
+                "status": s.get("status", "pending"),
+                "submitted_at": s.get("created_at", "")
+            })
+        return jsonify({"suggestions": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/forward-to-admin/<suggestion_id>", methods=["POST", "OPTIONS"])
+def forward_suggestion_to_admin(suggestion_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        # Get the director suggestion
+        rows = supa_get("pending_suggestions_director", {"id": "eq." + suggestion_id})
+        if not rows:
+            return jsonify({"error": "Suggestion introuvable"}), 404
+        s = rows[0]
+        # Insert into main admin suggestions queue
+        supa_insert("pending_suggestions", {
+            "filename": s.get("filename", "inconnu"),
+            "content": s.get("content", ""),
+            "category": s.get("category", "contract"),
+            "suggested_by": s.get("suggested_by", ""),
+            "status": "pending"
+        })
+        # Mark director suggestion as forwarded
+        supa_update("pending_suggestions_director", suggestion_id, {"status": "forwarded"})
+        return jsonify({"status": "ok", "message": "Suggestion transmise a admin"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/suggestions/reject-director/<suggestion_id>", methods=["POST", "OPTIONS"])
+def reject_director_suggestion(suggestion_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        supa_update("pending_suggestions_director", suggestion_id, {"status": "rejected"})
+        return jsonify({"status": "ok", "message": "Suggestion rejetee par le directeur"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
