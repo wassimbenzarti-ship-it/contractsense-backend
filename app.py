@@ -928,7 +928,7 @@ def suggestion_preview(suggestion_id):
         return "", 204
     try:
         url = SUPA_URL + "/rest/v1/pending_suggestions?id=eq." + suggestion_id + "&select=filename,content,category,suggested_by"
-        r = requests.get(url, headers=SUPA_HEADERS, timeout=15)
+        r = requests.get(url, headers=supa_headers(), timeout=15)
         data = r.json()
         if not data:
             return jsonify({"error": "Suggestion non trouvee"}), 404
