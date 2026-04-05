@@ -1632,7 +1632,7 @@ def rag_delete():
 
 def cmi_hash(params, store_key):
     sorted_keys = sorted([k for k in params if k.upper() != "HASH"])
-    s = "".join(f"{k}={params[k]}|" for k in sorted_keys) + store_key
+    s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
     return base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
 
 @app.route("/payment/initiate", methods=["POST", "OPTIONS"])
