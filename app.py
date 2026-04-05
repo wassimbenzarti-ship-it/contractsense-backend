@@ -1634,7 +1634,10 @@ def cmi_hash(params, store_key):
     excluded = {"HASH", "hashAlgorithm"}
     sorted_keys = sorted([k for k in params if k not in excluded], key=lambda x: x.lower())
     s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
-    print(f"[CMI DEBUG] hash_input: {s}", flush=True)
+    print(f"[CMI DEBUG] fields_order: {sorted_keys}", flush=True)
+    for k in sorted_keys:
+        print(f"[CMI DEBUG]   {k} = {params[k]}", flush=True)
+    print(f"[CMI DEBUG] storekey_len={len(store_key)} storekey_start={store_key[:4]}...", flush=True)
     result = base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
     print(f"[CMI DEBUG] HASH: {result}", flush=True)
     return result
