@@ -1173,17 +1173,32 @@ def analyze():
         lang = request.form.get("lang", "fr")
         contract_type = request.form.get("type", "generic")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
-        partie = request.form.get("partie", "la partie bÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ficiaire") or "la partie bÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ficiaire"
+        partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
+        user_email = request.form.get("user_email", "").strip()
+
+        # Check analyses_remaining if user_email provided
+        remaining = None
+        if user_email:
+            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining", "limit": "1"})
+            if rows:
+                remaining = rows[0].get("analyses_remaining", 0) or 0
+                if remaining <= 0:
+                    return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
+
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
         contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
         result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
+
+        # Decrement analyses_remaining after successful analysis
+        if user_email and remaining is not None:
+            supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
+
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 @app.route("/export", methods=["POST"])
 def export():
     try:
@@ -1631,9 +1646,10 @@ def rag_delete():
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
+    """CMI hash: sort keys (excl. HASH), join values with |, append storekey, SHA512 base64."""
     sorted_keys = sorted([k for k in params if k.upper() != "HASH"])
-    s = "".join(f"{k}={params[k]}|" for k in sorted_keys) + store_key
-    return base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
+    hash_str = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
+    return base64.b64encode(hashlib.sha512(hash_str.encode("utf-8")).digest()).decode()
 
 @app.route("/payment/initiate", methods=["POST", "OPTIONS"])
 def payment_initiate():
@@ -1643,7 +1659,7 @@ def payment_initiate():
     nb_users = int(data.get("nb_users", 1))
     price = 850 if nb_users > 10 else 950
     total = nb_users * price
-    order_id = f"WF-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8].upper()}"
+    order_id = "ORD-" + uuid.uuid4().hex[:12].upper()
 
     supa_insert("payments", {
         "director_email": director_email, "order_id": order_id,
@@ -1651,20 +1667,22 @@ def payment_initiate():
     })
 
     params = {
-        "clientid":     CMI_CLIENT_ID,
-        "storetype":    "3D_PAY_HOSTING",
+        "BillToName":   director_email,
         "amount":       f"{total:.2f}",
+        "callbackUrl":  "https://web-production-f96f7.up.railway.app/payment/callback",
+        "clientid":     CMI_CLIENT_ID,
         "currency":     "504",
+        "email":        director_email,
+        "encoding":     "UTF-8",
+        "failUrl":      f"{APP_URL}/app-v2.html?payment=failed",
+        "hashAlgorithm": "ver3",
+        "lang":         "fr",
         "oid":          order_id,
         "okUrl":        f"{APP_URL}/app-v2.html?payment=success",
-        "failUrl":      f"{APP_URL}/app-v2.html?payment=failed",
+        "rnd":          datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
         "shopurl":      APP_URL,
-        "callbackUrl":  "https://web-production-f96f7.up.railway.app/payment/callback",
-        "lang":         "fr",
-        "rnd":          str(int(datetime.datetime.now().timestamp())),
-        "hashAlgorithm": "ver3",
-        "encoding":     "UTF-8",
-        "email":        director_email,
+        "storetype":    "3D_PAY_HOSTING",
+        "trantype":     "PreAuth",
     }
     params["HASH"] = cmi_hash(params, CMI_STORE_KEY)
     return jsonify({"form_url": CMI_PAYMENT_URL, "params": params, "total": total})
