@@ -1653,6 +1653,15 @@ def account_info():
     if acc.get("is_admin"):
         return jsonify({**acc, "analyses_remaining": -1, "can_analyze": True})
 
+    # Juriste : vérifier si son directeur (parent_email) est actif
+    if acc.get("role") == "juriste" and acc.get("parent_email"):
+        parent = supa_get("user_accounts", {"email": f"eq.{acc['parent_email']}", "limit": "1"})
+        if parent and parent[0].get("payment_status") == "active":
+            sub_end = parent[0].get("subscription_end")
+            parent_active = not sub_end or datetime.datetime.fromisoformat(sub_end) >= datetime.datetime.now()
+            if parent_active:
+                return jsonify({**acc, "can_analyze": True, "payment_status": "active"})
+
     # Abonnement actif → vérifier expiration
     if acc.get("payment_status") == "active":
         sub_end = acc.get("subscription_end")
