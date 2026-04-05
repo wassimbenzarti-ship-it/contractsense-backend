@@ -127,7 +127,7 @@ SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 CMI_CLIENT_ID   = os.environ.get("CMI_CLIENT_ID", "")
 CMI_STORE_KEY   = os.environ.get("CMI_STORE_KEY", "")
 CMI_PAYMENT_URL = os.environ.get("CMI_PAYMENT_URL", "https://testpayment.cmi.co.ma/fim/est3Dgate")
-APP_URL         = os.environ.get("APP_URL", "https://westfieldavocats.com")
+APP_URL         = os.environ.get("APP_URL", "https://westfieldavocats.com").strip().rstrip("/")
 
 def supa_headers():
     return {
