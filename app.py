@@ -1185,14 +1185,31 @@ def analyze():
         partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         user_email = request.form.get("user_email", "").strip()
 
-        # Check analyses_remaining if user_email provided
-        remaining = None
-        if user_email:
-            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining", "limit": "1"})
-            if rows:
-                remaining = rows[0].get("analyses_remaining", 0) or 0
-                if remaining <= 0:
-                    return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
+        # Require login
+        if not user_email:
+            return jsonify({"error": "Connexion requise pour analyser un contrat."}), 401
+
+        # Check analyses_remaining — upsert row if missing (3 free analyses by default)
+        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+        if not rows:
+            # First time user — create free account with 3 analyses
+            import datetime as _dt
+            reset_date = (_dt.datetime.now() + _dt.timedelta(days=7)).isoformat()
+            supa_insert("user_accounts", {
+                "email": user_email, "role": "directeur",
+                "analyses_remaining": 3, "payment_status": "free",
+                "subscription_end": reset_date
+            })
+            remaining = 3
+        else:
+            acc = rows[0]
+            if acc.get("is_admin"):
+                remaining = 9999  # admin = unlimited
+            else:
+                remaining = acc.get("analyses_remaining", 0) or 0
+
+        if remaining <= 0:
+            return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
 
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
