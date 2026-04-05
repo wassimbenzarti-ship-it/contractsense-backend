@@ -25,6 +25,8 @@ from docx.oxml import OxmlElement
 app = Flask(__name__)
 CORS(app, origins=[
     "https://ai.westfieldavocats.com",
+    "https://westfieldavocats.com",
+    "https://www.westfieldavocats.com",
     "https://wassimbenzarti-ship-it.github.io",
     "https://contractsense.fr",
     "https://www.contractsense.fr",
