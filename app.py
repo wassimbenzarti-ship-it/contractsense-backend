@@ -1631,12 +1631,13 @@ def rag_delete():
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
-    # Exclude HASH and hashAlgorithm from hash computation (hashAlgorithm is
-    # a CMI directive, not an input to the hash itself)
     excluded = {"HASH", "hashAlgorithm"}
     sorted_keys = sorted([k for k in params if k not in excluded], key=lambda x: x.lower())
     s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
-    return base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
+    print(f"[CMI DEBUG] hash_input: {s}", flush=True)
+    result = base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
+    print(f"[CMI DEBUG] HASH: {result}", flush=True)
+    return result
 
 @app.route("/payment/initiate", methods=["POST", "OPTIONS"])
 def payment_initiate():
