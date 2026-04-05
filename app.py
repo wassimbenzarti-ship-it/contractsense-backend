@@ -23,7 +23,11 @@ app = Flask(__name__)
 CORS(app, origins=[
     "https://ai.westfieldavocats.com",
     "https://wassimbenzarti-ship-it.github.io",
+    "https://contractsense.fr",
+    "https://www.contractsense.fr",
     "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:5173",
     "null"
 ], supports_credentials=True)
 
@@ -129,9 +133,8 @@ def supa_get(table, params=None):
     return r.json()
 
 def supa_update(table, record_id, updates):
-    url = SUPABASE_URL + f"/rest/v1/{table}?id=eq.{record_id}"
-    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
-    r = requests.patch(url, json=updates, headers=headers, timeout=10)
+    url = SUPA_URL + f"/rest/v1/{table}?id=eq.{record_id}"
+    r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r.json()
 
 def supa_insert(table, data):
@@ -1596,10 +1599,12 @@ def rag_delete_by_id(doc_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/rag/delete", methods=["POST"])
+@app.route("/rag/delete", methods=["POST", "DELETE", "OPTIONS"])
 def rag_delete():
+    if request.method == "OPTIONS":
+        return "", 204
     try:
-        body = request.get_json()
+        body = request.get_json() or {}
         source = body.get("source", "")
         count = delete_rag_by_source(source)
         return jsonify({"success": True, "deleted": count})
