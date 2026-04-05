@@ -1631,7 +1631,10 @@ def rag_delete():
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
-    sorted_keys = sorted([k for k in params if k.upper() != "HASH"])
+    # Exclude HASH and hashAlgorithm from hash computation (hashAlgorithm is
+    # a CMI directive, not an input to the hash itself)
+    excluded = {"HASH", "hashAlgorithm"}
+    sorted_keys = sorted([k for k in params if k not in excluded], key=lambda x: x.lower())
     s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
     return base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
 
@@ -1651,20 +1654,21 @@ def payment_initiate():
     })
 
     params = {
-        "clientid":     CMI_CLIENT_ID,
-        "storetype":    "3D_PAY_HOSTING",
-        "amount":       f"{total:.2f}",
-        "currency":     "504",
-        "oid":          order_id,
-        "okUrl":        f"{APP_URL}/app-v2.html?payment=success",
-        "failUrl":      f"{APP_URL}/app-v2.html?payment=failed",
-        "shopurl":      APP_URL,
-        "callbackUrl":  "https://web-production-f96f7.up.railway.app/payment/callback",
-        "lang":         "fr",
-        "rnd":          str(int(datetime.datetime.now().timestamp())),
+        "clientid":      CMI_CLIENT_ID,
+        "storetype":     "3D_PAY_HOSTING",
+        "trantype":      "PreAuth",
+        "amount":        f"{total:.2f}",
+        "currency":      "504",
+        "oid":           order_id,
+        "okUrl":         f"{APP_URL}/app-v2.html?payment=success",
+        "failUrl":       f"{APP_URL}/app-v2.html?payment=failed",
+        "shopurl":       APP_URL,
+        "callbackUrl":   "https://web-production-f96f7.up.railway.app/payment/callback",
+        "lang":          "fr",
+        "rnd":           datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
         "hashAlgorithm": "ver3",
-        "encoding":     "UTF-8",
-        "email":        director_email,
+        "encoding":      "UTF-8",
+        "email":         director_email,
     }
     params["HASH"] = cmi_hash(params, CMI_STORE_KEY)
     return jsonify({"form_url": CMI_PAYMENT_URL, "params": params, "total": total})
