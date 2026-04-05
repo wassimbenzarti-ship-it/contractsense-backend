@@ -1631,7 +1631,7 @@ def rag_delete():
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
-    excluded = {"HASH", "hashAlgorithm"}
+    excluded = {"HASH"}
     sorted_keys = sorted([k for k in params if k not in excluded], key=lambda x: x.lower())
     s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
     print(f"[CMI DEBUG] fields_order: {sorted_keys}", flush=True)
