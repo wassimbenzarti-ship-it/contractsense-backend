@@ -1109,6 +1109,8 @@ def admin_create_user():
         parent_email = data.get("parent_email", "")
         if not email or not password:
             return jsonify({"error": "Email et mot de passe requis"}), 400
+        if role == "juriste" and not parent_email:
+            return jsonify({"error": "Un juriste doit être rattaché à un directeur (parent_email requis)"}), 400
         # Use service_role key to create Auth user
         service_key = SUPA_SERVICE_KEY
         free_reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
@@ -1653,20 +1655,33 @@ def account_info():
     if acc.get("is_admin"):
         return jsonify({**acc, "analyses_remaining": -1, "can_analyze": True})
 
-    # Juriste : vérifier si son directeur (parent_email) est actif
-    if acc.get("role") == "juriste" and acc.get("parent_email"):
-        parent = supa_get("user_accounts", {"email": f"eq.{acc['parent_email']}", "limit": "1"})
-        if parent and parent[0].get("payment_status") == "active":
-            sub_end = parent[0].get("subscription_end")
-            parent_active = not sub_end or datetime.datetime.fromisoformat(sub_end) >= datetime.datetime.now()
-            if parent_active:
-                return jsonify({**acc, "can_analyze": True, "payment_status": "active"})
+    # Juriste → couvert uniquement par son directeur, pas de free tier
+    if acc.get("role") == "juriste":
+        parent_email = acc.get("parent_email")
+        if not parent_email:
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "no_director",
+                            "message": "Votre compte n'est rattaché à aucun directeur."})
+        parent = supa_get("user_accounts", {"email": f"eq.{parent_email}", "limit": "1"})
+        if not parent:
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_not_found"})
+        p = parent[0]
+        if p.get("payment_status") != "active":
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_inactive",
+                            "message": "Votre directeur n'a pas d'abonnement actif."})
+        sub_end = p.get("subscription_end")
+        if sub_end and datetime.datetime.fromisoformat(sub_end) < datetime.datetime.now():
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_expired",
+                            "message": "L'abonnement de votre directeur a expiré."})
+        return jsonify({**acc, "can_analyze": True, "payment_status": "active"})
 
-    # Abonnement actif → vérifier expiration
+    # Directeur (solo ou équipe) — abonnement actif → vérifier expiration
     if acc.get("payment_status") == "active":
         sub_end = acc.get("subscription_end")
         if sub_end and datetime.datetime.fromisoformat(sub_end) < datetime.datetime.now():
-            # Abonnement expiré → repasse en free avec 3 analyses
             reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
             supa_patch("user_accounts",
                        {"payment_status": "free", "analyses_remaining": 3, "subscription_end": reset},
@@ -1676,7 +1691,7 @@ def account_info():
             acc["subscription_end"] = reset
         return jsonify({**acc, "can_analyze": acc.get("analyses_remaining", 0) > 0})
 
-    # Free → reset hebdomadaire auto
+    # Directeur free → reset hebdomadaire auto
     sub_end = acc.get("subscription_end")
     if sub_end and datetime.datetime.fromisoformat(sub_end) < datetime.datetime.now():
         reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
