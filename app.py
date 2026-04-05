@@ -1111,12 +1111,16 @@ def admin_create_user():
             return jsonify({"error": "Email et mot de passe requis"}), 400
         # Use service_role key to create Auth user
         service_key = SUPA_SERVICE_KEY
+        free_reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
         if not service_key:
             # Fallback: only insert metadata, warn about Auth
             supa_insert("user_accounts", {
                 "email": email, "role": role,
                 "parent_email": parent_email if parent_email else None,
-                "temp_password": password
+                "temp_password": password,
+                "analyses_remaining": 3,
+                "payment_status": "free",
+                "subscription_end": free_reset
             })
             return jsonify({"status": "partial", "message": "Metadata enregistree. Configurez SUPABASE_SERVICE_KEY dans Railway pour creer automatiquement le compte Auth.", "auth_created": False})
         # Create Supabase Auth user via admin API
@@ -1139,7 +1143,10 @@ def admin_create_user():
         supa_insert("user_accounts", {
             "email": email, "role": role,
             "parent_email": parent_email if parent_email else None,
-            "temp_password": password
+            "temp_password": password,
+            "analyses_remaining": 3,
+            "payment_status": "free",
+            "subscription_end": free_reset
         })
         return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
     except Exception as e:
@@ -1628,6 +1635,51 @@ def rag_delete():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ── Account info + free tier weekly reset ────────────────────────────────────
+
+@app.route("/account/info", methods=["POST", "OPTIONS"])
+def account_info():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+    if not email:
+        return jsonify({"error": "email requis"}), 400
+    rows = supa_get("user_accounts", {"email": f"eq.{email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "compte introuvable"}), 404
+    acc = rows[0]
+
+    # Admin → toujours illimité
+    if acc.get("is_admin"):
+        return jsonify({**acc, "analyses_remaining": -1, "can_analyze": True})
+
+    # Abonnement actif → vérifier expiration
+    if acc.get("payment_status") == "active":
+        sub_end = acc.get("subscription_end")
+        if sub_end and datetime.datetime.fromisoformat(sub_end) < datetime.datetime.now():
+            # Abonnement expiré → repasse en free avec 3 analyses
+            reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
+            supa_patch("user_accounts",
+                       {"payment_status": "free", "analyses_remaining": 3, "subscription_end": reset},
+                       f"email=eq.{email}")
+            acc["payment_status"] = "free"
+            acc["analyses_remaining"] = 3
+            acc["subscription_end"] = reset
+        return jsonify({**acc, "can_analyze": acc.get("analyses_remaining", 0) > 0})
+
+    # Free → reset hebdomadaire auto
+    sub_end = acc.get("subscription_end")
+    if sub_end and datetime.datetime.fromisoformat(sub_end) < datetime.datetime.now():
+        reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
+        supa_patch("user_accounts",
+                   {"analyses_remaining": 3, "subscription_end": reset},
+                   f"email=eq.{email}")
+        acc["analyses_remaining"] = 3
+        acc["subscription_end"] = reset
+
+    rem = acc.get("analyses_remaining", 0) or 0
+    return jsonify({**acc, "can_analyze": rem > 0})
+
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
@@ -1648,7 +1700,8 @@ def payment_initiate():
     data = request.get_json() or {}
     director_email = data.get("director_email", "")
     nb_users = int(data.get("nb_users", 1))
-    price = 850 if nb_users > 10 else 950
+    role = data.get("role", "directeur")  # "juriste" = 950 DH solo, "directeur" = 850 DH/user
+    price = 950 if role == "juriste" else 850
     total = nb_users * price
     order_id = f"WF-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8].upper()}"
 
@@ -1688,7 +1741,7 @@ def payment_callback():
         if payments:
             p = payments[0]
             sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
-            upd = {"payment_status": "active", "analyses_remaining": 10, "subscription_end": sub_end}
+            upd = {"payment_status": "active", "analyses_remaining": 20, "subscription_end": sub_end}
             supa_patch("user_accounts", upd, f"email=eq.{p['director_email']}")
             juristes = supa_get("user_accounts", {"parent_email": f"eq.{p['director_email']}", "select": "email"}) or []
             for j in juristes:
