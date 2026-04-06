@@ -2035,6 +2035,23 @@ def director_create_juriste():
     return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
 
+def _init_storage():
+    """Crée le bucket Supabase Storage au démarrage si inexistant."""
+    if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
+        return
+    try:
+        r = supa_storage_ensure_bucket("contracts")
+        if r.ok:
+            print("Storage bucket 'contracts' pret.")
+        elif "already exists" in r.text.lower() or r.status_code == 409:
+            print("Storage bucket 'contracts' deja existant.")
+        else:
+            print(f"Storage bucket init: {r.status_code} {r.text[:100]}")
+    except Exception as e:
+        print(f"Storage bucket init error: {e}")
+
+_init_storage()
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, timeout=120)
