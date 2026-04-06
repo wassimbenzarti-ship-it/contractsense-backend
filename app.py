@@ -137,7 +137,7 @@ def _cache_store(key: str, data: bytes):
         old = _FILE_CACHE_ORDER.pop(0)
         _FILE_CACHE.pop(old, None)
 
-def _cache_get(key: str) -> bytes | None:
+def _cache_get(key):
     return _FILE_CACHE.get(key)
 
 # CMI Payment config
