@@ -1807,14 +1807,74 @@ def payment_callback():
         if payments:
             p = payments[0]
             sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
-            upd = {"payment_status": "active", "analyses_remaining": 20, "subscription_end": sub_end}
-            supa_patch("user_accounts", upd, f"email=eq.{p['director_email']}")
+            nb_users = p.get("nb_users", 1)
+            nb_juristes_max = max(0, nb_users - 1)  # nb_users includes director
+            upd_dir = {
+                "payment_status": "active", "analyses_remaining": 20,
+                "subscription_end": sub_end, "nb_juristes_max": nb_juristes_max
+            }
+            upd_jur = {"payment_status": "active", "analyses_remaining": 20, "subscription_end": sub_end}
+            supa_patch("user_accounts", upd_dir, f"email=eq.{p['director_email']}")
             juristes = supa_get("user_accounts", {"parent_email": f"eq.{p['director_email']}", "select": "email"}) or []
             for j in juristes:
-                supa_patch("user_accounts", upd, f"email=eq.{j['email']}")
+                supa_patch("user_accounts", upd_jur, f"email=eq.{j['email']}")
     else:
         supa_patch("payments", {"status": "failed"}, f"order_id=eq.{order_id}")
     return "APPROVED", 200
+
+
+@app.route("/director/create-juriste", methods=["POST", "OPTIONS"])
+def director_create_juriste():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    director_email = data.get("director_email", "").strip()
+    juriste_email  = data.get("juriste_email", "").strip()
+    juriste_password = data.get("juriste_password", "").strip()
+
+    if not director_email or not juriste_email or not juriste_password:
+        return jsonify({"error": "Champs requis manquants"}), 400
+
+    # Check director exists and has slots available
+    rows = supa_get("user_accounts", {"email": f"eq.{director_email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "Directeur introuvable"}), 404
+    director = rows[0]
+    is_admin = director.get("role") == "admin"
+
+    if not is_admin and director.get("payment_status") != "active":
+        return jsonify({"error": "Abonnement inactif — souscrivez d'abord un abonnement"}), 403
+
+    if not is_admin:
+        nb_juristes_max = director.get("nb_juristes_max", 0) or 0
+        existing = supa_get("user_accounts", {"parent_email": f"eq.{director_email}", "select": "id"}) or []
+        if len(existing) >= nb_juristes_max:
+            return jsonify({
+                "error": f"Quota atteint : votre abonnement inclut {nb_juristes_max} juriste(s). Modifiez votre abonnement pour en ajouter."
+            }), 403
+
+    # Create Supabase auth user via admin API
+    try:
+        r = requests.post(
+            SUPA_URL + "/auth/v1/admin/users",
+            headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}", "Content-Type": "application/json"},
+            json={"email": juriste_email, "password": juriste_password, "email_confirm": True},
+            timeout=15
+        )
+        if not r.ok and "already registered" not in r.text.lower():
+            return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Upsert user_accounts row
+    supa_insert("user_accounts", {
+        "email": juriste_email, "role": "juriste",
+        "parent_email": director_email,
+        "payment_status": "active",
+        "analyses_remaining": 20,
+        "subscription_end": director.get("subscription_end", "")
+    })
+
+    return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
 
 if __name__ == "__main__":
