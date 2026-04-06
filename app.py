@@ -123,6 +123,23 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
+# ── In-memory file cache ──────────────────────────────────────────────────────
+# Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
+# them even when the client no longer has the file. Limited to 200 entries ~100 MB.
+_FILE_CACHE: dict = {}
+_FILE_CACHE_ORDER: list = []
+_FILE_CACHE_MAX = 200
+
+def _cache_store(key: str, data: bytes):
+    _FILE_CACHE[key] = data
+    _FILE_CACHE_ORDER.append(key)
+    if len(_FILE_CACHE_ORDER) > _FILE_CACHE_MAX:
+        old = _FILE_CACHE_ORDER.pop(0)
+        _FILE_CACHE.pop(old, None)
+
+def _cache_get(key: str) -> bytes | None:
+    return _FILE_CACHE.get(key)
+
 # CMI Payment config
 CMI_CLIENT_ID   = os.environ.get("CMI_CLIENT_ID", "")
 CMI_STORE_KEY   = os.environ.get("CMI_STORE_KEY", "")
@@ -167,6 +184,39 @@ def supa_patch(table, updates, filter_str):
     url = SUPA_URL + f"/rest/v1/{table}?{filter_str}"
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r
+
+def _storage_headers():
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    return {
+        "apikey": key,
+        "Authorization": "Bearer " + key,
+    }
+
+def supa_storage_ensure_bucket(bucket_name):
+    """Create the storage bucket if it doesn't exist (idempotent)."""
+    url = SUPA_URL + "/storage/v1/bucket"
+    r = requests.post(url, headers={**_storage_headers(), "Content-Type": "application/json"},
+                      json={"id": bucket_name, "name": bucket_name, "public": False}, timeout=10)
+    return r
+
+def supa_storage_upload(bucket, path, file_bytes, content_type="application/octet-stream"):
+    """Upload a file to Supabase Storage, auto-creating the bucket if missing."""
+    url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
+    headers = {**_storage_headers(), "Content-Type": content_type}
+    r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
+    if r.status_code == 404:
+        supa_storage_ensure_bucket(bucket)
+        r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
+    return r
+
+def supa_storage_download(bucket, path):
+    """Download a file from Supabase Storage. Returns bytes or None."""
+    url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
+    r = requests.get(url, headers=_storage_headers(), timeout=60)
+    if r.ok:
+        return r.content
+    print(f"supa_storage_download failed {r.status_code}: {r.text[:200]}")
+    return None
 
 def parse_dt(s):
     """Parse ISO datetime string, strip timezone info for naive comparison."""
@@ -1232,6 +1282,35 @@ def analyze():
         if user_email and remaining is not None:
             supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
 
+        # ── Cache en mémoire (toujours disponible dans la session serveur) ───
+        file_cache_id = None
+        if file_bytes:
+            file_cache_id = str(uuid.uuid4())
+            _cache_store(file_cache_id, file_bytes)
+        result["file_cache_id"] = file_cache_id
+
+        # ── Supabase Storage (persistance longue durée, optionnel) ───────────
+        file_storage_path = None
+        if file_bytes and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+            try:
+                ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "docx"
+                if ext in ("docx", "pdf", "doc", "txt"):
+                    storage_path = str(uuid.uuid4()) + "." + ext
+                    ct_map = {
+                        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "pdf": "application/pdf",
+                        "doc": "application/msword",
+                        "txt": "text/plain",
+                    }
+                    upload_r = supa_storage_upload("contracts", storage_path, file_bytes, ct_map.get(ext, "application/octet-stream"))
+                    if upload_r.ok:
+                        file_storage_path = storage_path
+                    else:
+                        print(f"Storage upload failed {upload_r.status_code}: {upload_r.text[:200]}")
+            except Exception as _e:
+                print(f"Storage upload error: {_e}")
+        result["file_storage_path"] = file_storage_path
+
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1239,12 +1318,37 @@ def analyze():
 def export():
     try:
         file = request.files.get("file")
+        file_storage_path = request.form.get("file_storage_path", "").strip()
+        file_cache_id = request.form.get("file_cache_id", "").strip()
         modifications = json.loads(request.form.get("modifications", "[]"))
         decisions = json.loads(request.form.get("decisions", "{}"))
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-        file_bytes = file.read()
-        filename = file.filename.lower()
+
+        # Strip internal metadata entries before processing
+        modifications = [m for m in modifications if not m.get("_isClauseMeta") and not m.get("_isFileMeta")]
+
+        file_bytes = None
+        filename = ""
+
+        # 1. Cache mémoire (priorité : même session serveur, 100% fiable)
+        if file_cache_id:
+            cached = _cache_get(file_cache_id)
+            if cached:
+                file_bytes = cached
+                filename = "contrat.docx"
+
+        # 2. Supabase Storage (persistance longue durée)
+        if file_bytes is None and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+            downloaded = supa_storage_download("contracts", file_storage_path)
+            if downloaded:
+                file_bytes = downloaded
+                filename = file_storage_path.rsplit("/", 1)[-1].lower()
+
+        # 3. Fallback : fichier uploadé directement dans la requête
+        if file_bytes is None:
+            if not file:
+                return jsonify({"error": "Fichier manquant"}), 400
+            file_bytes = file.read()
+            filename = file.filename.lower()
 
         if filename.endswith(".docx"):
             try:
