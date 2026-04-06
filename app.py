@@ -204,7 +204,9 @@ def supa_storage_upload(bucket, path, file_bytes, content_type="application/octe
     url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
     headers = {**_storage_headers(), "Content-Type": content_type}
     r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
-    if r.status_code == 404:
+    # Supabase returns 400 with "Bucket not found" when bucket doesn't exist
+    bucket_missing = r.status_code in (400, 404) and "ucket" in r.text
+    if bucket_missing:
         supa_storage_ensure_bucket(bucket)
         r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
     return r
