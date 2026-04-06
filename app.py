@@ -1208,7 +1208,19 @@ def export():
             try:
                 output = apply_track_changes(file_bytes, modifications, decisions)
             except Exception as zip_err:
-                # File is not a valid DOCX (e.g. text content with .docx extension)
+                print(f"[EXPORT ERROR] apply_track_changes failed: {zip_err}", flush=True)
+                import zipfile
+                is_valid_zip = False
+                try:
+                    import io as _io
+                    zipfile.ZipFile(_io.BytesIO(file_bytes))
+                    is_valid_zip = True
+                except Exception:
+                    pass
+                if is_valid_zip:
+                    # Valid DOCX but apply_track_changes had a logic error — re-raise
+                    raise zip_err
+                # Not a valid ZIP/DOCX — fallback to text-based export
                 text_content = file_bytes.decode("utf-8", errors="ignore")
                 output = create_docx_with_changes(text_content, modifications, decisions)
         elif filename.endswith(".doc"):
