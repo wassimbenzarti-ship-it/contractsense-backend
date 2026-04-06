@@ -168,6 +168,39 @@ def supa_patch(table, updates, filter_str):
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r
 
+def _storage_headers():
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    return {
+        "apikey": key,
+        "Authorization": "Bearer " + key,
+    }
+
+def supa_storage_ensure_bucket(bucket_name):
+    """Create the storage bucket if it doesn't exist (idempotent)."""
+    url = SUPA_URL + "/storage/v1/bucket"
+    r = requests.post(url, headers={**_storage_headers(), "Content-Type": "application/json"},
+                      json={"id": bucket_name, "name": bucket_name, "public": False}, timeout=10)
+    return r
+
+def supa_storage_upload(bucket, path, file_bytes, content_type="application/octet-stream"):
+    """Upload a file to Supabase Storage, auto-creating the bucket if missing."""
+    url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
+    headers = {**_storage_headers(), "Content-Type": content_type}
+    r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
+    if r.status_code == 404:
+        supa_storage_ensure_bucket(bucket)
+        r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
+    return r
+
+def supa_storage_download(bucket, path):
+    """Download a file from Supabase Storage. Returns bytes or None."""
+    url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
+    r = requests.get(url, headers=_storage_headers(), timeout=60)
+    if r.ok:
+        return r.content
+    print(f"supa_storage_download failed {r.status_code}: {r.text[:200]}")
+    return None
+
 def parse_dt(s):
     """Parse ISO datetime string, strip timezone info for naive comparison."""
     if not s:
@@ -1232,6 +1265,28 @@ def analyze():
         if user_email and remaining is not None:
             supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
 
+        # Store original file in Supabase Storage so export can retrieve it later
+        file_storage_path = None
+        if file_bytes and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+            try:
+                ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "docx"
+                if ext in ("docx", "pdf", "doc", "txt"):
+                    storage_path = str(uuid.uuid4()) + "." + ext
+                    ct_map = {
+                        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "pdf": "application/pdf",
+                        "doc": "application/msword",
+                        "txt": "text/plain",
+                    }
+                    upload_r = supa_storage_upload("contracts", storage_path, file_bytes, ct_map.get(ext, "application/octet-stream"))
+                    if upload_r.ok:
+                        file_storage_path = storage_path
+                    else:
+                        print(f"Storage upload failed {upload_r.status_code}: {upload_r.text[:200]}")
+            except Exception as _e:
+                print(f"Storage upload error: {_e}")
+        result["file_storage_path"] = file_storage_path
+
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1239,12 +1294,29 @@ def analyze():
 def export():
     try:
         file = request.files.get("file")
+        file_storage_path = request.form.get("file_storage_path", "").strip()
         modifications = json.loads(request.form.get("modifications", "[]"))
         decisions = json.loads(request.form.get("decisions", "{}"))
-        if not file:
-            return jsonify({"error": "Fichier manquant"}), 400
-        file_bytes = file.read()
-        filename = file.filename.lower()
+
+        # Strip internal metadata entries before processing
+        modifications = [m for m in modifications if not m.get("_isClauseMeta") and not m.get("_isFileMeta")]
+
+        file_bytes = None
+        filename = ""
+
+        # Prefer original file from Supabase Storage when available
+        if file_storage_path and (SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY)):
+            downloaded = supa_storage_download("contracts", file_storage_path)
+            if downloaded:
+                file_bytes = downloaded
+                filename = file_storage_path.rsplit("/", 1)[-1].lower()
+
+        # Fallback to uploaded file
+        if file_bytes is None:
+            if not file:
+                return jsonify({"error": "Fichier manquant"}), 400
+            file_bytes = file.read()
+            filename = file.filename.lower()
 
         if filename.endswith(".docx"):
             try:
