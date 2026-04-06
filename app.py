@@ -127,7 +127,7 @@ SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 CMI_CLIENT_ID   = os.environ.get("CMI_CLIENT_ID", "")
 CMI_STORE_KEY   = os.environ.get("CMI_STORE_KEY", "")
 CMI_PAYMENT_URL = os.environ.get("CMI_PAYMENT_URL", "https://testpayment.cmi.co.ma/fim/est3Dgate")
-APP_URL         = os.environ.get("APP_URL", "https://westfieldavocats.com")
+APP_URL         = os.environ.get("APP_URL", "https://westfieldavocats.com").strip().rstrip("/")
 
 def supa_headers():
     return {
@@ -167,6 +167,16 @@ def supa_patch(table, updates, filter_str):
     url = SUPA_URL + f"/rest/v1/{table}?{filter_str}"
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r
+
+def parse_dt(s):
+    """Parse ISO datetime string, strip timezone info for naive comparison."""
+    if not s:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(s)
+        return dt.replace(tzinfo=None)  # make naive
+    except Exception:
+        return None
 
 # ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ RAG: Supabase REST storage ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
 def load_rag(contract_type=None, limit=200):
@@ -1109,14 +1119,20 @@ def admin_create_user():
         parent_email = data.get("parent_email", "")
         if not email or not password:
             return jsonify({"error": "Email et mot de passe requis"}), 400
+        if role == "juriste" and not parent_email:
+            return jsonify({"error": "Un juriste doit être rattaché à un directeur (parent_email requis)"}), 400
         # Use service_role key to create Auth user
         service_key = SUPA_SERVICE_KEY
+        free_reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
         if not service_key:
             # Fallback: only insert metadata, warn about Auth
             supa_insert("user_accounts", {
                 "email": email, "role": role,
                 "parent_email": parent_email if parent_email else None,
-                "temp_password": password
+                "temp_password": password,
+                "analyses_remaining": 3,
+                "payment_status": "free",
+                "subscription_end": free_reset
             })
             return jsonify({"status": "partial", "message": "Metadata enregistree. Configurez SUPABASE_SERVICE_KEY dans Railway pour creer automatiquement le compte Auth.", "auth_created": False})
         # Create Supabase Auth user via admin API
@@ -1139,7 +1155,10 @@ def admin_create_user():
         supa_insert("user_accounts", {
             "email": email, "role": role,
             "parent_email": parent_email if parent_email else None,
-            "temp_password": password
+            "temp_password": password,
+            "analyses_remaining": 3,
+            "payment_status": "free",
+            "subscription_end": free_reset
         })
         return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
     except Exception as e:
@@ -1176,14 +1195,31 @@ def analyze():
         partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         user_email = request.form.get("user_email", "").strip()
 
-        # Check analyses_remaining if user_email provided
-        remaining = None
-        if user_email:
-            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining", "limit": "1"})
-            if rows:
-                remaining = rows[0].get("analyses_remaining", 0) or 0
-                if remaining <= 0:
-                    return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
+        # Require login
+        if not user_email:
+            return jsonify({"error": "Connexion requise pour analyser un contrat."}), 401
+
+        # Check analyses_remaining — upsert row if missing (3 free analyses by default)
+        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+        if not rows:
+            # First time user — create free account with 3 analyses
+            import datetime as _dt
+            reset_date = (_dt.datetime.now() + _dt.timedelta(days=7)).isoformat()
+            supa_insert("user_accounts", {
+                "email": user_email, "role": "directeur",
+                "analyses_remaining": 3, "payment_status": "free",
+                "subscription_end": reset_date
+            })
+            remaining = 3
+        else:
+            acc = rows[0]
+            if acc.get("is_admin"):
+                remaining = 9999  # admin = unlimited
+            else:
+                remaining = acc.get("analyses_remaining", 0) or 0
+
+        if remaining <= 0:
+            return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
 
         if not file:
             return jsonify({"error": "Fichier manquant"}), 400
@@ -1643,13 +1679,86 @@ def rag_delete():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ── Account info + free tier weekly reset ────────────────────────────────────
+
+@app.route("/account/info", methods=["POST", "OPTIONS"])
+def account_info():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+    if not email:
+        return jsonify({"error": "email requis"}), 400
+    rows = supa_get("user_accounts", {"email": f"eq.{email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "compte introuvable"}), 404
+    acc = rows[0]
+
+    # Admin → toujours illimité
+    if acc.get("is_admin"):
+        return jsonify({**acc, "analyses_remaining": -1, "can_analyze": True})
+
+    # Juriste → couvert uniquement par son directeur, pas de free tier
+    if acc.get("role") == "juriste":
+        parent_email = acc.get("parent_email")
+        if not parent_email:
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "no_director",
+                            "message": "Votre compte n'est rattaché à aucun directeur."})
+        parent = supa_get("user_accounts", {"email": f"eq.{parent_email}", "limit": "1"})
+        if not parent:
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_not_found"})
+        p = parent[0]
+        if p.get("payment_status") != "active":
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_inactive",
+                            "message": "Votre directeur n'a pas d'abonnement actif."})
+        sub_end = p.get("subscription_end")
+        if sub_end and parse_dt(sub_end) < datetime.datetime.now():
+            return jsonify({**acc, "can_analyze": False,
+                            "blocked_reason": "director_expired",
+                            "message": "L'abonnement de votre directeur a expiré."})
+        return jsonify({**acc, "can_analyze": True, "payment_status": "active"})
+
+    # Directeur (solo ou équipe) — abonnement actif → vérifier expiration
+    if acc.get("payment_status") == "active":
+        sub_end = acc.get("subscription_end")
+        if sub_end and parse_dt(sub_end) < datetime.datetime.now():
+            reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
+            supa_patch("user_accounts",
+                       {"payment_status": "free", "analyses_remaining": 3, "subscription_end": reset},
+                       f"email=eq.{email}")
+            acc["payment_status"] = "free"
+            acc["analyses_remaining"] = 3
+            acc["subscription_end"] = reset
+        return jsonify({**acc, "can_analyze": acc.get("analyses_remaining", 0) > 0})
+
+    # Directeur free → reset hebdomadaire auto
+    sub_end = acc.get("subscription_end")
+    if sub_end and parse_dt(sub_end) < datetime.datetime.now():
+        reset = (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
+        supa_patch("user_accounts",
+                   {"analyses_remaining": 3, "subscription_end": reset},
+                   f"email=eq.{email}")
+        acc["analyses_remaining"] = 3
+        acc["subscription_end"] = reset
+
+    rem = acc.get("analyses_remaining", 0) or 0
+    return jsonify({**acc, "can_analyze": rem > 0})
+
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
-    """CMI hash: sort keys (excl. HASH), join values with |, append storekey, SHA512 base64."""
-    sorted_keys = sorted([k for k in params if k.upper() != "HASH"])
-    hash_str = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
-    return base64.b64encode(hashlib.sha512(hash_str.encode("utf-8")).digest()).decode()
+    excluded = {"HASH", "encoding"}
+    sorted_keys = sorted([k for k in params if k not in excluded], key=lambda x: x.lower())
+    s = "|".join(str(params[k]) for k in sorted_keys) + "|" + store_key
+    print(f"[CMI DEBUG] fields_order: {sorted_keys}", flush=True)
+    for k in sorted_keys:
+        print(f"[CMI DEBUG]   {k} = {params[k]}", flush=True)
+    print(f"[CMI DEBUG] storekey_len={len(store_key)} storekey_start={store_key[:4]}...", flush=True)
+    result = base64.b64encode(hashlib.sha512(s.encode("utf-8")).digest()).decode()
+    print(f"[CMI DEBUG] HASH: {result}", flush=True)
+    return result
 
 @app.route("/payment/initiate", methods=["POST", "OPTIONS"])
 def payment_initiate():
@@ -1657,9 +1766,10 @@ def payment_initiate():
     data = request.get_json() or {}
     director_email = data.get("director_email", "")
     nb_users = int(data.get("nb_users", 1))
-    price = 850 if nb_users > 10 else 950
+    role = data.get("role", "directeur")  # "juriste" = 950 DH solo, "directeur" = 850 DH/user
+    price = 950 if role == "juriste" else 850
     total = nb_users * price
-    order_id = "ORD-" + uuid.uuid4().hex[:12].upper()
+    order_id = f"WF-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8].upper()}"
 
     supa_insert("payments", {
         "director_email": director_email, "order_id": order_id,
@@ -1667,22 +1777,21 @@ def payment_initiate():
     })
 
     params = {
-        "BillToName":   director_email,
-        "amount":       f"{total:.2f}",
-        "callbackUrl":  "https://web-production-f96f7.up.railway.app/payment/callback",
-        "clientid":     CMI_CLIENT_ID,
-        "currency":     "504",
-        "email":        director_email,
-        "encoding":     "UTF-8",
-        "failUrl":      f"{APP_URL}/app-v2.html?payment=failed",
+        "clientid":      CMI_CLIENT_ID,
+        "storetype":     "3D_PAY_HOSTING",
+        "trantype":      "PreAuth",
+        "amount":        f"{total:.2f}",
+        "currency":      "504",
+        "oid":           order_id,
+        "okUrl":         f"{APP_URL}/app-v2.html?payment=success",
+        "failUrl":       f"{APP_URL}/app-v2.html?payment=failed",
+        "shopurl":       APP_URL,
+        "callbackUrl":   "https://web-production-f96f7.up.railway.app/payment/callback",
+        "lang":          "fr",
+        "rnd":           datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
         "hashAlgorithm": "ver3",
-        "lang":         "fr",
-        "oid":          order_id,
-        "okUrl":        f"{APP_URL}/app-v2.html?payment=success",
-        "rnd":          datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
-        "shopurl":      APP_URL,
-        "storetype":    "3D_PAY_HOSTING",
-        "trantype":     "PreAuth",
+        "encoding":      "UTF-8",
+        "email":         director_email,
     }
     params["HASH"] = cmi_hash(params, CMI_STORE_KEY)
     return jsonify({"form_url": CMI_PAYMENT_URL, "params": params, "total": total})
@@ -1698,14 +1807,72 @@ def payment_callback():
         if payments:
             p = payments[0]
             sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
-            upd = {"payment_status": "active", "analyses_remaining": 10, "subscription_end": sub_end}
-            supa_patch("user_accounts", upd, f"email=eq.{p['director_email']}")
+            nb_users = p.get("nb_users", 1)
+            nb_juristes_max = max(0, nb_users - 1)  # nb_users includes director
+            upd_dir = {
+                "payment_status": "active", "analyses_remaining": 20,
+                "subscription_end": sub_end, "nb_juristes_max": nb_juristes_max
+            }
+            upd_jur = {"payment_status": "active", "analyses_remaining": 20, "subscription_end": sub_end}
+            supa_patch("user_accounts", upd_dir, f"email=eq.{p['director_email']}")
             juristes = supa_get("user_accounts", {"parent_email": f"eq.{p['director_email']}", "select": "email"}) or []
             for j in juristes:
-                supa_patch("user_accounts", upd, f"email=eq.{j['email']}")
+                supa_patch("user_accounts", upd_jur, f"email=eq.{j['email']}")
     else:
         supa_patch("payments", {"status": "failed"}, f"order_id=eq.{order_id}")
     return "APPROVED", 200
+
+
+@app.route("/director/create-juriste", methods=["POST", "OPTIONS"])
+def director_create_juriste():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    director_email = data.get("director_email", "").strip()
+    juriste_email  = data.get("juriste_email", "").strip()
+    juriste_password = data.get("juriste_password", "").strip()
+
+    if not director_email or not juriste_email or not juriste_password:
+        return jsonify({"error": "Champs requis manquants"}), 400
+
+    # Check director exists and has slots available
+    rows = supa_get("user_accounts", {"email": f"eq.{director_email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "Directeur introuvable"}), 404
+    director = rows[0]
+
+    if director.get("payment_status") != "active":
+        return jsonify({"error": "Abonnement inactif — souscrivez d'abord un abonnement"}), 403
+
+    nb_juristes_max = director.get("nb_juristes_max", 0) or 0
+    existing = supa_get("user_accounts", {"parent_email": f"eq.{director_email}", "select": "id"}) or []
+    if len(existing) >= nb_juristes_max:
+        return jsonify({
+            "error": f"Quota atteint : votre abonnement inclut {nb_juristes_max} juriste(s). Modifiez votre abonnement pour en ajouter."
+        }), 403
+
+    # Create Supabase auth user via admin API
+    try:
+        r = requests.post(
+            SUPA_URL + "/auth/v1/admin/users",
+            headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}", "Content-Type": "application/json"},
+            json={"email": juriste_email, "password": juriste_password, "email_confirm": True},
+            timeout=15
+        )
+        if not r.ok and "already registered" not in r.text.lower():
+            return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Upsert user_accounts row
+    supa_insert("user_accounts", {
+        "email": juriste_email, "role": "juriste",
+        "parent_email": director_email,
+        "payment_status": "active",
+        "analyses_remaining": 20,
+        "subscription_end": director.get("subscription_end", "")
+    })
+
+    return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
 
 if __name__ == "__main__":
