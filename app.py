@@ -1839,16 +1839,18 @@ def director_create_juriste():
     if not rows:
         return jsonify({"error": "Directeur introuvable"}), 404
     director = rows[0]
+    is_admin = director.get("role") == "admin"
 
-    if director.get("payment_status") != "active":
+    if not is_admin and director.get("payment_status") != "active":
         return jsonify({"error": "Abonnement inactif — souscrivez d'abord un abonnement"}), 403
 
-    nb_juristes_max = director.get("nb_juristes_max", 0) or 0
-    existing = supa_get("user_accounts", {"parent_email": f"eq.{director_email}", "select": "id"}) or []
-    if len(existing) >= nb_juristes_max:
-        return jsonify({
-            "error": f"Quota atteint : votre abonnement inclut {nb_juristes_max} juriste(s). Modifiez votre abonnement pour en ajouter."
-        }), 403
+    if not is_admin:
+        nb_juristes_max = director.get("nb_juristes_max", 0) or 0
+        existing = supa_get("user_accounts", {"parent_email": f"eq.{director_email}", "select": "id"}) or []
+        if len(existing) >= nb_juristes_max:
+            return jsonify({
+                "error": f"Quota atteint : votre abonnement inclut {nb_juristes_max} juriste(s). Modifiez votre abonnement pour en ajouter."
+            }), 403
 
     # Create Supabase auth user via admin API
     try:
