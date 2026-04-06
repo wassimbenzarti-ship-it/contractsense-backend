@@ -737,41 +737,93 @@ def fuzzy_match(original, para_text, threshold=0.60):
     return overlap >= threshold
 
 def create_docx_with_changes(contract_text, modifications, decisions):
-    """Create new DOCX for old .doc files that cant be processed directly"""
+    """Fallback DOCX: rapport professionnel avec texte original barre et proposition en vert."""
     from docx import Document as DocxDocument
+    from docx.shared import RGBColor, Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement as _OE
+
     doc = DocxDocument()
-    doc.add_heading('Document avec modifications ContractSense', 0)
+    for section in doc.sections:
+        section.top_margin    = Cm(2)
+        section.bottom_margin = Cm(2)
+        section.left_margin   = Cm(2.5)
+        section.right_margin  = Cm(2.5)
+
+    title = doc.add_heading("Rapport de modifications — ContractSense", 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    dp = doc.add_paragraph()
+    dp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    dr = dp.add_run("Genere le " + datetime.datetime.now().strftime("%d/%m/%Y a %H:%M"))
+    dr.font.size = Pt(9)
+    dr.font.color.rgb = RGBColor(0x70, 0x70, 0x70)
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+    if not accepted:
+        doc.add_paragraph("Aucune modification acceptee.")
+        out = io.BytesIO(); doc.save(out); out.seek(0); return out
 
-    # Add note
-    note = doc.add_paragraph()
-    note.add_run("Note: Document gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© depuis un fichier .doc ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es appliquÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es ci-dessous.").italic = True
     doc.add_paragraph()
+    sp = doc.add_paragraph()
+    sp.add_run(str(len(accepted)) + " clause(s) modifiee(s)").bold = True
 
-    # Add each accepted modification as track change style
-    for mod in accepted:
-        doc.add_heading(mod.get("clause_name", "Clause"), level=2)
+    RISK_LABEL = {"high": "Risque eleve", "medium": "Risque modere", "low": "Risque faible"}
+    RISK_COLOR = {"high": RGBColor(0xEF,0x44,0x44), "medium": RGBColor(0xF5,0x9E,0x0B), "low": RGBColor(0x10,0xB9,0x81)}
 
-        # Original (strikethrough red)
-        p_orig = doc.add_paragraph()
-        run_orig = p_orig.add_run("ORIGINAL: " + mod.get("original", ""))
-        from docx.shared import RGBColor
-        run_orig.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
-        run_orig.font.strike = True
-
-        # Proposed (green)
-        p_prop = doc.add_paragraph()
-        run_prop = p_prop.add_run("MODIFIÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: " + mod.get("proposed", ""))
-        run_prop.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
-        run_prop.font.bold = True
-
+    for i, mod in enumerate(accepted):
         doc.add_paragraph()
+        doc.add_heading(str(i+1) + ". " + mod.get("clause_name", "Clause"), level=2)
 
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    return output
+        risk = mod.get("risk", "")
+        if risk:
+            rp = doc.add_paragraph()
+            rr = rp.add_run("[ " + RISK_LABEL.get(risk, risk) + " ]")
+            rr.font.color.rgb = RISK_COLOR.get(risk, RGBColor(0x70,0x70,0x70))
+            rr.font.size = Pt(9); rr.bold = True
+
+        reason = mod.get("reason", "")
+        if reason:
+            rp2 = doc.add_paragraph()
+            rr2 = rp2.add_run(reason)
+            rr2.font.size = Pt(9)
+            rr2.font.color.rgb = RGBColor(0x50,0x50,0x50)
+            rr2.italic = True
+
+        pl = doc.add_paragraph()
+        rl = pl.add_run("TEXTE ORIGINAL :")
+        rl.bold = True; rl.font.size = Pt(9)
+        rl.font.color.rgb = RGBColor(0xCC,0x00,0x00)
+
+        po = doc.add_paragraph()
+        po.paragraph_format.left_indent = Cm(0.5)
+        ro = po.add_run(mod.get("original", ""))
+        ro.font.color.rgb = RGBColor(0xCC,0x00,0x00)
+        ro.font.strike = True
+
+        pa = doc.add_paragraph("Proposition de modification :")
+        pa.runs[0].bold = True
+        pa.runs[0].font.size = Pt(9)
+        pa.runs[0].font.color.rgb = RGBColor(0x00,0x80,0x00)
+
+        pp = doc.add_paragraph()
+        pp.paragraph_format.left_indent = Cm(0.5)
+        rp3 = pp.add_run(mod.get("proposed", ""))
+        rp3.font.color.rgb = RGBColor(0x00,0x70,0x00)
+        rp3.bold = True
+
+        sep = doc.add_paragraph()
+        pPr = sep._p.get_or_add_pPr()
+        pBdr = _OE("w:pBdr")
+        bottom = _OE("w:bottom")
+        bottom.set(_qn("w:val"), "single")
+        bottom.set(_qn("w:sz"), "4")
+        bottom.set(_qn("w:space"), "1")
+        bottom.set(_qn("w:color"), "CCCCCC")
+        pBdr.append(bottom); pPr.append(pBdr)
+
+    out = io.BytesIO(); doc.save(out); out.seek(0); return out
+
 
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
