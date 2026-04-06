@@ -123,6 +123,23 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
+# ── In-memory file cache ──────────────────────────────────────────────────────
+# Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
+# them even when the client no longer has the file. Limited to 200 entries ~100 MB.
+_FILE_CACHE: dict = {}
+_FILE_CACHE_ORDER: list = []
+_FILE_CACHE_MAX = 200
+
+def _cache_store(key: str, data: bytes):
+    _FILE_CACHE[key] = data
+    _FILE_CACHE_ORDER.append(key)
+    if len(_FILE_CACHE_ORDER) > _FILE_CACHE_MAX:
+        old = _FILE_CACHE_ORDER.pop(0)
+        _FILE_CACHE.pop(old, None)
+
+def _cache_get(key: str) -> bytes | None:
+    return _FILE_CACHE.get(key)
+
 # CMI Payment config
 CMI_CLIENT_ID   = os.environ.get("CMI_CLIENT_ID", "")
 CMI_STORE_KEY   = os.environ.get("CMI_STORE_KEY", "")
@@ -1265,7 +1282,14 @@ def analyze():
         if user_email and remaining is not None:
             supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
 
-        # Store original file in Supabase Storage so export can retrieve it later
+        # ── Cache en mémoire (toujours disponible dans la session serveur) ───
+        file_cache_id = None
+        if file_bytes:
+            file_cache_id = str(uuid.uuid4())
+            _cache_store(file_cache_id, file_bytes)
+        result["file_cache_id"] = file_cache_id
+
+        # ── Supabase Storage (persistance longue durée, optionnel) ───────────
         file_storage_path = None
         if file_bytes and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
             try:
@@ -1295,6 +1319,7 @@ def export():
     try:
         file = request.files.get("file")
         file_storage_path = request.form.get("file_storage_path", "").strip()
+        file_cache_id = request.form.get("file_cache_id", "").strip()
         modifications = json.loads(request.form.get("modifications", "[]"))
         decisions = json.loads(request.form.get("decisions", "{}"))
 
@@ -1304,14 +1329,21 @@ def export():
         file_bytes = None
         filename = ""
 
-        # Prefer original file from Supabase Storage when available
-        if file_storage_path and (SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY)):
+        # 1. Cache mémoire (priorité : même session serveur, 100% fiable)
+        if file_cache_id:
+            cached = _cache_get(file_cache_id)
+            if cached:
+                file_bytes = cached
+                filename = "contrat.docx"
+
+        # 2. Supabase Storage (persistance longue durée)
+        if file_bytes is None and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
             downloaded = supa_storage_download("contracts", file_storage_path)
             if downloaded:
                 file_bytes = downloaded
                 filename = file_storage_path.rsplit("/", 1)[-1].lower()
 
-        # Fallback to uploaded file
+        # 3. Fallback : fichier uploadé directement dans la requête
         if file_bytes is None:
             if not file:
                 return jsonify({"error": "Fichier manquant"}), 400
