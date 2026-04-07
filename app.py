@@ -529,7 +529,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         query_vec = get_embedding(search_query, voyage_key)
         relevant_docs = []
         if query_vec and len(query_vec) == 1024:
-            relevant_docs = search_rag_pgvector(query_vec, top_k=15)
+            relevant_docs = search_rag_pgvector(query_vec, top_k=25)
             print(f"pgvector: {len(relevant_docs)} docs found")
         if not relevant_docs:
             # Fallback: recherche textuelle si Voyage AI indisponible ou 0 résultats
