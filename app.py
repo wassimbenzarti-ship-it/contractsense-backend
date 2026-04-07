@@ -156,6 +156,7 @@ def send_email(to: str, subject: str, html: str):
     except Exception as e:
         print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
 
+
 # ── In-memory file cache ──────────────────────────────────────────────────────
 # Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
 # them even when the client no longer has the file. Limited to 200 entries ~100 MB.
@@ -1357,19 +1358,77 @@ def admin_create_user():
             "password": password,
             "email_confirm": True
         }, timeout=15)
+        auth_user = None
         if not auth_resp.ok:
-            err = auth_resp.json()
-            return jsonify({"error": "Auth creation failed: " + err.get("message", str(err))}), 400
-        auth_user = auth_resp.json()
-        # Insert metadata into user_accounts
-        supa_insert("user_accounts", {
-            "email": email, "role": role,
-            "parent_email": parent_email if parent_email else None,
-            "temp_password": password,
-            "analyses_remaining": 3,
-            "payment_status": "free",
-            "subscription_end": free_reset
-        })
+            err_body = auth_resp.json() if auth_resp.content else {}
+            err_code = err_body.get("error_code", "") or err_body.get("code", "")
+            err_msg = err_body.get("msg", "") or err_body.get("message", "")
+            # Handle already-existing Auth account (email_exists or email_address_not_authorized)
+            is_already_exists = (
+                "email_exists" in str(err_code) or
+                "already registered" in str(err_msg).lower() or
+                "already been registered" in str(err_msg).lower() or
+                auth_resp.status_code == 422
+            )
+            if is_already_exists:
+                # Find the existing Auth user by email via admin list
+                list_resp = requests.get(
+                    SUPA_URL.rstrip("/") + "/auth/v1/admin/users",
+                    headers=auth_headers,
+                    params={"page": 1, "per_page": 1000},
+                    timeout=15
+                )
+                if list_resp.ok:
+                    users_data = list_resp.json()
+                    users_list = users_data if isinstance(users_data, list) else users_data.get("users", [])
+                    for u in users_list:
+                        if u.get("email", "").lower() == email.lower():
+                            auth_user = u
+                            break
+                if not auth_user:
+                    return jsonify({"error": "Compte Auth existant mais introuvable. Supprimez manuellement l'utilisateur dans Supabase Auth puis réessayez."}), 400
+                # Update password for the existing Auth user
+                requests.put(
+                    SUPA_URL.rstrip("/") + "/auth/v1/admin/users/" + auth_user["id"],
+                    headers=auth_headers,
+                    json={"password": password, "email_confirm": True},
+                    timeout=15
+                )
+            else:
+                return jsonify({"error": "Erreur creation Auth: " + err_msg or str(err_body)}), 400
+        else:
+            auth_user = auth_resp.json()
+        # Upsert metadata into user_accounts (in case row was deleted but Auth survived)
+        existing_rows = supa_get("user_accounts", {"email": f"eq.{email}", "select": "email", "limit": "1"})
+        if existing_rows:
+            # Update existing row
+            requests.patch(
+                SUPA_URL.rstrip("/") + "/rest/v1/user_accounts?email=eq." + email,
+                headers={
+                    "apikey": service_key,
+                    "Authorization": "Bearer " + service_key,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                json={
+                    "role": role,
+                    "parent_email": parent_email if parent_email else None,
+                    "temp_password": password,
+                    "analyses_remaining": 3,
+                    "payment_status": "free",
+                    "subscription_end": free_reset
+                },
+                timeout=15
+            )
+        else:
+            supa_insert("user_accounts", {
+                "email": email, "role": role,
+                "parent_email": parent_email if parent_email else None,
+                "temp_password": password,
+                "analyses_remaining": 3,
+                "payment_status": "free",
+                "subscription_end": free_reset
+            })
         return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
