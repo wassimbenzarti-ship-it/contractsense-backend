@@ -9,6 +9,7 @@ import zipfile
 import datetime
 import hashlib
 import smtplib
+import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import base64
@@ -144,11 +145,11 @@ def send_email(to: str, subject: str, html: str):
         msg["To"]      = to
         msg.attach(MIMEText(html, "html", "utf-8"))
         if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as s:
                 s.login(SMTP_USER, SMTP_PASSWORD)
                 s.sendmail(SMTP_FROM, [to], msg.as_string())
         else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
                 s.starttls()
                 s.login(SMTP_USER, SMTP_PASSWORD)
                 s.sendmail(SMTP_FROM, [to], msg.as_string())
@@ -2297,24 +2298,30 @@ def director_create_juriste():
 
     # Envoyer email de bienvenue avec identifiants
     app_url = os.environ.get("APP_URL", "https://contractsense.fr")
-    send_email(
-        to=juriste_email,
-        subject="Votre accès ContractSense",
-        html=f"""
+    # Envoyer email de bienvenue en background (evite timeout SMTP bloquant)
+    _email_to = juriste_email
+    _email_pwd = juriste_password
+    _app_url = os.environ.get("APP_URL", "https://contractsense.fr")
+    def _send_welcome():
+        send_email(
+            to=_email_to,
+            subject="Votre accès ContractSense",
+            html=f"""
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;background:#f9fafb;border-radius:12px">
   <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur ContractSense</h2>
   <p style="color:#475569">Votre directeur vous a ajouté à son équipe. Voici vos identifiants de connexion :</p>
   <div style="background:#fff;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e2e8f0">
-    <p style="margin:0 0 8px 0"><strong>Email :</strong> {juriste_email}</p>
-    <p style="margin:0"><strong>Mot de passe :</strong> {juriste_password}</p>
+    <p style="margin:0 0 8px 0"><strong>Email :</strong> {_email_to}</p>
+    <p style="margin:0"><strong>Mot de passe :</strong> {_email_pwd}</p>
   </div>
-  <a href="{app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+  <a href="{_app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
     Accéder à ContractSense
   </a>
   <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
 </div>
 """
-    )
+        )
+    threading.Thread(target=_send_welcome, daemon=True).start()
 
     return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
