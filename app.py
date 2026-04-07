@@ -2174,7 +2174,7 @@ def director_create_juriste():
         )
         if not r.ok:
             err_text = r.text.lower()
-            if "already registered" in err_text or "already exists" in err_text or "user already" in err_text:
+            if "email_exists" in err_text or "already exists" in err_text or "user already" in err_text:
                 # Trouver l'UUID et mettre à jour le mot de passe
                 list_r = requests.get(
                     SUPA_URL + "/auth/v1/admin/users",
