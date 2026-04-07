@@ -29,8 +29,8 @@ CORS(app, origins=[
     "https://westfieldavocats.com",
     "https://www.westfieldavocats.com",
     "https://wassimbenzarti-ship-it.github.io",
-    "https://contractsense.fr",
-    "https://www.contractsense.fr",
+    "https://westfieldavocats.com",
+    "https://www.westfieldavocats.com",
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",
@@ -126,7 +126,7 @@ SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 # ── Email (Resend API — HTTP, jamais bloqué par les hébergeurs) ───────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM     = os.environ.get("EMAIL_FROM", "ContractSense <noreply@contractsense.fr>")
+EMAIL_FROM     = os.environ.get("EMAIL_FROM", "Omniscient <noreply@westfieldavocats.com>")
 
 def send_email(to: str, subject: str, html: str):
     if not RESEND_API_KEY:
@@ -805,7 +805,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
         section.left_margin   = Cm(2.5)
         section.right_margin  = Cm(2.5)
 
-    title = doc.add_heading("Rapport de modifications — ContractSense", 0)
+    title = doc.add_heading("Rapport de modifications — Omniscient", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     dp = doc.add_paragraph()
     dp.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -881,7 +881,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
 
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
-    author = "ContractSense"
+    author = "Omniscient"
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 1
 
@@ -1644,7 +1644,7 @@ def export():
             output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
+            doc.add_heading('Omniscient - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
             accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
             for i, m in enumerate(accepted):
                 doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
@@ -2289,25 +2289,25 @@ def director_create_juriste():
         })
 
     # Envoyer email de bienvenue avec identifiants
-    app_url = os.environ.get("APP_URL", "https://contractsense.fr")
+    app_url = os.environ.get("APP_URL", "https://westfieldavocats.com")
     # Envoyer email de bienvenue en background (evite timeout SMTP bloquant)
     _email_to = juriste_email
     _email_pwd = juriste_password
-    _app_url = os.environ.get("APP_URL", "https://contractsense.fr")
+    _app_url = os.environ.get("APP_URL", "https://westfieldavocats.com")
     def _send_welcome():
         send_email(
             to=_email_to,
-            subject="Votre accès ContractSense",
+            subject="Votre accès Omniscient",
             html=f"""
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;background:#f9fafb;border-radius:12px">
-  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur ContractSense</h2>
+  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur Omniscient</h2>
   <p style="color:#475569">Votre directeur vous a ajouté à son équipe. Voici vos identifiants de connexion :</p>
   <div style="background:#fff;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e2e8f0">
     <p style="margin:0 0 8px 0"><strong>Email :</strong> {_email_to}</p>
     <p style="margin:0"><strong>Mot de passe :</strong> {_email_pwd}</p>
   </div>
   <a href="{_app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
-    Accéder à ContractSense
+    Accéder à Omniscient
   </a>
   <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
 </div>
