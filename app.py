@@ -143,10 +143,15 @@ def send_email(to: str, subject: str, html: str):
         msg["From"]    = SMTP_FROM
         msg["To"]      = to
         msg.attach(MIMEText(html, "html", "utf-8"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASSWORD)
-            s.sendmail(SMTP_FROM, [to], msg.as_string())
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
+                s.login(SMTP_USER, SMTP_PASSWORD)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+                s.starttls()
+                s.login(SMTP_USER, SMTP_PASSWORD)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
         print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
     except Exception as e:
         print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
