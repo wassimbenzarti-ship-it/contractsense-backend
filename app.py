@@ -525,7 +525,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         # Get embedding for search query
-        search_query = contract_type + " " + partie + " " + contract_text[:500]
+        # Utilise le texte du contrat comme requete principale (pas le type dropdown)
+        search_query = contract_text[:1500]
         query_vec = get_embedding(search_query, voyage_key)
         relevant_docs = []
         if query_vec and len(query_vec) == 1024:
