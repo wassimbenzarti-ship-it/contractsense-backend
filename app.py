@@ -163,7 +163,12 @@ def supa_get(table, params=None):
 def supa_update(table, record_id, updates):
     url = SUPA_URL + f"/rest/v1/{table}?id=eq.{record_id}"
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
-    return r.json()
+    if not r.content or r.status_code == 204:
+        return {"_status": r.status_code}
+    try:
+        return r.json()
+    except Exception:
+        return {"_status": r.status_code}
 
 def supa_insert(table, data):
     url = SUPA_URL + "/rest/v1/" + table
