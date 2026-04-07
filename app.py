@@ -1222,7 +1222,6 @@ def request_revision_by_director(analysis_id):
         data = request.get_json() or {}
         modifications = data.get("modifications", [])
         director_notes = (data.get("director_notes") or "").strip()
-        # Embed director note inside modifications to avoid dependency on director_notes column
         modifications = [m for m in modifications if not (isinstance(m, dict) and m.get("_isDirectorNote"))]
         if director_notes:
             modifications = [{"_isDirectorNote": True, "note": director_notes}] + modifications
@@ -1231,10 +1230,22 @@ def request_revision_by_director(analysis_id):
             "modifications": modifications,
             "director_email": data.get("director_email", "")
         }
-        result = supa_update("analyses", analysis_id, patch)
-        if isinstance(result, dict) and result.get("code"):
-            return jsonify({"error": result.get("message", "Erreur base de données")}), 500
-        return jsonify({"status": "ok"})
+        # Use return=representation to detect silent RLS failures (empty array = 0 rows updated)
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1249,10 +1260,21 @@ def validate_analysis_by_director(analysis_id):
             "director_email": data.get("director_email", ""),
             "modifications": data.get("modifications", [])
         }
-        result = supa_update("analyses", analysis_id, patch)
-        if isinstance(result, dict) and result.get("code"):
-            return jsonify({"error": result.get("message", "Erreur base de données")}), 500
-        return jsonify({"status": "ok"})
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
