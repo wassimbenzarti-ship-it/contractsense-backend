@@ -1205,6 +1205,9 @@ def reject_director_suggestion(suggestion_id):
     if request.method == "OPTIONS": return "", 204
     try:
         supa_update("pending_suggestions_director", suggestion_id, {"status": "rejected"})
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/analyses/request-revision/<analysis_id>", methods=["POST", "OPTIONS"])
