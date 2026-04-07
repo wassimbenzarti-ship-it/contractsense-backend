@@ -8,10 +8,7 @@ import re
 import zipfile
 import datetime
 import hashlib
-import smtplib
 import threading
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import base64
 import uuid
 import numpy as np
@@ -127,33 +124,28 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
-# ── Email (SMTP) ──────────────────────────────────────────────────────────────
-SMTP_HOST     = os.environ.get("SMTP_HOST", "")
-SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER     = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-SMTP_FROM     = os.environ.get("SMTP_FROM", SMTP_USER)
+# ── Email (Resend API — HTTP, jamais bloqué par les hébergeurs) ───────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM     = os.environ.get("EMAIL_FROM", "ContractSense <noreply@contractsense.fr>")
 
 def send_email(to: str, subject: str, html: str):
-    if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL] SMTP non configuré — email non envoyé à {to}", flush=True)
+    if not RESEND_API_KEY:
+        print(f"[EMAIL] RESEND_API_KEY non configuré — email non envoyé à {to}", flush=True)
         return
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = SMTP_FROM
-        msg["To"]      = to
-        msg.attach(MIMEText(html, "html", "utf-8"))
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as s:
-                s.login(SMTP_USER, SMTP_PASSWORD)
-                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": "Bearer " + RESEND_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"from": EMAIL_FROM, "to": [to], "subject": subject, "html": html},
+            timeout=15,
+        )
+        if resp.ok:
+            print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
         else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
-                s.starttls()
-                s.login(SMTP_USER, SMTP_PASSWORD)
-                s.sendmail(SMTP_FROM, [to], msg.as_string())
-        print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+            print(f"[EMAIL] Erreur Resend {resp.status_code}: {resp.text[:200]}", flush=True)
     except Exception as e:
         print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
 
