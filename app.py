@@ -8,6 +8,9 @@ import re
 import zipfile
 import datetime
 import hashlib
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import base64
 import uuid
 import numpy as np
@@ -122,6 +125,31 @@ def normalize_party_label(partie, contract_type=None):
 SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+# ── Email (SMTP) ──────────────────────────────────────────────────────────────
+SMTP_HOST     = os.environ.get("SMTP_HOST", "")
+SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER     = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM     = os.environ.get("SMTP_FROM", SMTP_USER)
+
+def send_email(to: str, subject: str, html: str):
+    if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
+        print(f"[EMAIL] SMTP non configuré — email non envoyé à {to}", flush=True)
+        return
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = SMTP_FROM
+        msg["To"]      = to
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.starttls()
+            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.sendmail(SMTP_FROM, [to], msg.as_string())
+        print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+    except Exception as e:
+        print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
 
 # ── In-memory file cache ──────────────────────────────────────────────────────
 # Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
@@ -2104,6 +2132,27 @@ def director_create_juriste():
         "analyses_remaining": 20,
         "subscription_end": director.get("subscription_end", "")
     })
+
+    # Envoyer email de bienvenue avec identifiants
+    app_url = os.environ.get("APP_URL", "https://contractsense.fr")
+    send_email(
+        to=juriste_email,
+        subject="Votre accès ContractSense",
+        html=f"""
+<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;background:#f9fafb;border-radius:12px">
+  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur ContractSense</h2>
+  <p style="color:#475569">Votre directeur vous a ajouté à son équipe. Voici vos identifiants de connexion :</p>
+  <div style="background:#fff;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e2e8f0">
+    <p style="margin:0 0 8px 0"><strong>Email :</strong> {juriste_email}</p>
+    <p style="margin:0"><strong>Mot de passe :</strong> {juriste_password}</p>
+  </div>
+  <a href="{app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+    Accéder à ContractSense
+  </a>
+  <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
+</div>
+"""
+    )
 
     return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
