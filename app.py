@@ -1474,6 +1474,53 @@ def analyze():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyze-clause", methods=["POST", "OPTIONS"])
+def analyze_clause():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        clause_name = (data.get("clause_name") or "").strip()
+        clause_text = (data.get("clause_text") or "").strip()
+        contract_type = data.get("type", "general")
+        partie = data.get("partie", "la partie bénéficiaire")
+        if not clause_name:
+            return jsonify({"error": "clause_name requis"}), 400
+
+        prompt = f"""Tu es un juriste expert. Analyse la clause suivante extraite d'un contrat de type "{contract_type}".
+
+Nom de la clause : {clause_name}
+Texte de la clause :
+{clause_text or "(texte non fourni — analyse sur la base du nom uniquement)"}
+
+Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
+{{
+  "original": "texte original de la clause (ou synthèse si non fourni)",
+  "proposed": "rédaction améliorée protégeant {partie}",
+  "risk": "high|medium|low",
+  "reason": "explication concise du risque et de la modification proposée"
+}}"""
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        # Nettoyer si markdown
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw)
+        return jsonify(result)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Réponse IA invalide", "raw": raw[:200]}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/export", methods=["POST"])
 def export():
     try:
@@ -2160,6 +2207,54 @@ def director_create_juriste():
     )
 
     return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
+
+
+@app.route("/director/delete-juriste", methods=["POST", "OPTIONS"])
+def director_delete_juriste():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    director_email = data.get("director_email", "").strip()
+    juriste_email  = data.get("juriste_email", "").strip()
+    if not director_email or not juriste_email:
+        return jsonify({"error": "Champs requis manquants"}), 400
+
+    # Vérifier que le juriste appartient bien à ce directeur
+    rows = supa_get("user_accounts", {"email": f"eq.{juriste_email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "Juriste introuvable"}), 404
+    juriste = rows[0]
+    if juriste.get("parent_email") != director_email:
+        return jsonify({"error": "Ce juriste n'appartient pas à votre équipe"}), 403
+
+    # Supprimer de Supabase Auth via admin API
+    # D'abord récupérer l'UUID auth du juriste
+    auth_users_r = requests.get(
+        SUPA_URL + "/auth/v1/admin/users",
+        headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+        params={"filter": f"email=={juriste_email}"},
+        timeout=15
+    )
+    if auth_users_r.ok:
+        auth_data = auth_users_r.json()
+        users = auth_data.get("users", [])
+        for u in users:
+            if u.get("email") == juriste_email:
+                uid = u.get("id")
+                requests.delete(
+                    SUPA_URL + f"/auth/v1/admin/users/{uid}",
+                    headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+                    timeout=15
+                )
+                break
+
+    # Supprimer de user_accounts
+    requests.delete(
+        SUPA_URL + f"/rest/v1/user_accounts?email=eq.{juriste_email}",
+        headers={**supa_headers(), "apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+        timeout=10
+    )
+
+    return jsonify({"status": "ok", "message": f"Juriste {juriste_email} supprimé"})
 
 
 def _init_storage():
