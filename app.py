@@ -556,25 +556,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         rag_context += "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
 
             # Extract clause titles from reference docs to detect missing clauses
-            if reference_docs:
-                rag_clause_titles = []
-                for doc in reference_docs:
-                    title = doc.get("title", "")
-                    content_preview = doc.get("content", "")[:300]
-                    # Extract clause headings from content (lines starting with Article/Clause/uppercase)
-                    import re as _re
-                    headings = _re.findall(r'(?:^|\n)\s*((?:Article|Clause|ARTICLE|CLAUSE|[A-Z][A-Z\s]{3,30})(?:[\s:.-]+[^\n]{0,60}))', content_preview)
-                    for h in headings[:3]:
-                        h = h.strip().strip(':-').strip()
-                        if len(h) > 5 and h not in rag_clause_titles:
-                            rag_clause_titles.append(h)
-                    if title and title not in rag_clause_titles:
-                        rag_clause_titles.append(title)
+            try:
+                rag_clause_titles = [d.get("title", "") for d in reference_docs if d.get("title")]
                 if rag_clause_titles:
                     rag_context += "\n\nCLAUSES PRESENTES DANS LE MODELE DE REFERENCE (verifie lesquelles sont ABSENTES du contrat):\n"
                     for ct in rag_clause_titles[:20]:
                         rag_context += "- " + ct + "\n"
-                    rag_context += "=> Si l\'une de ces clauses est absente du contrat analyse, propose-la OBLIGATOIREMENT comme nouvelle_clause.\n"
+                    rag_context += "=> Si l'une de ces clauses est absente du contrat analyse, propose-la OBLIGATOIREMENT comme nouvelle_clause.\n"
+                    print(f"RAG model clauses injected: {rag_clause_titles}")
+            except Exception as _e:
+                print("RAG clause extraction error: " + str(_e))
     except Exception as e:
         print("RAG search error: " + str(e))
 
