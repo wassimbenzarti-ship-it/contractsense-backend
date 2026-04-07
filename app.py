@@ -1205,6 +1205,49 @@ def reject_director_suggestion(suggestion_id):
     if request.method == "OPTIONS": return "", 204
     try:
         supa_update("pending_suggestions_director", suggestion_id, {"status": "rejected"})
+
+
+@app.route("/analyses/request-revision/<analysis_id>", methods=["POST", "OPTIONS"])
+def request_revision_by_director(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        modifications = data.get("modifications", [])
+        director_notes = (data.get("director_notes") or "").strip()
+        # Embed director note inside modifications to avoid dependency on director_notes column
+        modifications = [m for m in modifications if not (isinstance(m, dict) and m.get("_isDirectorNote"))]
+        if director_notes:
+            modifications = [{"_isDirectorNote": True, "note": director_notes}] + modifications
+        patch = {
+            "status": "revision_requested",
+            "modifications": modifications,
+            "director_email": data.get("director_email", "")
+        }
+        result = supa_update("analyses", analysis_id, patch)
+        if isinstance(result, dict) and result.get("code"):
+            return jsonify({"error": result.get("message", "Erreur base de données")}), 500
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/validate-by-director/<analysis_id>", methods=["POST", "OPTIONS"])
+def validate_analysis_by_director(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        patch = {
+            "status": "validated",
+            "director_email": data.get("director_email", ""),
+            "modifications": data.get("modifications", [])
+        }
+        result = supa_update("analyses", analysis_id, patch)
+        if isinstance(result, dict) and result.get("code"):
+            return jsonify({"error": result.get("message", "Erreur base de données")}), 500
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
         return jsonify({"status": "ok", "message": "Suggestion rejetee par le directeur"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
