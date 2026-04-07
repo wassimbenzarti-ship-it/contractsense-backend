@@ -2164,6 +2164,7 @@ def director_create_juriste():
             }), 403
 
     # Create Supabase auth user via admin API
+    # Si l'utilisateur existe déjà dans Auth, on met juste à jour son mot de passe
     try:
         r = requests.post(
             SUPA_URL + "/auth/v1/admin/users",
@@ -2171,19 +2172,47 @@ def director_create_juriste():
             json={"email": juriste_email, "password": juriste_password, "email_confirm": True},
             timeout=15
         )
-        if not r.ok and "already registered" not in r.text.lower():
-            return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
+        if not r.ok:
+            err_text = r.text.lower()
+            if "already registered" in err_text or "already exists" in err_text or "user already" in err_text:
+                # Trouver l'UUID et mettre à jour le mot de passe
+                list_r = requests.get(
+                    SUPA_URL + "/auth/v1/admin/users",
+                    headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+                    params={"filter": f"email=={juriste_email}", "per_page": "1000"},
+                    timeout=15
+                )
+                if list_r.ok:
+                    for u in (list_r.json().get("users") or []):
+                        if u.get("email") == juriste_email:
+                            requests.put(
+                                SUPA_URL + f"/auth/v1/admin/users/{u['id']}",
+                                headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}", "Content-Type": "application/json"},
+                                json={"password": juriste_password},
+                                timeout=15
+                            )
+                            break
+            else:
+                return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # Upsert user_accounts row
-    supa_insert("user_accounts", {
-        "email": juriste_email, "role": "juriste",
-        "parent_email": director_email,
-        "payment_status": "active",
-        "analyses_remaining": 20,
-        "subscription_end": director.get("subscription_end", "")
-    })
+    # Upsert user_accounts row (supprimer l'ancienne si elle existe, puis réinsérer)
+    existing_row = supa_get("user_accounts", {"email": f"eq.{juriste_email}", "limit": "1"})
+    if existing_row:
+        supa_patch("user_accounts", {
+            "role": "juriste", "parent_email": director_email,
+            "payment_status": "active", "analyses_remaining": 20,
+            "subscription_end": director.get("subscription_end", "")
+        }, f"email=eq.{juriste_email}")
+    else:
+        supa_insert("user_accounts", {
+            "email": juriste_email, "role": "juriste",
+            "parent_email": director_email,
+            "payment_status": "active",
+            "analyses_remaining": 20,
+            "subscription_end": director.get("subscription_end", "")
+        })
 
     # Envoyer email de bienvenue avec identifiants
     app_url = os.environ.get("APP_URL", "https://contractsense.fr")
@@ -2226,26 +2255,29 @@ def director_delete_juriste():
     if juriste.get("parent_email") != director_email:
         return jsonify({"error": "Ce juriste n'appartient pas à votre équipe"}), 403
 
-    # Supprimer de Supabase Auth via admin API
-    # D'abord récupérer l'UUID auth du juriste
-    auth_users_r = requests.get(
-        SUPA_URL + "/auth/v1/admin/users",
-        headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
-        params={"filter": f"email=={juriste_email}"},
-        timeout=15
-    )
-    if auth_users_r.ok:
-        auth_data = auth_users_r.json()
-        users = auth_data.get("users", [])
+    # Supprimer de Supabase Auth — chercher dans toutes les pages
+    auth_headers = {"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"}
+    deleted_auth = False
+    for page in range(1, 20):
+        list_r = requests.get(
+            SUPA_URL + "/auth/v1/admin/users",
+            headers=auth_headers,
+            params={"page": page, "per_page": "1000"},
+            timeout=15
+        )
+        if not list_r.ok:
+            break
+        users = list_r.json().get("users") or []
         for u in users:
             if u.get("email") == juriste_email:
-                uid = u.get("id")
                 requests.delete(
-                    SUPA_URL + f"/auth/v1/admin/users/{uid}",
-                    headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
-                    timeout=15
+                    SUPA_URL + f"/auth/v1/admin/users/{u['id']}",
+                    headers=auth_headers, timeout=15
                 )
+                deleted_auth = True
                 break
+        if deleted_auth or len(users) < 1000:
+            break
 
     # Supprimer de user_accounts
     requests.delete(
