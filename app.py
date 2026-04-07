@@ -1962,6 +1962,9 @@ def account_info():
             acc["payment_status"] = "free"
             acc["analyses_remaining"] = 3
             acc["subscription_end"] = reset
+        # Si nb_juristes_max est 0 mais l'abonnement est actif, défaut à 5
+        if not acc.get("nb_juristes_max"):
+            acc["nb_juristes_max"] = 5
         return jsonify({**acc, "can_analyze": acc.get("analyses_remaining", 0) > 0})
 
     # Directeur free → reset hebdomadaire auto
@@ -2076,7 +2079,7 @@ def director_create_juriste():
         return jsonify({"error": "Abonnement inactif — souscrivez d'abord un abonnement"}), 403
 
     if not is_admin:
-        nb_juristes_max = director.get("nb_juristes_max", 0) or 0
+        nb_juristes_max = director.get("nb_juristes_max", 0) or 5  # défaut 5 si non défini
         existing = supa_get("user_accounts", {"parent_email": f"eq.{director_email}", "select": "id"}) or []
         if len(existing) >= nb_juristes_max:
             return jsonify({
