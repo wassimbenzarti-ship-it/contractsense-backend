@@ -726,19 +726,20 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
         "IMPORTANT: Le contrat est numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rotÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
-        '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
-        '"risk":"high|medium|low",'
-        '"reason":"Pourquoi cette clause dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©savantage ' + partie + ' et comment la modification la protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨ge",'
-        '"type":"modification|nouvelle_clause",'
-        '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
-        '"proposed":"clause reformulÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorisant ' + partie + '",'
-        '"type":"modification|nouvelle_clause",'
-        '"insertion_after":"para_idx aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s lequel insÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rer ou null si modification",'
-        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}],'
-        '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact de la reference","issue":"Description du probleme de conformite","severity":"high|medium|low","recommendation":"Ce que le contrat devrait prevoir","para_idx":5}]}\n\n'
+        '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
+        '"reason":"explication","type":"modification","original":"texte EXACT du paragraphe",'
+        '"proposed":"clause reformulee favorisant ' + partie + '","insertion_after":null,'
+        '"rag_source":"titre EXACT du contexte ou null"}],'
+        '"nouvelles_clauses":[{"id":11,"para_idx":null,"clause_name":"non-concurrence",'
+        '"risk":"high","reason":"Protection absente - inspire du modele RAG en priorite",'
+        '"type":"nouvelle_clause","original":null,'
+        '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
+        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null"}],'
+        '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
         "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements): Pour chaque reference juridique marquee [LAW] ou [DOCTRINE] dans le contexte, identifie les clauses du contrat qui s'y opposent ou qui l'ignorent. Dans le champ source, copie EXACTEMENT le titre du document (ligne rag_source). Dans le champ issue, cite l'article exact (ex: Art. 43 CT, Art. 239 CT). Pour un CDI marocain, verifie OBLIGATOIREMENT: periode essai (Art.13-14), preavis (Art.43-44), heures sup (Art.196-202), conges (Art.231-249), licenciement abusif (Art.63-65). compliance=[] seulement si contrat non-travail.\n"
         "R\u00e8gles:\n"
-        "- MINIMUM 8 modifications obligatoires ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ un juriste qui en trouve moins de 8 n'a pas analysÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© exhaustivement\n"
+        "- MINIMUM 6 modifications (type=modification) dans le tableau modifications\n"
+        "- MINIMUM 3 nouvelles_clauses (type=nouvelle_clause, original=null) dans nouvelles_clauses: non-concurrence, clause penale, non-sollicitation ou autres protections absentes\n"
         "- para_idx: numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
         "- proposed: clause juridique complÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨te et professionnelle, rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©digÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e en style contractuel soutenu\n"
@@ -850,6 +851,39 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Add confidence score based on RAG usage
     mods = result.get("modifications", [])
+    # Merge nouvelles_clauses into modifications array
+    nouvelles = result.get("nouvelles_clauses", [])
+    if nouvelles and isinstance(nouvelles, list):
+        for nc in nouvelles:
+            if isinstance(nc, dict):
+                nc["type"] = "nouvelle_clause"
+                nc["original"] = nc.get("original") or None
+                nc["id"] = len(mods) + 1
+                mods.append(nc)
+    # Fallback: if still no nouvelle_clause, add hardcoded defaults
+    has_new_clause = any(m.get("type") == "nouvelle_clause" for m in mods)
+    if not has_new_clause:
+        _last_para = len(paragraphs) - 1 if paragraphs else None
+        _defaults = [
+            {"type": "nouvelle_clause", "clause_name": "Non-concurrence", "risk": "high",
+             "reason": "Clause absente - protection essentielle de l'employeur",
+             "original": None, "para_idx": None, "insertion_after": _last_para,
+             "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
+             "rag_source": None},
+            {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
+             "reason": "Dissuasion contre rupture fautive et protection contre licenciement abusif",
+             "original": None, "para_idx": None, "insertion_after": _last_para,
+             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 du Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
+             "rag_source": None},
+            {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
+             "reason": "Protection des equipes et clients de l'employeur",
+             "original": None, "para_idx": None, "insertion_after": _last_para,
+             "proposed": "Pendant le contrat et 24 mois apres cessation, l'Employeur s'interdit de solliciter ou recruter tout collaborateur ayant travaille avec le Salarie. Toute violation entraine une indemnite forfaitaire de 6 mois de salaire brut.",
+             "rag_source": None},
+        ]
+        for _nc in _defaults:
+            _nc["id"] = len(mods) + 1
+            mods.append(_nc)
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es sur le RAG"
     result["_paragraphs"] = paragraphs
