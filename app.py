@@ -1187,6 +1187,7 @@ def suggest_to_director():
             except: pass
         if not target_email:
             return jsonify({"error": "target_email manquant — le juriste n'est rattaché à aucun directeur"}), 400
+        content_text = content_text.replace('\x00', '')  # PostgreSQL rejette les octets nuls
         supa_insert("pending_suggestions_director", {
             "filename": filename,
             "content": content_text[:50000],  # limite sécurité 50k chars
