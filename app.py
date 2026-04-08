@@ -8,6 +8,7 @@ import re
 import zipfile
 import datetime
 import hashlib
+import threading
 import base64
 import uuid
 import numpy as np
@@ -28,52 +29,387 @@ CORS(app, origins=[
     "https://westfieldavocats.com",
     "https://www.westfieldavocats.com",
     "https://wassimbenzarti-ship-it.github.io",
-    "https://contractsense.fr",
-    "https://www.contractsense.fr",
+    "https://westfieldavocats.com",
+    "https://www.westfieldavocats.com",
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",
     "null"
 ], supports_credentials=True)
 
-def get_legal_framework(contract_type):
-    """Return mandatory legal constraints per contract type"""
-    frameworks = {
-        "employment": (
-            "DROIT DU TRAVAIL MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGLES IMPÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂRATIVES:\n"
-            "- CDD (contrat de projet/durÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©terminÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
-            "- Renouvellement abusif = requalification automatique en CDI\n"
-            "- PrÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©avis lÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
-            "- PrÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©avis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
-            "- IndemnitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© de licenciement: 96h/an pour les 3 premiÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨res annÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es, 144h/an aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s\n"
-            "- Licenciement abusif interdit ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ cause rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©elle et sÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rieuse obligatoire\n"
-            "- Heures supplÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©mentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
-            "- CongÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© annuel: 1,5 jour/mois travaillÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© (min 18 jours/an)\n"
-            "- Toute clause moins favorable que la loi est NULLE de plein droit"
-        ),
-        "nda": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ CONFIDENTIALITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ:\n"
-            "- DurÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e maximale raisonnable: 3-5 ans post-contrat\n"
-            "- Clause doit dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©finir prÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cisÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ment les informations confidentielles\n"
-            "- PÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s doivent ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªtre proportionnÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es (Art. 264 DOC)"
-        ),
-        "service": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ PRESTATION DE SERVICES:\n"
-            "- DÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©lai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
-            "- PÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s de retard lÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gales: taux directeur BAM + 3 points\n"
-            "- Clauses limitatives de responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© admises si non abusives\n"
-            "- Clause de non-concurrence: limitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e dans le temps et l'espace"
-        ),
-        "purchase": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ VENTE:\n"
-            "- Garantie des vices cachÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s: 1 an (Art. 573 DOC)\n"
-            "- Transfert de propriÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©: ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  la livraison sauf clause contraire\n"
-            "- RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©serve de propriÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© possible jusqu'au paiement complet"
-        ),
-    }
-    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©raux du DOC.")
+def detect_contract_type(text):
+    """Auto-detect contract type from content when user did not specify one."""
+    t = text[:3000].lower()
 
-# ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Party label normalization ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+    # CDI / CDD — check CDD first (more specific)
+    if any(k in t for k in ['contrat de travail à durée déterminée', 'contrat à durée déterminée', 'cdd', 'durée déterminée']):
+        return 'contrat de travail CDD'
+    if any(k in t for k in ['contrat de travail à durée indéterminée', 'contrat à durée indéterminée', 'cdi', 'durée indéterminée',
+                             'salarie', 'salarié', 'employeur', 'licenciement', 'contrat de travail']):
+        return 'contrat de travail CDI'
+
+    # NDA / Confidentialité
+    if any(k in t for k in ['accord de confidentialité', 'non-disclosure', 'nda', 'accord de non-divulgation',
+                             'secret professionnel', 'informations confidentielles', 'confidentialité']):
+        return 'nda'
+
+    # Bail commercial / Location
+    if any(k in t for k in ['bail commercial', 'contrat de bail', 'contrat de location', 'locataire', 'bailleur',
+                             'loyer', 'loi 49-16', 'fonds de commerce']):
+        return 'bail'
+
+    # SaaS / Logiciel
+    if any(k in t for k in ['contrat saas', 'logiciel', 'software', 'licence d\'utilisation', 'abonnement logiciel',
+                             'plateforme en ligne', 'cloud', 'hébergement']):
+        return 'saas'
+
+    # Partenariat / Collaboration
+    if any(k in t for k in ['contrat de partenariat', 'accord de partenariat', 'convention de collaboration',
+                             'joint venture', 'consortium', 'groupement momentané']):
+        return 'partenariat'
+
+    # Vente / Achat
+    if any(k in t for k in ['contrat de vente', 'promesse de vente', 'acte de cession', 'contrat d\'achat',
+                             'vendeur', 'acheteur', 'prix de vente', 'transfert de propriété']):
+        return 'achat/vente'
+
+    # Prestation de services — en dernier car mots très courants
+    if any(k in t for k in ['contrat de prestation', 'contrat de services', 'contrat de mission',
+                             'prestataire', 'maîtrise d\'ouvrage', 'honoraires', 'mission de conseil']):
+        return 'service'
+
+    return 'generic'
+
+
+def get_legal_framework(contract_type):
+    """Return mandatory legal constraints per contract type (lois, obligations, clauses illegales)"""
+    ct = contract_type.lower()
+
+    # CDI / CDD / Travail
+    if any(k in ct for k in ["cdi", "cdd", "travail", "employment", "emploi"]):
+        return (
+            "=== DROIT DU TRAVAIL MAROCAIN — CONFORMITE LEGALE OBLIGATOIRE ===\n"
+            "Loi 65-99 (Code du travail), Decret n°2-04-469 (preavis), Loi 18-12 (accidents travail)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER SYSTEMATIQUEMENT:\n"
+            "1. 'Resiliation de plein droit / sans preavis / sans procedure' => NULLE (art. 62-67 C.trav.)\n"
+            "   Meme pour faute grave (art. 39), la procedure art. 62 est OBLIGATOIRE:\n"
+            "   convocation ecrite + entretien + notification motivee + delai de reponse 8 jours\n"
+            "2. Heures sup sans majoration => NULLE (art. 201: +25% jour, +50% nuit/vendredi, +100% feries)\n"
+            "3. Conges < 1,5 jour/mois (18j/an) => NULLE de plein droit (art. 231)\n"
+            "4. CDD > 1 an ou renouvele > 1 fois => requalification automatique CDI (art. 16)\n"
+            "5. Periode d'essai cadre > 3 mois (non-renouvelable sans accord ecrit) => NULLE\n"
+            "6. Clause de non-concurrence sans contrepartie financiere => NULLE\n"
+            "7. Absences repetees: reference correcte = art. 271 (pas art. 272) C.trav.\n\n"
+            "REGLES IMPERATIBLES:\n"
+            "- Preavis cadres (Decret 2-04-469): <1 an = 1 mois / 1-5 ans = 2 mois / >5 ans = 3 mois\n"
+            "- Indemnite licenciement: 96h de salaire par annee (3 premieres), puis 144h/an\n"
+            "- Toute clause moins favorable que la loi est NULLE de plein droit (art. 9 C.trav.)\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # Prestation de services / Mission
+    if any(k in ct for k in ["service", "prestation", "mission", "conseil", "consulting"]):
+        return (
+            "=== DROIT MAROCAIN — PRESTATION DE SERVICES — CONFORMITE ===\n"
+            "DOC (Dahir des Obligations et Contrats 1913), Loi 15-95 (Code Commerce), Loi 17-97 (PI)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Delai paiement > 60 jours => contraire art. 78 Loi 15-95 (Code Commerce)\n"
+            "2. Clause excluant TOUTE responsabilite contractuelle => NULLE (art. 232 DOC)\n"
+            "3. Clause attribuant la PI prestataire a client sans cession expresse => NULLE\n"
+            "4. Penalites de retard retroactives ou disproportionnees => reduction judiciaire possible\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Penalites de retard legales: taux directeur BAM + 3 points (Loi 15-95 art. 78)\n"
+            "- Cession droits d'auteur: doit etre expresse, limitee et ecrite (Loi 2-00 art. 15)\n"
+            "- Toute modification du scope necessite avenant ecrit signe des deux parties\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # NDA / Confidentialite
+    if any(k in ct for k in ["nda", "confidential", "secret", "divulgation"]):
+        return (
+            "=== DROIT MAROCAIN — CONFIDENTIALITE — CONFORMITE ===\n"
+            "DOC art. 264 (penalites), Loi 09-08 (protection donnees personnelles), Loi 17-97 (secrets commerciaux)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Duree illimitee ou perpetuelle => risque de nullite (doit etre raisonnable: max 5 ans)\n"
+            "2. Perimetre trop large incluant infos publiques => NULLE pour ces elements\n"
+            "3. Clause interdisant tout recrutement sans limite de temps/espace => NULLE\n"
+            "4. Traitement donnees personnelles sans mention Loi 09-08 => non-conforme\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Exceptions obligatoires a mentionner: info deja publique, info connue avant, obligation legale\n"
+            "- Penalites doivent etre proportionnees (art. 264 DOC)\n"
+            "- Si donnees personnelles impliquees: mentions CNDP obligatoires\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # Bail commercial / Location
+    if any(k in ct for k in ["bail", "location", "loyer", "immobi", "locataire", "bailleur"]):
+        return (
+            "=== DROIT MAROCAIN — BAIL COMMERCIAL — CONFORMITE ===\n"
+            "Loi 49-16 (bail commercial), DOC art. 627+\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Expulsion sans procedure judiciaire => NULLE (Loi 49-16 art. 25+)\n"
+            "2. Refus de renouvellement sans indemnite d'eviction => CONTRAIRE a Loi 49-16\n"
+            "3. Interdiction totale de sous-location meme avec accord bailleur => abusive\n"
+            "4. Clause attribuant toutes reparations au locataire y compris gros oeuvre => NULLE\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Duree minimale bail commercial: 3 ans (Loi 49-16 art. 4)\n"
+            "- Renouvellement: droit du locataire sauf motif legitime + indemnite d'eviction\n"
+            "- Gros travaux (art. 627 DOC): a charge du bailleur sauf convention contraire expresse\n"
+            "- Indexation loyer: doit etre basee sur indice officiel (IPC Bank Al Maghrib)\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # Vente / Achat
+    if any(k in ct for k in ["vente", "achat", "purchase", "sale", "acquisition", "cession"]):
+        return (
+            "=== DROIT MAROCAIN — VENTE — CONFORMITE ===\n"
+            "DOC art. 478-600 (vente), Loi 31-08 (protection consommateur si B2C)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Exclusion totale garantie vices caches => NULLE en B2C (Loi 31-08)\n"
+            "2. Clause transferant risques avant livraison sans accord expres => contraire DOC art. 510\n"
+            "3. Clause desequilibree exclusivement au detriment consommateur => NULLE (Loi 31-08)\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Garantie vices caches: 1 an minimum a partir decouverte (DOC art. 573)\n"
+            "- Transfert propriete: a la livraison sauf clause de reserve expresse\n"
+            "- Reserve de propriete jusqu'au paiement integral: valide si mentionnee expressement\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # Partenariat / Collaboration / Joint-venture
+    if any(k in ct for k in ["partenariat", "partnership", "collaboration", "joint", "consortium"]):
+        return (
+            "=== DROIT MAROCAIN — PARTENARIAT / COLLABORATION — CONFORMITE ===\n"
+            "DOC art. 982+ (societe en participation), Code Commerce Loi 15-95, Loi 17-97 (PI)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Pacte leonin (une partie prend tout, l'autre rien) => NULDE DOC art. 1015\n"
+            "2. Absence de mecanisme de sortie => expose les parties a blocage\n"
+            "3. Cession PI commune sans accord des deux parties => NULLE\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Responsabilite solidaire des associes vis-a-vis tiers si societe en participation\n"
+            "- Contributions respectives et gouvernance doivent etre precisees\n"
+            "- Clause de deadlock (blocage) obligatoire pour toute decision strategique\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # SaaS / Logiciel / Tech
+    if any(k in ct for k in ["saas", "logiciel", "software", "tech", "digital", "cloud", "licence"]):
+        return (
+            "=== DROIT MAROCAIN — SAAS / LOGICIEL — CONFORMITE ===\n"
+            "Loi 2-00 (droits auteur/logiciels), Loi 09-08 (donnees personnelles/RGPD), Loi 53-05 (e-commerce)\n\n"
+            "CLAUSES ILLEGALES A SIGNALER:\n"
+            "1. Exclusion totale responsabilite pour perte donnees personnelles => NULLE (Loi 09-08)\n"
+            "2. Licence d'utilisation sans definition du perimetre => risque de litige\n"
+            "3. Modifications unilaterales des conditions sans preavis => abusive\n"
+            "4. Absence de SLA ou SLA 0% => desequilibre contractuel\n\n"
+            "REGLES IMPERATIVES:\n"
+            "- Protection donnees personnelles: conformite Loi 09-08 obligatoire si donnees marocains\n"
+            "- Droit auteur logiciel: protection automatique Loi 2-00, cession doit etre expresse\n"
+            "- Portabilite des donnees client: bonne pratique, doit etre mentionnee\n"
+            "=== FIN CONFORMITE LEGALE ==="
+        )
+
+    # Default / Generic
+    return (
+        "=== DROIT MAROCAIN — CONFORMITE GENERALE ===\n"
+        "DOC (Dahir Obligations et Contrats 1913), Code Commerce Loi 15-95\n\n"
+        "PRINCIPES GENERAUX IMPERIEUX:\n"
+        "- Consentement libre et eclaire (DOC art. 3): clause imposee sans negociation = risque nullite\n"
+        "- Objet licite et possible (DOC art. 2): toute clause contraire a l'ordre public = NULLE\n"
+        "- Lesion (DOC art. 54): desequilibre manifeste peut entrainer nullite\n"
+        "- Clause penale disproportionnee: le juge peut la reduire (DOC art. 264)\n"
+        "- Droit de resiliation unilaterale abusive: engage la responsabilite (DOC art. 263)\n"
+        "=== FIN CONFORMITE LEGALE ==="
+    )
+
+
+def get_party_favorable_rules(contract_type, partie):
+    """Return protective clauses to PROPOSE based on contract type AND party being protected.
+    These come from contract templates and validated clauses in the RAG — replicated as fallback."""
+    ct = contract_type.lower()
+    p = (partie or "").lower()
+
+    # CDI / CDD — Employeur
+    if any(k in ct for k in ["cdi", "cdd", "travail", "employment", "emploi"]) and "employ" in p:
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR L'EMPLOYEUR (CDI/CDD) ===\n"
+            "Cherche dans les MODELES DE CONTRATS du RAG les formulations de ces clauses et inspire-toi en.\n\n"
+            "CLAUSES A PROPOSER SI ABSENTES (nouvelles_clauses obligatoires):\n"
+            "1. MOBILITE GEOGRAPHIQUE: acceptation mutation sur territoire national et international "
+            "(Maroc + pays d'operation), sans indemnite, preavis raisonnable. "
+            "Rediger: 'Le Salarie accepte expressement que ses fonctions puissent etre exercees dans "
+            "tout etablissement de la Societe, y compris a l'etranger, selon les besoins operationnels. "
+            "Toute mutation sera notifiee avec un preavis raisonnable sans constituer une modification "
+            "substantielle du contrat.'\n"
+            "2. NON-CONCURRENCE: duree 1-2 ans post-rupture, perimetre geographique defini, "
+            "penalite = 3 mois de salaire par infraction, renonciation possible dans 30 jours.\n"
+            "3. NON-SOLLICITATION: interdiction de solliciter salaries et clients pendant 2 ans post-rupture.\n"
+            "4. PROPRIETE INTELLECTUELLE: toutes creations/travaux dans le cadre des fonctions "
+            "= propriete exclusive employeur, compensation incluse dans remuneration.\n"
+            "5. RETOUR MATERIEL: restitution immediate documents/acces/equipements a la cessation.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # CDI / CDD — Salarie
+    if any(k in ct for k in ["cdi", "cdd", "travail", "employment", "emploi"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE SALARIE (CDI/CDD) ===\n"
+            "CLAUSES A VERIFIER ET RENFORCER:\n"
+            "1. Preavis: verifier que les delais legaux (Decret 2-04-469) sont respectes ou superieurs\n"
+            "2. Indemnite de licenciement: verifier calcul correct (96h/an puis 144h/an)\n"
+            "3. Non-concurrence: exiger contrepartie financiere explicite sinon NULLE\n"
+            "4. Heures supplementaires: si forfait, verifier que la compensation est claire\n"
+            "5. Conges: verifier >= 1,5j/mois (18j/an minimum legal)\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Prestation de services — Prestataire
+    if any(k in ct for k in ["service", "prestation", "mission", "conseil"]) and any(k in p for k in ["prestataire", "fournisseur", "consultant"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE PRESTATAIRE ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. LIMITATION DE RESPONSABILITE: plafond = montant des honoraires verses sur 12 mois, "
+            "exclusion dommages indirects/immateriels/perte de CA.\n"
+            "2. PAIEMENT: acompte 30% a la commande, solde 30j net date facture, penalites 3x taux BAM.\n"
+            "3. PROPRIETE IP: toute creation reste propriete prestataire jusqu'a paiement integral.\n"
+            "4. RESILIATION: preavis 30 jours minimum, paiement des prestations realisees.\n"
+            "5. ACCEPTATION FORMELLE: livraison acceptee tacitement si pas de reserve ecrite sous 10 jours.\n"
+            "6. FORCE MAJEURE: suspension des obligations sans penalites.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Prestation de services — Client
+    if any(k in ct for k in ["service", "prestation", "mission", "conseil"]) and any(k in p for k in ["client", "mandant", "donneur"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE CLIENT ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. PENALITES RETARD LIVRAISON: 0,5% du montant total par semaine de retard, plafond 10%.\n"
+            "2. GARANTIE DE RESULTAT: le prestataire garantit la conformite aux specifications annexees.\n"
+            "3. PROPRIETE IP: cession expresse de tous droits PI au client a la livraison.\n"
+            "4. RESILIATION POUR MANQUEMENT: resiliation de plein droit avec 15j de mise en demeure.\n"
+            "5. AUDIT: droit de verification/audit des prestations a tout moment avec preavis 5 jours.\n"
+            "6. CONFIDENTIALITE: interdiction d'utiliser les donnees client pour d'autres missions.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # NDA — Divulgateur
+    if any(k in ct for k in ["nda", "confidential", "secret"]) and any(k in p for k in ["divulgateur", "disclosing", "emetteur"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE DIVULGATEUR ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. DEFINITION LARGE: inclure informations techniques, commerciales, financieres, "
+            "strategies, bases de donnees, savoir-faire, methodes proprietaires.\n"
+            "2. PENALITE FORTE: 500.000 MAD par violation + dommages-interets complementaires.\n"
+            "3. INJONCTION: droit de demander injonction judiciaire en urgence sans caution.\n"
+            "4. RETOUR/DESTRUCTION: destruction immediate de tout document confidentiel sur demande.\n"
+            "5. DUREE 5 ANS post-contrat pour informations commerciales.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # NDA — Destinataire/Recipient
+    if any(k in ct for k in ["nda", "confidential", "secret"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE DESTINATAIRE ===\n"
+            "CLAUSES A VERIFIER ET RENFORCER:\n"
+            "1. EXCEPTIONS CLAIRES: info deja publique, info deja connue, info recue d'un tiers, obligation legale.\n"
+            "2. DUREE RAISONNABLE: max 3 ans pour informations commerciales courantes.\n"
+            "3. PERIMETRE LIMITE: uniquement les informations necessaires a l'objectif defini.\n"
+            "4. PAS D'EXCLUSIVITE ABUSIVE: le destinataire peut continuer son activite normale.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Bail — Bailleur
+    if any(k in ct for k in ["bail", "location", "loyer"]) and any(k in p for k in ["bailleur", "proprietaire", "loueur"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE BAILLEUR ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. CAUTION: depot de garantie 3 mois de loyer, restitue sous 30j apres etat des lieux sortant.\n"
+            "2. INDEXATION: revision annuelle du loyer selon IPC (Bank Al Maghrib).\n"
+            "3. REPARATIONS LOCATIVES: liste exhaustive des reparations a charge locataire.\n"
+            "4. INTERDICTION SOUS-LOCATION: sauf accord ecrit prealable bailleur.\n"
+            "5. ASSURANCE: locataire doit justifier assurance responsabilite civile annuellement.\n"
+            "6. ETAT DES LIEUX: contradictoire entree/sortie, photos, delai 8 jours.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Bail — Locataire
+    if any(k in ct for k in ["bail", "location", "loyer"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE LOCATAIRE ===\n"
+            "CLAUSES A VERIFIER ET RENFORCER:\n"
+            "1. DROIT AU RENOUVELLEMENT: mention explicite du droit Loi 49-16 + indemnite d'eviction.\n"
+            "2. TRAVAUX BAILLEUR: gros oeuvre, toiture, facade = charge bailleur.\n"
+            "3. INDEXATION PLAFONNEE: revision loyer plafonnee a l'IPC officiel.\n"
+            "4. SOUS-LOCATION: autorisation possible avec accord bailleur (non refus abusif).\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Vente — Vendeur
+    if any(k in ct for k in ["vente", "achat", "purchase", "sale"]) and any(k in p for k in ["vendeur", "seller", "cedant"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE VENDEUR ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. RESERVE DE PROPRIETE: la propriete reste au vendeur jusqu'au paiement integral.\n"
+            "2. LIMITATION GARANTIE: exclusion des defauts connus de l'acheteur, usure normale.\n"
+            "3. PAIEMENT ANTICIPE: acompte 30% non remboursable a la commande.\n"
+            "4. FORCE MAJEURE: suspension livraison sans penalite en cas d'evenement imprevisiible.\n"
+            "5. RESPONSABILITE LIMITEE: plafonnee au prix de vente du bien concerne.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Vente — Acheteur
+    if any(k in ct for k in ["vente", "achat", "purchase", "sale"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR L'ACHETEUR ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. GARANTIE VICES CACHES: 1 an minimum, remplacement ou remboursement au choix acheteur.\n"
+            "2. CONFORMITE SPECIFICATIONS: livraison doit correspondre exactement aux specs annexees.\n"
+            "3. PENALITES RETARD: 0,5%/semaine plafonnees a 10% du prix de vente.\n"
+            "4. DROIT DE RETOUR: 15 jours apres livraison si non-conformite constatee.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Partenariat — generique
+    if any(k in ct for k in ["partenariat", "partnership", "collaboration", "joint"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE PARTENARIAT ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. GOUVERNANCE: quorum et majorite requise pour decisions strategiques (>50% ou unanimite).\n"
+            "2. MECANISME DEADLOCK: en cas de blocage, procedure de mediation puis rachat force.\n"
+            "3. DROIT DE PREEMPTION: si un associe veut ceder, l'autre a droit de rachat prioritaire.\n"
+            "4. PROPRIETE IP COMMUNE: co-propriete proportionnelle aux contributions, cession commune.\n"
+            "5. CLAUSE DE SORTIE: conditions et prix de rachat des parts en cas de dissolution.\n"
+            "6. NON-SOLLICITATION CROISEE: interdiction de recruter les employes de l'autre partie.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # SaaS / Tech
+    if any(k in ct for k in ["saas", "logiciel", "software", "tech", "cloud", "licence"]):
+        return (
+            "\n=== CLAUSES PROTECTRICES POUR LE SAAS/LOGICIEL ===\n"
+            "CLAUSES A PROPOSER SI ABSENTES:\n"
+            "1. SLA: disponibilite garantie 99,5% minimum, credits en cas de depassement.\n"
+            "2. SECURITE DONNEES: chiffrement AES-256, sauvegardes quotidiennes, ISO 27001 si disponible.\n"
+            "3. PORTABILITE: export des donnees client sous 30 jours en format standard.\n"
+            "4. LIMITATION RESPONSABILITE: plafon = 12 mois d'abonnement, exclusion dommages indirects.\n"
+            "5. RESILIATION: preavis 30 jours, donnees restituees et effacees sous 60 jours.\n"
+            "6. SOUS-TRAITANCE: notification obligatoire si sous-traitance traitement donnees.\n"
+            "=== FIN CLAUSES PROTECTRICES ==="
+        )
+
+    # Default
+    return (
+        "\n=== CLAUSES PROTECTRICES GENERIQUES ===\n"
+        "CLAUSES A PROPOSER SI ABSENTES:\n"
+        "1. LIMITATION DE RESPONSABILITE: plafon au montant du contrat, exclusion dommages indirects.\n"
+        "2. CONFIDENTIALITE: 3 ans post-contrat, penalite proportionnee.\n"
+        "3. RESILIATION: preavis 30 jours pour manquement non remedie sous 15 jours.\n"
+        "4. FORCE MAJEURE: suspension obligations sans penalite (epidemie, guerre, catastrophe naturelle).\n"
+        "5. COMPETENCE JURIDICTIONNELLE: tribunaux de [ville], droit marocain applicable.\n"
+        "6. REGLEMENT AMIABLE: tentative de mediation avant toute action judiciaire.\n"
+        "=== FIN CLAUSES PROTECTRICES ==="
+    )
+
+
 CONTRACT_CATEGORIES = {
     "service": "Prestation de services",
     "saas": "SaaS / Logiciel",
@@ -123,6 +459,32 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
+# ── Email (Resend API — HTTP, jamais bloqué par les hébergeurs) ───────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM     = os.environ.get("EMAIL_FROM", "Omniscient <noreply@westfieldavocats.com>")
+
+def send_email(to: str, subject: str, html: str):
+    if not RESEND_API_KEY:
+        print(f"[EMAIL] RESEND_API_KEY non configuré — email non envoyé à {to}", flush=True)
+        return
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": "Bearer " + RESEND_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"from": EMAIL_FROM, "to": [to], "subject": subject, "html": html},
+            timeout=15,
+        )
+        if resp.ok:
+            print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+        else:
+            print(f"[EMAIL] Erreur Resend {resp.status_code}: {resp.text[:200]}", flush=True)
+    except Exception as e:
+        print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
+
+
 # ── In-memory file cache ──────────────────────────────────────────────────────
 # Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
 # them even when the client no longer has the file. Limited to 200 entries ~100 MB.
@@ -137,7 +499,7 @@ def _cache_store(key: str, data: bytes):
         old = _FILE_CACHE_ORDER.pop(0)
         _FILE_CACHE.pop(old, None)
 
-def _cache_get(key: str) -> bytes | None:
+def _cache_get(key):
     return _FILE_CACHE.get(key)
 
 # CMI Payment config
@@ -163,7 +525,12 @@ def supa_get(table, params=None):
 def supa_update(table, record_id, updates):
     url = SUPA_URL + f"/rest/v1/{table}?id=eq.{record_id}"
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
-    return r.json()
+    if not r.content or r.status_code == 204:
+        return {"_status": r.status_code}
+    try:
+        return r.json()
+    except Exception:
+        return {"_status": r.status_code}
 
 def supa_insert(table, data):
     url = SUPA_URL + "/rest/v1/" + table
@@ -204,7 +571,9 @@ def supa_storage_upload(bucket, path, file_bytes, content_type="application/octe
     url = SUPA_URL + f"/storage/v1/object/{bucket}/{path}"
     headers = {**_storage_headers(), "Content-Type": content_type}
     r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
-    if r.status_code == 404:
+    # Supabase returns 400 with "Bucket not found" when bucket doesn't exist
+    bucket_missing = r.status_code in (400, 404) and "ucket" in r.text
+    if bucket_missing:
         supa_storage_ensure_bucket(bucket)
         r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
     return r
@@ -491,35 +860,89 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         # Get embedding for search query
-        search_query = contract_type + " " + partie + " " + contract_text[:500]
+        # Utilise le texte du contrat comme requete principale (pas le type dropdown)
+        search_query = contract_text[:1500]
         query_vec = get_embedding(search_query, voyage_key)
         relevant_docs = []
         if query_vec and len(query_vec) == 1024:
-            relevant_docs = search_rag_pgvector(query_vec, top_k=15)
+            relevant_docs = search_rag_pgvector(query_vec, top_k=25)
             print(f"pgvector: {len(relevant_docs)} docs found")
+        if not relevant_docs:
+            # Fallback: recherche textuelle si Voyage AI indisponible ou 0 résultats
+            print("RAG fallback: recherche textuelle (Voyage AI indisponible ou 0 résultats)")
+            relevant_docs = search_rag(search_query, api_key, voyage_key, top_k=10, partie=partie)
+            print(f"RAG fallback: {len(relevant_docs)} docs found")
         if relevant_docs:
-            validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
-            reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
+            # RAG split: loi/doctrine/jurisprudence -> conformite / contrats/modeles -> clauses protectrices
+            LEGAL_KW_CAT = {"loi", "legislation", "doctrine", "jurisprudence", "code", "decret", "arrete"}
+            LEGAL_KW_SRC = ["loi-", "code-du-", "decret", "dahir", "bulletin-officiel"]
+            LEGAL_KW_TITLE = ["loi ", "code du", "decret", "dahir", "art.", "article "]
 
-            if validated_clauses:
-                rag_context += "\n\nCLAUSES VALIDÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂES PAR DES JURISTES (utilise ces reformulations comme modÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨les):\n"
-                for doc in validated_clauses:
-                    content_raw = doc.get("content", "")
-                    rag_context += "\n---\n" + content_raw[:600] + "\n"
-                rag_context += "\nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Ces clauses ont ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es par des juristes. Inspire-toi directement de leur formulation.\n"
+            def _is_legal_doc(doc):
+                cat = (doc.get("category") or "").lower()
+                src = (doc.get("source") or "").lower()
+                title = (doc.get("title") or "").lower()
+                return (
+                    any(k in cat for k in LEGAL_KW_CAT) or
+                    any(k in src for k in LEGAL_KW_SRC) or
+                    any(k in title for k in LEGAL_KW_TITLE)
+                )
 
-            if reference_docs:
-                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂFÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂRENCE:\n"
-                protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
-                for doc in reference_docs:
+            legal_docs = [d for d in relevant_docs if _is_legal_doc(d)]
+            contract_docs = [d for d in relevant_docs if not _is_legal_doc(d)]
+            validated_clauses = [d for d in contract_docs if "validated_clause" in d.get("source", "") or "admin_validated" in d.get("source", "")]
+            model_docs = [d for d in contract_docs if d not in validated_clauses]
+            protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
+
+            print(f"RAG split: {len(legal_docs)} legaux / {len(validated_clauses)} valides / {len(model_docs)} modeles")
+
+            # 1. SOURCES LEGALES -> conformite uniquement
+            if legal_docs:
+                rag_context += "\n\n=== SOURCES LEGALES (verifier conformite uniquement) ===\n"
+                for doc in legal_docs:
                     title = doc.get("title", "Document")
                     src = doc.get("source", "")
-                    is_protected = any(p in (title + src).lower() for p in protected_kw)
-                    rag_context += "\n=== " + title + " ===\n" + doc.get("content", "")[:500] + "\n"
+                    is_protected = any(pk in (title + src).lower() for pk in protected_kw)
+                    rag_context += "\n--- [LOI/DOCTRINE] " + title + " ---\n"
+                    rag_context += doc.get("content", "")[:1200] + "\n"
                     if is_protected:
-                        rag_context += "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ SOURCE PROTÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂE ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ utilise le contenu mais ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cris null dans rag_source\n"
+                        rag_context += "=> SOURCE PROTEGEE: rag_source=null\n"
                     else:
-                        rag_context += "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
+                        rag_context += "=> Si cite: rag_source=\"" + title + "\"\n"
+                rag_context += "=== FIN SOURCES LEGALES ===\n"
+
+            # 2. CLAUSES VALIDEES par juristes -> modeles de redaction a copier
+            if validated_clauses:
+                rag_context += "\n\n=== CLAUSES VALIDEES PAR JURISTES (copie et adapte) ===\n"
+                for doc in validated_clauses:
+                    rag_context += "\n--- [CLAUSE VALIDEE] " + doc.get("title", "Clause") + " ---\n"
+                    rag_context += doc.get("content", "")[:800] + "\n"
+                rag_context += "=> Formulations validees par avocats.\n"
+                rag_context += "=== FIN CLAUSES VALIDEES ===\n"
+
+            # 3. MODELES DE CONTRATS -> clauses protectrices a proposer si absentes
+            if model_docs:
+                rag_context += "\n\n=== MODELES DE CONTRATS (clauses ABSENTES => proposer) ===\n"
+                for doc in model_docs:
+                    title = doc.get("title", "Document")
+                    src = doc.get("source", "")
+                    is_protected = any(pk in (title + src).lower() for pk in protected_kw)
+                    rag_context += "\n--- [MODELE] " + title + " ---\n"
+                    rag_context += doc.get("content", "")[:1500] + "\n"
+                    if is_protected:
+                        rag_context += "=> SOURCE PROTEGEE: rag_source=null\n"
+                    else:
+                        rag_context += "=> Si cite: rag_source=\"" + title + "\"\n"
+                try:
+                    model_titles = [d.get("title", "") for d in model_docs if d.get("title")]
+                    if model_titles:
+                        rag_context += "\nCLAUSES MODELE absentes du contrat => nouvelle_clause obligatoire:\n"
+                        for mt in model_titles[:20]:
+                            rag_context += "- " + mt + "\n"
+                except Exception as _e:
+                    print("RAG model titles error: " + str(_e))
+                rag_context += "=== FIN MODELES ===\n"
+
     except Exception as e:
         print("RAG search error: " + str(e))
 
@@ -554,6 +977,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             break
     role_obj = role_objectives.get(role_key, "protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ger ses intÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªts")
 
+    # Build contract-type-specific instructions
+    # Regles specifiques par type de contrat et partie protegee
+    contract_specific_rules = get_party_favorable_rules(contract_type, partie)
+
     system = (
         "Tu es un avocat d'affaires senior avec 20 ans d'expÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rience en droit des contrats. Ta responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© professionnelle est engagÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e.\n"
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  l'erreur ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ chaque clause dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©savantageuse non identifiÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e est une faute professionnelle.\n"
@@ -573,6 +1000,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "1. EXHAUSTIVITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ TOTALE: Identifie TOUTES les clauses dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©savantageuses pour " + partie + " ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ mÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªme les clauses en apparence neutres\n"
         "2. CLAUSES ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ RISQUE: Cherche spÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cifiquement: limitation de responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©, rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©siliation unilatÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rale, pÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s asymÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©triques, clauses d'exclusivitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© abusives, dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©lais de paiement dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorable\n"
         "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ CECI EST OBLIGATOIRE SANS EXCEPTION (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©matiquement: limitation de responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©, pÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s/clause pÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nale, confidentialitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©, force majeure, rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©vision de prix, juridiction compÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©dige-la complÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨te dans proposed dans la mÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªme langue que le contrat, (2) numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rote-la en suivant la numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "3bis. COMPARAISON MODELE RAG: Si le contexte contient des DOCUMENTS JURIDIQUES DE REFERENCE, vérifie quelles clauses du modèle sont absentes du contrat ET avantageraient " + partie + ". Propose-les comme nouvelle_clause. Cite les articles applicables (ex: Loi 65-99 Code du travail marocain) dans le champ reason uniquement.\n"
         "4. NIVEAU RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂDACTIONNEL: Style avocat d'affaires senior ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ prÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cis, technique, sans ambiguÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¯tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©\n"
         "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e ou absente du contexte ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ rag_source: null.\n"
         "6. LÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGALITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: Toutes les modifications doivent respecter le droit applicable ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ jamais de clauses illÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gales\n\n"
@@ -582,7 +1010,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 3: Pour chaque clause dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorable ou neutre amÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©liorable ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ propose une modification\n"
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 4: VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie les protections manquantes ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ propose des clauses additionnelles\n"
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 5: VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie chaque modification contre le RAG pour citer les sources\n\n"
-        + get_legal_framework(contract_type) +
+        + get_legal_framework(contract_type) + contract_specific_rules +
         "\n\n"
         + rag_context +
         "\n\nATTENTION sur les clauses validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es du RAG:\n"
@@ -601,13 +1029,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"insertion_after":"para_idx aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s lequel insÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rer ou null si modification",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}]}\n\n'
         "RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨gles:\n"
+        "- reason: 1-2 phrases MAX, risque juridique uniquement, pas de texte de clause\n"
+        "- proposed: NE JAMAIS mentionner les noms propres des personnes \xe2\x80\x94 utiliser termes generiques: Le salarie, L'employeur\n"
         "- MINIMUM 8 modifications obligatoires ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ un juriste qui en trouve moins de 8 n'a pas analysÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© exhaustivement\n"
         "- para_idx: numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
         "- proposed: clause juridique complÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨te et professionnelle, rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©digÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e en style contractuel soutenu\n"
         "- proposed: utilise le vocabulaire juridique appropriÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© (nonobstant, en ce compris, ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  titre de, ci-aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s, sous rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©serve de...)\n"
         "- proposed: structure avec sujet + verbe + objet + conditions + exceptions si nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cessaire\n"
-        "- proposed: max 120 mots, mais suffisamment dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©taillÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© pour ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªtre opÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rationnel sans ambiguÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¯tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©\n"
+        "- proposed: 60-100 mots pour les modifications, 100-180 mots pour les nouvelles clauses — phrases juridiques complètes, précises et directement opérationnelles\n"
+        "- proposed: JAMAIS de références [P0], [P1], [P107] etc dans le texte proposé — ces indices sont UNIQUEMENT pour le champ insertion_after\n"
         "- proposed: jamais de blancs ou placeholders comme ___ ou [ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  complÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ter]\n"
         "- proposed: rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©dige comme un avocat d'affaires senior rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©digeant pour un client exigeant\n"
         "- VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie chaque proposed: est-ce que ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ§a avantage bien " + partie + " ? Si non, reformule."
@@ -711,6 +1142,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         else:
             raise ValueError("Impossible d'extraire les modifications")
 
+    # Strip [Pxxx] paragraph index references from proposed text
+    for mod in result.get("modifications", []):
+        if mod.get("proposed"):
+            mod["proposed"] = re.sub(r'\[P\d+\]', '', mod["proposed"]).strip()
+
     # Add confidence score based on RAG usage
     mods = result.get("modifications", [])
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
@@ -735,45 +1171,97 @@ def fuzzy_match(original, para_text, threshold=0.60):
     return overlap >= threshold
 
 def create_docx_with_changes(contract_text, modifications, decisions):
-    """Create new DOCX for old .doc files that cant be processed directly"""
+    """Fallback DOCX: rapport professionnel avec texte original barre et proposition en vert."""
     from docx import Document as DocxDocument
+    from docx.shared import RGBColor, Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement as _OE
+
     doc = DocxDocument()
-    doc.add_heading('Document avec modifications ContractSense', 0)
+    for section in doc.sections:
+        section.top_margin    = Cm(2)
+        section.bottom_margin = Cm(2)
+        section.left_margin   = Cm(2.5)
+        section.right_margin  = Cm(2.5)
+
+    title = doc.add_heading("Rapport de modifications — Omniscient", 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    dp = doc.add_paragraph()
+    dp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    dr = dp.add_run("Genere le " + datetime.datetime.now().strftime("%d/%m/%Y a %H:%M"))
+    dr.font.size = Pt(9)
+    dr.font.color.rgb = RGBColor(0x70, 0x70, 0x70)
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+    if not accepted:
+        doc.add_paragraph("Aucune modification acceptee.")
+        out = io.BytesIO(); doc.save(out); out.seek(0); return out
 
-    # Add note
-    note = doc.add_paragraph()
-    note.add_run("Note: Document gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© depuis un fichier .doc ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es appliquÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es ci-dessous.").italic = True
     doc.add_paragraph()
+    sp = doc.add_paragraph()
+    sp.add_run(str(len(accepted)) + " clause(s) modifiee(s)").bold = True
 
-    # Add each accepted modification as track change style
-    for mod in accepted:
-        doc.add_heading(mod.get("clause_name", "Clause"), level=2)
+    RISK_LABEL = {"high": "Risque eleve", "medium": "Risque modere", "low": "Risque faible"}
+    RISK_COLOR = {"high": RGBColor(0xEF,0x44,0x44), "medium": RGBColor(0xF5,0x9E,0x0B), "low": RGBColor(0x10,0xB9,0x81)}
 
-        # Original (strikethrough red)
-        p_orig = doc.add_paragraph()
-        run_orig = p_orig.add_run("ORIGINAL: " + mod.get("original", ""))
-        from docx.shared import RGBColor
-        run_orig.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
-        run_orig.font.strike = True
-
-        # Proposed (green)
-        p_prop = doc.add_paragraph()
-        run_prop = p_prop.add_run("MODIFIÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: " + mod.get("proposed", ""))
-        run_prop.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
-        run_prop.font.bold = True
-
+    for i, mod in enumerate(accepted):
         doc.add_paragraph()
+        doc.add_heading(str(i+1) + ". " + mod.get("clause_name", "Clause"), level=2)
 
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    return output
+        risk = mod.get("risk", "")
+        if risk:
+            rp = doc.add_paragraph()
+            rr = rp.add_run("[ " + RISK_LABEL.get(risk, risk) + " ]")
+            rr.font.color.rgb = RISK_COLOR.get(risk, RGBColor(0x70,0x70,0x70))
+            rr.font.size = Pt(9); rr.bold = True
+
+        reason = mod.get("reason", "")
+        if reason:
+            rp2 = doc.add_paragraph()
+            rr2 = rp2.add_run(reason)
+            rr2.font.size = Pt(9)
+            rr2.font.color.rgb = RGBColor(0x50,0x50,0x50)
+            rr2.italic = True
+
+        pl = doc.add_paragraph()
+        rl = pl.add_run("TEXTE ORIGINAL :")
+        rl.bold = True; rl.font.size = Pt(9)
+        rl.font.color.rgb = RGBColor(0xCC,0x00,0x00)
+
+        po = doc.add_paragraph()
+        po.paragraph_format.left_indent = Cm(0.5)
+        ro = po.add_run(mod.get("original", ""))
+        ro.font.color.rgb = RGBColor(0xCC,0x00,0x00)
+        ro.font.strike = True
+
+        pa = doc.add_paragraph("Proposition de modification :")
+        pa.runs[0].bold = True
+        pa.runs[0].font.size = Pt(9)
+        pa.runs[0].font.color.rgb = RGBColor(0x00,0x80,0x00)
+
+        pp = doc.add_paragraph()
+        pp.paragraph_format.left_indent = Cm(0.5)
+        rp3 = pp.add_run(mod.get("proposed", ""))
+        rp3.font.color.rgb = RGBColor(0x00,0x70,0x00)
+        rp3.bold = True
+
+        sep = doc.add_paragraph()
+        pPr = sep._p.get_or_add_pPr()
+        pBdr = _OE("w:pBdr")
+        bottom = _OE("w:bottom")
+        bottom.set(_qn("w:val"), "single")
+        bottom.set(_qn("w:sz"), "4")
+        bottom.set(_qn("w:space"), "1")
+        bottom.set(_qn("w:color"), "CCCCCC")
+        pBdr.append(bottom); pPr.append(pBdr)
+
+    out = io.BytesIO(); doc.save(out); out.seek(0); return out
+
 
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
-    author = "ContractSense"
+    author = "Omniscient"
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 1
 
@@ -1151,6 +1639,74 @@ def reject_director_suggestion(suggestion_id):
     if request.method == "OPTIONS": return "", 204
     try:
         supa_update("pending_suggestions_director", suggestion_id, {"status": "rejected"})
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/request-revision/<analysis_id>", methods=["POST", "OPTIONS"])
+def request_revision_by_director(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        modifications = data.get("modifications", [])
+        director_notes = (data.get("director_notes") or "").strip()
+        modifications = [m for m in modifications if not (isinstance(m, dict) and m.get("_isDirectorNote"))]
+        if director_notes:
+            modifications = [{"_isDirectorNote": True, "note": director_notes}] + modifications
+        patch = {
+            "status": "revision_requested",
+            "modifications": modifications,
+            "director_email": data.get("director_email", "")
+        }
+        # Use return=representation to detect silent RLS failures (empty array = 0 rows updated)
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/validate-by-director/<analysis_id>", methods=["POST", "OPTIONS"])
+def validate_analysis_by_director(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        patch = {
+            "status": "validated",
+            "director_email": data.get("director_email", ""),
+            "modifications": data.get("modifications", [])
+        }
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
         return jsonify({"status": "ok", "message": "Suggestion rejetee par le directeur"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1334,7 +1890,17 @@ def analyze():
         contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
+
+        # Auto-detect contract type if not specified
+        auto_detected = False
+        if not contract_type or contract_type in ("generic", "auto", ""):
+            contract_type = detect_contract_type(contract_text)
+            auto_detected = True
+            print(f"Auto-detected contract type: {contract_type}")
+
         result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
+        result["detected_contract_type"] = contract_type
+        result["auto_detected"] = auto_detected
 
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
@@ -1372,6 +1938,53 @@ def analyze():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyze-clause", methods=["POST", "OPTIONS"])
+def analyze_clause():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        clause_name = (data.get("clause_name") or "").strip()
+        clause_text = (data.get("clause_text") or "").strip()
+        contract_type = data.get("type", "general")
+        partie = data.get("partie", "la partie bénéficiaire")
+        if not clause_name:
+            return jsonify({"error": "clause_name requis"}), 400
+
+        prompt = f"""Tu es un juriste expert. Analyse la clause suivante extraite d'un contrat de type "{contract_type}".
+
+Nom de la clause : {clause_name}
+Texte de la clause :
+{clause_text or "(texte non fourni — analyse sur la base du nom uniquement)"}
+
+Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
+{{
+  "original": "texte original de la clause (ou synthèse si non fourni)",
+  "proposed": "rédaction améliorée protégeant {partie}",
+  "risk": "high|medium|low",
+  "reason": "explication concise du risque et de la modification proposée"
+}}"""
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        # Nettoyer si markdown
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw)
+        return jsonify(result)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Réponse IA invalide", "raw": raw[:200]}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/export", methods=["POST"])
 def export():
     try:
@@ -1421,7 +2034,7 @@ def export():
             output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
+            doc.add_heading('Omniscient - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
             accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
             for i, m in enumerate(accepted):
                 doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
@@ -2015,6 +2628,7 @@ def director_create_juriste():
             }), 403
 
     # Create Supabase auth user via admin API
+    # Si l'utilisateur existe déjà dans Auth, on met juste à jour son mot de passe
     try:
         r = requests.post(
             SUPA_URL + "/auth/v1/admin/users",
@@ -2022,22 +2636,145 @@ def director_create_juriste():
             json={"email": juriste_email, "password": juriste_password, "email_confirm": True},
             timeout=15
         )
-        if not r.ok and "already registered" not in r.text.lower():
-            return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
+        if not r.ok:
+            err_text = r.text.lower()
+            if "email_exists" in err_text or "already exists" in err_text or "user already" in err_text:
+                # Trouver l'UUID et mettre à jour le mot de passe
+                list_r = requests.get(
+                    SUPA_URL + "/auth/v1/admin/users",
+                    headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+                    params={"filter": f"email=={juriste_email}", "per_page": "1000"},
+                    timeout=15
+                )
+                if list_r.ok:
+                    for u in (list_r.json().get("users") or []):
+                        if u.get("email") == juriste_email:
+                            requests.put(
+                                SUPA_URL + f"/auth/v1/admin/users/{u['id']}",
+                                headers={"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}", "Content-Type": "application/json"},
+                                json={"password": juriste_password},
+                                timeout=15
+                            )
+                            break
+            else:
+                return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # Upsert user_accounts row
-    supa_insert("user_accounts", {
-        "email": juriste_email, "role": "juriste",
-        "parent_email": director_email,
-        "payment_status": "active",
-        "analyses_remaining": 20,
-        "subscription_end": director.get("subscription_end", "")
-    })
+    # Upsert user_accounts row (supprimer l'ancienne si elle existe, puis réinsérer)
+    existing_row = supa_get("user_accounts", {"email": f"eq.{juriste_email}", "limit": "1"})
+    if existing_row:
+        supa_patch("user_accounts", {
+            "role": "juriste", "parent_email": director_email,
+            "payment_status": "active", "analyses_remaining": 20,
+            "subscription_end": director.get("subscription_end", "")
+        }, f"email=eq.{juriste_email}")
+    else:
+        supa_insert("user_accounts", {
+            "email": juriste_email, "role": "juriste",
+            "parent_email": director_email,
+            "payment_status": "active",
+            "analyses_remaining": 20,
+            "subscription_end": director.get("subscription_end", "")
+        })
+
+    # Envoyer email de bienvenue avec identifiants
+    app_url = os.environ.get("APP_URL", "https://westfieldavocats.com")
+    # Envoyer email de bienvenue en background (evite timeout SMTP bloquant)
+    _email_to = juriste_email
+    _email_pwd = juriste_password
+    _app_url = os.environ.get("APP_URL", "https://westfieldavocats.com")
+    def _send_welcome():
+        send_email(
+            to=_email_to,
+            subject="Votre accès Omniscient",
+            html=f"""
+<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;background:#f9fafb;border-radius:12px">
+  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur Omniscient</h2>
+  <p style="color:#475569">Votre directeur vous a ajouté à son équipe. Voici vos identifiants de connexion :</p>
+  <div style="background:#fff;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e2e8f0">
+    <p style="margin:0 0 8px 0"><strong>Email :</strong> {_email_to}</p>
+    <p style="margin:0"><strong>Mot de passe :</strong> {_email_pwd}</p>
+  </div>
+  <a href="{_app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+    Accéder à Omniscient
+  </a>
+  <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
+</div>
+"""
+        )
+    threading.Thread(target=_send_welcome, daemon=True).start()
 
     return jsonify({"status": "ok", "message": f"Compte juriste {juriste_email} créé avec succès"})
 
+
+@app.route("/director/delete-juriste", methods=["POST", "OPTIONS"])
+def director_delete_juriste():
+    if request.method == "OPTIONS": return "", 204
+    data = request.get_json() or {}
+    director_email = data.get("director_email", "").strip()
+    juriste_email  = data.get("juriste_email", "").strip()
+    if not director_email or not juriste_email:
+        return jsonify({"error": "Champs requis manquants"}), 400
+
+    # Vérifier que le juriste appartient bien à ce directeur
+    rows = supa_get("user_accounts", {"email": f"eq.{juriste_email}", "limit": "1"})
+    if not rows:
+        return jsonify({"error": "Juriste introuvable"}), 404
+    juriste = rows[0]
+    if juriste.get("parent_email") != director_email:
+        return jsonify({"error": "Ce juriste n'appartient pas à votre équipe"}), 403
+
+    # Supprimer de Supabase Auth — chercher dans toutes les pages
+    auth_headers = {"apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"}
+    deleted_auth = False
+    for page in range(1, 20):
+        list_r = requests.get(
+            SUPA_URL + "/auth/v1/admin/users",
+            headers=auth_headers,
+            params={"page": page, "per_page": "1000"},
+            timeout=15
+        )
+        if not list_r.ok:
+            break
+        users = list_r.json().get("users") or []
+        for u in users:
+            if u.get("email") == juriste_email:
+                requests.delete(
+                    SUPA_URL + f"/auth/v1/admin/users/{u['id']}",
+                    headers=auth_headers, timeout=15
+                )
+                deleted_auth = True
+                break
+        if deleted_auth or len(users) < 1000:
+            break
+
+    # Supprimer de user_accounts
+    requests.delete(
+        SUPA_URL + f"/rest/v1/user_accounts?email=eq.{juriste_email}",
+        headers={**supa_headers(), "apikey": SUPA_SERVICE_KEY, "Authorization": f"Bearer {SUPA_SERVICE_KEY}"},
+        timeout=10
+    )
+
+    return jsonify({"status": "ok", "message": f"Juriste {juriste_email} supprimé"})
+
+
+def _init_storage():
+    """Crée le bucket Supabase Storage au démarrage si inexistant."""
+    if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
+        return
+    try:
+        r = supa_storage_ensure_bucket("contracts")
+        if r.ok:
+            print("Storage bucket 'contracts' pret.")
+        elif "already exists" in r.text.lower() or r.status_code == 409:
+            print("Storage bucket 'contracts' deja existant.")
+        else:
+            print(f"Storage bucket init: {r.status_code} {r.text[:100]}")
+    except Exception as e:
+        print(f"Storage bucket init error: {e}")
+
+_init_storage()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
