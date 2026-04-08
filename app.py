@@ -584,14 +584,43 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
-        # Dedicated legal pgvector searches if few results
-        if is_voyage and len(legal_docs) < 3:
-            seen_ids = {d.get("id") for d in legal_docs}
-            for cat in ["loi", "doctrine", "jurisprudence"]:
-                for d in search_rag_pgvector(query_vec, top_k=5, doc_type=cat):
-                    if d.get("id") not in seen_ids:
-                        legal_docs.append(d)
-                        seen_ids.add(d.get("id"))
+        # Dedicated per-category searches to ensure coverage of all doc types
+        seen_ids = {d.get("id") for d in all_docs}
+        _cat_key = SUPA_SERVICE_KEY or SUPA_KEY
+        _cat_url = SUPA_URL + "/rest/v1/rag_documents"
+        _cat_hdrs = {"apikey": _cat_key, "Authorization": "Bearer " + _cat_key}
+        for cat in ["contrat", "loi", "doctrine", "jurisprudence"]:
+            try:
+                _cat_params = {"select": "id,title,content,source,category,party_label,embedding",
+                               "category": "eq." + cat, "limit": "50"}
+                _cat_r = requests.get(_cat_url, headers=_cat_hdrs, params=_cat_params, timeout=15)
+                if _cat_r.ok:
+                    _cat_raw = _cat_r.json() or []
+                    _cat_scored = []
+                    for doc in _cat_raw:
+                        emb = doc.get("embedding")
+                        if isinstance(emb, str):
+                            try: emb = json.loads(emb)
+                            except: emb = None
+                        if emb and isinstance(emb, list):
+                            score = cosine_similarity(query_vec, emb)
+                            _cat_scored.append((score, doc))
+                    _cat_scored.sort(key=lambda x: x[0], reverse=True)
+                    _added = 0
+                    for _score, doc in _cat_scored[:5]:
+                        if doc.get("id") not in seen_ids:
+                            seen_ids.add(doc.get("id"))
+                            if cat == "contrat":
+                                contract_docs.append(doc)
+                            else:
+                                legal_docs.append(doc)
+                            _added += 1
+                    _top = f"{_cat_scored[0][0]:.3f}" if _cat_scored else "n/a"
+                    print(f"Category [{cat}]: {len(_cat_raw)} docs, top={_top}, added {_added}")
+                else:
+                    print(f"Category fetch [{cat}] error {_cat_r.status_code}: {_cat_r.text[:100]}")
+            except Exception as _ce:
+                print(f"Category search error [{cat}]: {_ce}")
 
         protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
 
