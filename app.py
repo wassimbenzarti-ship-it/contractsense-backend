@@ -385,7 +385,9 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         # If user_id provided, search only their models
         if user_id:
             payload["filter_user_id"] = user_id
-        r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.ok:
             results = r.json()
             print(f"pgvector search: {len(results)} results")
@@ -542,44 +544,80 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
         query_vec = get_embedding(search_query, voyage_key)
-        if query_vec and len(query_vec) == 1024:
+        is_voyage = bool(voyage_key) and len(query_vec) == 1024
+
+        all_docs = []
+
+        # Primary: pgvector semantic search (requires Voyage 1024-dim embeddings)
+        if is_voyage:
             all_docs = search_rag_pgvector(query_vec, top_k=20)
-            print(f"pgvector: {len(all_docs)} docs found")
+            print(f"pgvector: {len(all_docs)} docs")
 
-            contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
-            legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
+        # Fallback: direct Supabase fetch + in-memory cosine similarity
+        if not all_docs:
+            print("RAG fallback: fetching docs with embeddings from Supabase")
+            try:
+                key = SUPA_SERVICE_KEY or SUPA_KEY
+                raw_url = SUPA_URL + "/rest/v1/rag_documents"
+                raw_headers = {"apikey": key, "Authorization": "Bearer " + key}
+                raw_params = {"select": "id,title,content,source,category,party_label,embedding", "limit": "150"}
+                raw_r = requests.get(raw_url, headers=raw_headers, params=raw_params, timeout=20)
+                if raw_r.ok:
+                    raw_docs = raw_r.json() or []
+                    scored = []
+                    for doc in raw_docs:
+                        emb = doc.get("embedding")
+                        if isinstance(emb, str):
+                            try: emb = json.loads(emb)
+                            except: emb = None
+                        if emb and isinstance(emb, list):
+                            score = cosine_similarity(query_vec, emb)
+                            scored.append((score, doc))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    all_docs = [d for _, d in scored[:20]]
+                    print(f"Fallback RAG: {len(all_docs)} docs ranked from {len(raw_docs)} total")
+                else:
+                    print(f"Fallback RAG fetch error {raw_r.status_code}: {raw_r.text[:200]}")
+            except Exception as fe:
+                print("Fallback RAG error: " + str(fe))
 
-            # Dedicated legal searches if few results
-            if len(legal_docs) < 3:
-                seen_ids = {d.get("id") for d in legal_docs}
-                for cat in ["loi", "doctrine", "jurisprudence"]:
-                    for d in search_rag_pgvector(query_vec, top_k=5, doc_type=cat):
-                        if d.get("id") not in seen_ids:
-                            legal_docs.append(d)
-                            seen_ids.add(d.get("id"))
+        contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
+        legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
-            protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
+        # Dedicated legal pgvector searches if few results
+        if is_voyage and len(legal_docs) < 3:
+            seen_ids = {d.get("id") for d in legal_docs}
+            for cat in ["loi", "doctrine", "jurisprudence"]:
+                for d in search_rag_pgvector(query_vec, top_k=5, doc_type=cat):
+                    if d.get("id") not in seen_ids:
+                        legal_docs.append(d)
+                        seen_ids.add(d.get("id"))
 
-            # Context 1: model docs -> protection client
-            if contract_docs:
-                validated = [d for d in contract_docs if "validated_clause" in d.get("source","")]
-                reference = [d for d in contract_docs if "validated_clause" not in d.get("source","")]
-                model_context = "\n\n=== MODELES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
-                for doc in (validated + reference)[:8]:
-                    title = doc.get("title","") or doc.get("source","modele")
-                    is_prot = any(p in (title + doc.get("source","")).lower() for p in protected_kw)
-                    model_context += f"\n=== {title} ===\n{doc.get('content','')[:600]}\n"
-                    model_context += f"→ rag_source: {'null (protege)' if is_prot else title}\n"
+        protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
 
-            # Context 2: legal docs -> conformite
-            if legal_docs:
-                legal_context = "\n\n=== REFERENCES JURIDIQUES (LOIS / DOCTRINE / JURISPRUDENCE) ===\n"
-                for doc in legal_docs[:8]:
-                    cat = doc.get("category","reference").upper()
-                    title = doc.get("title","") or doc.get("source","reference")
-                    legal_context += f"\n[{cat}] {title}\n{doc.get('content','')[:600]}\n"
+        # Context 1: model docs -> protection client
+        if contract_docs:
+            validated = [d for d in contract_docs if "validated_clause" in d.get("source","")]
+            reference = [d for d in contract_docs if "validated_clause" not in d.get("source","")]
+            model_context = "\n\n=== MODELES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
+            for doc in (validated + reference)[:8]:
+                title = doc.get("title","") or doc.get("source","modele")
+                is_prot = any(p in (title + doc.get("source","")).lower() for p in protected_kw)
+                model_context += "\n=== " + str(title) + " ===\n" + str(doc.get("content",""))[:600] + "\n"
+                model_context += "\u2192 rag_source: " + ("null (protege)" if is_prot else str(title)) + "\n"
+
+        # Context 2: legal docs -> conformite
+        if legal_docs:
+            legal_context = "\n\n=== REFERENCES JURIDIQUES (LOIS / DOCTRINE / JURISPRUDENCE) ===\n"
+            for doc in legal_docs[:8]:
+                cat = doc.get("category","reference").upper()
+                title = doc.get("title","") or doc.get("source","reference")
+                legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:600] + "\n"
+
+        print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
+        import traceback; traceback.print_exc()
     rag_context = model_context  # legacy compat for prompt below
 
     # Detect contract language
