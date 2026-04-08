@@ -539,7 +539,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     model_context = ""
     legal_context = ""
-    LEGAL_CATS = {"loi", "doctrine", "jurisprudence", "legal", "legislation"}
+    _rag_contract_count = 0
+    _rag_legal_count = 0
+    _rag_is_voyage = False
+    LEGAL_CATS = {"loi", "law", "doctrine", "jurisprudence", "legal", "legislation"}
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
@@ -584,14 +587,43 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
-        # Dedicated legal pgvector searches if few results
-        if is_voyage and len(legal_docs) < 3:
-            seen_ids = {d.get("id") for d in legal_docs}
-            for cat in ["loi", "doctrine", "jurisprudence"]:
-                for d in search_rag_pgvector(query_vec, top_k=5, doc_type=cat):
-                    if d.get("id") not in seen_ids:
-                        legal_docs.append(d)
-                        seen_ids.add(d.get("id"))
+        # Dedicated per-category searches to ensure coverage of all doc types
+        seen_ids = {d.get("id") for d in all_docs}
+        _cat_key = SUPA_SERVICE_KEY or SUPA_KEY
+        _cat_url = SUPA_URL + "/rest/v1/rag_documents"
+        _cat_hdrs = {"apikey": _cat_key, "Authorization": "Bearer " + _cat_key}
+        for cat in ["contract", "law", "doctrine", "jurisprudence"]:
+            try:
+                _cat_params = {"select": "id,title,content,source,category,party_label,embedding",
+                               "category": "eq." + cat, "limit": "50"}
+                _cat_r = requests.get(_cat_url, headers=_cat_hdrs, params=_cat_params, timeout=15)
+                if _cat_r.ok:
+                    _cat_raw = _cat_r.json() or []
+                    _cat_scored = []
+                    for doc in _cat_raw:
+                        emb = doc.get("embedding")
+                        if isinstance(emb, str):
+                            try: emb = json.loads(emb)
+                            except: emb = None
+                        if emb and isinstance(emb, list):
+                            score = cosine_similarity(query_vec, emb)
+                            _cat_scored.append((score, doc))
+                    _cat_scored.sort(key=lambda x: x[0], reverse=True)
+                    _added = 0
+                    for _score, doc in _cat_scored[:5]:
+                        if doc.get("id") not in seen_ids:
+                            seen_ids.add(doc.get("id"))
+                            if cat == "contract":
+                                contract_docs.append(doc)
+                            else:
+                                legal_docs.append(doc)
+                            _added += 1
+                    _top = f"{_cat_scored[0][0]:.3f}" if _cat_scored else "n/a"
+                    print(f"Category [{cat}]: {len(_cat_raw)} docs, top={_top}, added {_added}")
+                else:
+                    print(f"Category fetch [{cat}] error {_cat_r.status_code}: {_cat_r.text[:100]}")
+            except Exception as _ce:
+                print(f"Category search error [{cat}]: {_ce}")
 
         protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
 
@@ -614,6 +646,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 title = doc.get("title","") or doc.get("source","reference")
                 legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:600] + "\n"
 
+        _rag_contract_count = len(contract_docs)
+        _rag_legal_count = len(legal_docs)
+        _rag_is_voyage = is_voyage
         print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
@@ -823,6 +858,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         compliance = []
     result["compliance"] = compliance
     result["_has_legal_context"] = bool(legal_context)
+    result["_rag_debug"] = {
+        "contract_docs": _rag_contract_count,
+        "legal_docs": _rag_legal_count,
+        "model_ctx_len": len(model_context),
+        "legal_ctx_len": len(legal_context),
+        "is_voyage": _rag_is_voyage,
+    }
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
@@ -1992,6 +2034,55 @@ def rag_upload():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/rag/test", methods=["GET"])
+def rag_test():
+    """Diagnostic endpoint: tests Supabase connectivity and RAG document availability"""
+    import traceback as _tb
+    out = {
+        "env": {
+            "SUPA_URL": (SUPA_URL[:30] + "...") if SUPA_URL else "MISSING",
+            "SUPA_KEY": "SET" if SUPA_KEY else "MISSING",
+            "SUPA_SERVICE_KEY": "SET" if SUPA_SERVICE_KEY else "MISSING",
+            "VOYAGE_KEY": "SET" if os.environ.get("VOYAGE_API_KEY") else "MISSING",
+        },
+        "steps": []
+    }
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    try:
+        # 1. Fetch all docs (no filter)
+        r = requests.get(SUPA_URL + "/rest/v1/rag_documents",
+            headers={"apikey": key, "Authorization": "Bearer " + key},
+            params={"select": "id,title,category", "limit": "20"}, timeout=10)
+        out["steps"].append({"name": "fetch_all", "status": r.status_code,
+            "count": len(r.json()) if r.ok else 0,
+            "sample": [{"t": d.get("title","?")[:40], "c": d.get("category","?")} for d in (r.json() or [])[:5]] if r.ok else r.text[:200]})
+    except Exception as e:
+        out["steps"].append({"name": "fetch_all", "error": str(e)})
+    for cat in ["contract", "law", "doctrine", "jurisprudence", "general"]:
+        try:
+            r = requests.get(SUPA_URL + "/rest/v1/rag_documents",
+                headers={"apikey": key, "Authorization": "Bearer " + key},
+                params={"select": "id,title", "category": "eq." + cat, "limit": "100"}, timeout=10)
+            docs = r.json() if r.ok else []
+            out["steps"].append({"name": f"cat_{cat}", "status": r.status_code,
+                "count": len(docs) if r.ok else 0,
+                "titles": [d.get("title","?")[:40] for d in (docs or [])[:3]]})
+        except Exception as e:
+            out["steps"].append({"name": f"cat_{cat}", "error": str(e)})
+    try:
+        # pgvector test with dummy embedding
+        test_vec = [0.0] * 1024
+        pvr = requests.post(SUPA_URL + "/rest/v1/rpc/search_rag",
+            headers={"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            json={"query_embedding": "[" + ",".join(["0.0"]*1024) + "]", "match_count": 3}, timeout=10)
+        out["steps"].append({"name": "pgvector_rpc", "status": pvr.status_code,
+            "count": len(pvr.json()) if pvr.ok else 0,
+            "error": pvr.text[:200] if not pvr.ok else None})
+    except Exception as e:
+        out["steps"].append({"name": "pgvector_rpc", "error": str(e)})
+    return jsonify(out)
+
 
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
