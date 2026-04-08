@@ -1208,6 +1208,7 @@ def suggestions_list_for_director():
                 "filename": s.get("filename", "inconnu"),
                 "category": s.get("category", ""),
                 "suggested_by": s.get("suggested_by", ""),
+                "content": s.get("content", ""),
                 "status": s.get("status", "pending"),
                 "submitted_at": s.get("created_at", "")
             })
