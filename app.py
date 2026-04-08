@@ -644,9 +644,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         + get_legal_framework(contract_type) +
         "\n\n"
         + model_context +
-        + (("\n\nATTENTION: Utilise les MODELES ci-dessus UNIQUEMENT pour les modifications favorisant " + partie + ". Ignore les clauses qui avantagent l'autre partie.\n") if model_context else "") +
-        + legal_context +
-        "\n\nATTENTION sur les clauses validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es du RAG:\n"
+        (("\n\nATTENTION: Utilise les MODELES ci-dessus UNIQUEMENT pour les modifications favorisant " + partie + ". Ignore les clauses qui avantagent l'autre partie.\n") if model_context else "") +
+        legal_context +
+        "\n\nATTENTION sur les clauses valid\u00e9es du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  " + partie + "\n"
         "- Si une clause validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorise l'autre partie, IGNORE-LA\n"
         "- VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
@@ -660,10 +660,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"clause reformulÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorisant ' + partie + '",'
         '"type":"modification|nouvelle_clause",'
         '"insertion_after":"para_idx aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s lequel insÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rer ou null si modification",'
-        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}]}\n\n'
-        "RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨gles:\n"
-        ',"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact de la reference","issue":"Description du probleme de conformite","severity":"high|medium|low","recommendation":"Ce que le contrat devrait prevoir","para_idx":5}]}'
+        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}],'
+        '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact de la reference","issue":"Description du probleme de conformite","severity":"high|medium|low","recommendation":"Ce que le contrat devrait prevoir","para_idx":5}]}\n\n'
         "CONFORMITE (si references juridiques presentes dans le contexte): identifie les clauses non conformes aux lois, doctrine ou jurisprudences ci-dessus. Chaque element compliance doit citer sa source exacte du contexte. Si pas de references juridiques dans le contexte: compliance=[].\n"
+        "R\u00e8gles:\n"
         "- MINIMUM 8 modifications obligatoires ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ un juriste qui en trouve moins de 8 n'a pas analysÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© exhaustivement\n"
         "- para_idx: numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
