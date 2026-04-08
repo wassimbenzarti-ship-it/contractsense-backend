@@ -1379,8 +1379,9 @@ def health():
     rag = load_rag()
     return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
-@app.route("/identify-parties", methods=["POST"])
+@app.route("/identify-parties", methods=["POST", "OPTIONS"])
 def identify_parties_route():
+    if request.method == "OPTIONS": return "", 204
     try:
         file = request.files.get("file")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
