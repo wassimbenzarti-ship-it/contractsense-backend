@@ -539,7 +539,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     model_context = ""
     legal_context = ""
-    LEGAL_CATS = {"loi", "doctrine", "jurisprudence", "legal", "legislation"}
+    LEGAL_CATS = {"loi", "law", "doctrine", "jurisprudence", "legal", "legislation"}
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
@@ -589,7 +589,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         _cat_key = SUPA_SERVICE_KEY or SUPA_KEY
         _cat_url = SUPA_URL + "/rest/v1/rag_documents"
         _cat_hdrs = {"apikey": _cat_key, "Authorization": "Bearer " + _cat_key}
-        for cat in ["contrat", "loi", "doctrine", "jurisprudence"]:
+        for cat in ["contract", "law", "doctrine", "jurisprudence"]:
             try:
                 _cat_params = {"select": "id,title,content,source,category,party_label,embedding",
                                "category": "eq." + cat, "limit": "50"}
@@ -610,7 +610,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     for _score, doc in _cat_scored[:5]:
                         if doc.get("id") not in seen_ids:
                             seen_ids.add(doc.get("id"))
-                            if cat == "contrat":
+                            if cat == "contract":
                                 contract_docs.append(doc)
                             else:
                                 legal_docs.append(doc)
