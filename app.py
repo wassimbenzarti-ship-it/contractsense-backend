@@ -539,6 +539,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     model_context = ""
     legal_context = ""
+    _rag_contract_count = 0
+    _rag_legal_count = 0
+    _rag_is_voyage = False
     LEGAL_CATS = {"loi", "law", "doctrine", "jurisprudence", "legal", "legislation"}
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
@@ -643,6 +646,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 title = doc.get("title","") or doc.get("source","reference")
                 legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:600] + "\n"
 
+        _rag_contract_count = len(contract_docs)
+        _rag_legal_count = len(legal_docs)
+        _rag_is_voyage = is_voyage
         print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
@@ -852,6 +858,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         compliance = []
     result["compliance"] = compliance
     result["_has_legal_context"] = bool(legal_context)
+    result["_rag_debug"] = {
+        "contract_docs": _rag_contract_count,
+        "legal_docs": _rag_legal_count,
+        "model_ctx_len": len(model_context),
+        "legal_ctx_len": len(legal_context),
+        "is_voyage": _rag_is_voyage,
+    }
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
@@ -2021,6 +2034,55 @@ def rag_upload():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/rag/test", methods=["GET"])
+def rag_test():
+    """Diagnostic endpoint: tests Supabase connectivity and RAG document availability"""
+    import traceback as _tb
+    out = {
+        "env": {
+            "SUPA_URL": (SUPA_URL[:30] + "...") if SUPA_URL else "MISSING",
+            "SUPA_KEY": "SET" if SUPA_KEY else "MISSING",
+            "SUPA_SERVICE_KEY": "SET" if SUPA_SERVICE_KEY else "MISSING",
+            "VOYAGE_KEY": "SET" if os.environ.get("VOYAGE_API_KEY") else "MISSING",
+        },
+        "steps": []
+    }
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    try:
+        # 1. Fetch all docs (no filter)
+        r = requests.get(SUPA_URL + "/rest/v1/rag_documents",
+            headers={"apikey": key, "Authorization": "Bearer " + key},
+            params={"select": "id,title,category", "limit": "20"}, timeout=10)
+        out["steps"].append({"name": "fetch_all", "status": r.status_code,
+            "count": len(r.json()) if r.ok else 0,
+            "sample": [{"t": d.get("title","?")[:40], "c": d.get("category","?")} for d in (r.json() or [])[:5]] if r.ok else r.text[:200]})
+    except Exception as e:
+        out["steps"].append({"name": "fetch_all", "error": str(e)})
+    for cat in ["contract", "law", "doctrine", "jurisprudence", "general"]:
+        try:
+            r = requests.get(SUPA_URL + "/rest/v1/rag_documents",
+                headers={"apikey": key, "Authorization": "Bearer " + key},
+                params={"select": "id,title", "category": "eq." + cat, "limit": "100"}, timeout=10)
+            docs = r.json() if r.ok else []
+            out["steps"].append({"name": f"cat_{cat}", "status": r.status_code,
+                "count": len(docs) if r.ok else 0,
+                "titles": [d.get("title","?")[:40] for d in (docs or [])[:3]]})
+        except Exception as e:
+            out["steps"].append({"name": f"cat_{cat}", "error": str(e)})
+    try:
+        # pgvector test with dummy embedding
+        test_vec = [0.0] * 1024
+        pvr = requests.post(SUPA_URL + "/rest/v1/rpc/search_rag",
+            headers={"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            json={"query_embedding": "[" + ",".join(["0.0"]*1024) + "]", "match_count": 3}, timeout=10)
+        out["steps"].append({"name": "pgvector_rpc", "status": pvr.status_code,
+            "count": len(pvr.json()) if pvr.ok else 0,
+            "error": pvr.text[:200] if not pvr.ok else None})
+    except Exception as e:
+        out["steps"].append({"name": "pgvector_rpc", "error": str(e)})
+    return jsonify(out)
+
 
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
