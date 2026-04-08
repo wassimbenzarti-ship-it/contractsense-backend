@@ -342,12 +342,12 @@ def cosine_similarity(a, b):
         return 0.0
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
 
-def get_embedding(text, voyage_key=None):
+def get_embedding(text, voyage_key=None, input_type="document"):
     # Try Voyage AI for semantic embeddings
     if voyage_key:
         try:
             vo = voyageai.Client(api_key=voyage_key)
-            result = vo.embed([text[:1000]], model="voyage-law-2", input_type="document")
+            result = vo.embed([text[:1000]], model="voyage-law-2", input_type=input_type)
             return result.embeddings[0]
         except Exception as e:
             print("Voyage AI error: " + str(e))
@@ -546,7 +546,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
-        query_vec = get_embedding(search_query, voyage_key)
+        query_vec = get_embedding(search_query, voyage_key, input_type="query")
         is_voyage = bool(voyage_key) and len(query_vec) == 1024
 
         all_docs = []
@@ -610,7 +610,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                             _cat_scored.append((score, doc))
                     _cat_scored.sort(key=lambda x: x[0], reverse=True)
                     _added = 0
-                    for _score, doc in _cat_scored[:5]:
+                    for _score, doc in _cat_scored[:8]:
                         if doc.get("id") not in seen_ids:
                             seen_ids.add(doc.get("id"))
                             if cat == "contract":
@@ -645,6 +645,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 cat = doc.get("category","reference").upper()
                 title = doc.get("title","") or doc.get("source","reference")
                 legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:600] + "\n"
+                legal_context += "\u2192 rag_source: " + str(title) + "\n"
 
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
