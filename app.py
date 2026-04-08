@@ -204,11 +204,19 @@ def supa_update(table, record_id, updates):
         return {"_status": r.status_code}
 
 def supa_insert(table, data):
+    key = SUPA_SERVICE_KEY or SUPA_KEY
     url = SUPA_URL + "/rest/v1/" + table
-    r = requests.post(url, headers=supa_headers(), json=data, timeout=30)
+    headers = {
+        "apikey": key,
+        "Authorization": "Bearer " + key,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+    r = requests.post(url, headers=headers, json=data, timeout=30)
     if not r.ok:
-        print("supa_insert ERROR " + str(r.status_code) + ": " + r.text[:500])
-    r.raise_for_status()
+        detail = r.text[:500]
+        print("supa_insert ERROR " + str(r.status_code) + ": " + detail)
+        raise Exception(f"Erreur base de données ({r.status_code}): {detail}")
     return r
 
 def supa_delete(table, filters):
@@ -1177,9 +1185,11 @@ def suggest_to_director():
                 except:
                     content_text = raw.decode("utf-8", errors="replace")
             except: pass
+        if not target_email:
+            return jsonify({"error": "target_email manquant — le juriste n'est rattaché à aucun directeur"}), 400
         supa_insert("pending_suggestions_director", {
             "filename": filename,
-            "content": content_text,
+            "content": content_text[:50000],  # limite sécurité 50k chars
             "category": category,
             "suggested_by": suggested_by,
             "target_director_email": target_email,
