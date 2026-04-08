@@ -385,7 +385,9 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         # If user_id provided, search only their models
         if user_id:
             payload["filter_user_id"] = user_id
-        r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.ok:
             results = r.json()
             print(f"pgvector search: {len(results)} results")
@@ -534,42 +536,89 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         numbered_text = contract_text[:20000]
 
-    # Search RAG using pgvector ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ fast semantic search
-    rag_context = ""
+    # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
+    model_context = ""
+    legal_context = ""
+    LEGAL_CATS = {"loi", "doctrine", "jurisprudence", "legal", "legislation"}
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        # Get embedding for search query
         search_query = contract_type + " " + partie + " " + contract_text[:500]
         query_vec = get_embedding(search_query, voyage_key)
-        relevant_docs = []
-        if query_vec and len(query_vec) == 1024:
-            relevant_docs = search_rag_pgvector(query_vec, top_k=15)
-            print(f"pgvector: {len(relevant_docs)} docs found")
-        if relevant_docs:
-            validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
-            reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
+        is_voyage = bool(voyage_key) and len(query_vec) == 1024
 
-            if validated_clauses:
-                rag_context += "\n\nCLAUSES VALIDÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂES PAR DES JURISTES (utilise ces reformulations comme modÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨les):\n"
-                for doc in validated_clauses:
-                    content_raw = doc.get("content", "")
-                    rag_context += "\n---\n" + content_raw[:600] + "\n"
-                rag_context += "\nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Ces clauses ont ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es par des juristes. Inspire-toi directement de leur formulation.\n"
+        all_docs = []
 
-            if reference_docs:
-                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂFÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂRENCE:\n"
-                protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
-                for doc in reference_docs:
-                    title = doc.get("title", "Document")
-                    src = doc.get("source", "")
-                    is_protected = any(p in (title + src).lower() for p in protected_kw)
-                    rag_context += "\n=== " + title + " ===\n" + doc.get("content", "")[:500] + "\n"
-                    if is_protected:
-                        rag_context += "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ SOURCE PROTÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂE ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ utilise le contenu mais ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cris null dans rag_source\n"
-                    else:
-                        rag_context += "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
+        # Primary: pgvector semantic search (requires Voyage 1024-dim embeddings)
+        if is_voyage:
+            all_docs = search_rag_pgvector(query_vec, top_k=20)
+            print(f"pgvector: {len(all_docs)} docs")
+
+        # Fallback: direct Supabase fetch + in-memory cosine similarity
+        if not all_docs:
+            print("RAG fallback: fetching docs with embeddings from Supabase")
+            try:
+                key = SUPA_SERVICE_KEY or SUPA_KEY
+                raw_url = SUPA_URL + "/rest/v1/rag_documents"
+                raw_headers = {"apikey": key, "Authorization": "Bearer " + key}
+                raw_params = {"select": "id,title,content,source,category,party_label,embedding", "limit": "150"}
+                raw_r = requests.get(raw_url, headers=raw_headers, params=raw_params, timeout=20)
+                if raw_r.ok:
+                    raw_docs = raw_r.json() or []
+                    scored = []
+                    for doc in raw_docs:
+                        emb = doc.get("embedding")
+                        if isinstance(emb, str):
+                            try: emb = json.loads(emb)
+                            except: emb = None
+                        if emb and isinstance(emb, list):
+                            score = cosine_similarity(query_vec, emb)
+                            scored.append((score, doc))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    all_docs = [d for _, d in scored[:20]]
+                    print(f"Fallback RAG: {len(all_docs)} docs ranked from {len(raw_docs)} total")
+                else:
+                    print(f"Fallback RAG fetch error {raw_r.status_code}: {raw_r.text[:200]}")
+            except Exception as fe:
+                print("Fallback RAG error: " + str(fe))
+
+        contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
+        legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
+
+        # Dedicated legal pgvector searches if few results
+        if is_voyage and len(legal_docs) < 3:
+            seen_ids = {d.get("id") for d in legal_docs}
+            for cat in ["loi", "doctrine", "jurisprudence"]:
+                for d in search_rag_pgvector(query_vec, top_k=5, doc_type=cat):
+                    if d.get("id") not in seen_ids:
+                        legal_docs.append(d)
+                        seen_ids.add(d.get("id"))
+
+        protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
+
+        # Context 1: model docs -> protection client
+        if contract_docs:
+            validated = [d for d in contract_docs if "validated_clause" in d.get("source","")]
+            reference = [d for d in contract_docs if "validated_clause" not in d.get("source","")]
+            model_context = "\n\n=== MODELES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
+            for doc in (validated + reference)[:8]:
+                title = doc.get("title","") or doc.get("source","modele")
+                is_prot = any(p in (title + doc.get("source","")).lower() for p in protected_kw)
+                model_context += "\n=== " + str(title) + " ===\n" + str(doc.get("content",""))[:600] + "\n"
+                model_context += "\u2192 rag_source: " + ("null (protege)" if is_prot else str(title)) + "\n"
+
+        # Context 2: legal docs -> conformite
+        if legal_docs:
+            legal_context = "\n\n=== REFERENCES JURIDIQUES (LOIS / DOCTRINE / JURISPRUDENCE) ===\n"
+            for doc in legal_docs[:8]:
+                cat = doc.get("category","reference").upper()
+                title = doc.get("title","") or doc.get("source","reference")
+                legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:600] + "\n"
+
+        print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
+        import traceback; traceback.print_exc()
+    rag_context = model_context  # legacy compat for prompt below
 
     # Detect contract language
     english_words = len([w for w in contract_text[:2000].lower().split() if w in ['the','and','of','to','in','for','is','this','agreement','shall','party','parties','contract','hereby','whereas','including','provided','subject','pursuant','accordance','obligation','represent','warrant','indemnify','liability','termination','governing','arbitration','confidential']])
@@ -632,8 +681,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 5: VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie chaque modification contre le RAG pour citer les sources\n\n"
         + get_legal_framework(contract_type) +
         "\n\n"
-        + rag_context +
-        "\n\nATTENTION sur les clauses validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es du RAG:\n"
+        + model_context +
+        (("\n\nATTENTION: Utilise les MODELES ci-dessus UNIQUEMENT pour les modifications favorisant " + partie + ". Ignore les clauses qui avantagent l'autre partie.\n") if model_context else "") +
+        legal_context +
+        "\n\nATTENTION sur les clauses valid\u00e9es du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  " + partie + "\n"
         "- Si une clause validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorise l'autre partie, IGNORE-LA\n"
         "- VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
@@ -647,8 +698,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"clause reformulÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorisant ' + partie + '",'
         '"type":"modification|nouvelle_clause",'
         '"insertion_after":"para_idx aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s lequel insÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rer ou null si modification",'
-        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}]}\n\n'
-        "RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨gles:\n"
+        '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e"}],'
+        '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact de la reference","issue":"Description du probleme de conformite","severity":"high|medium|low","recommendation":"Ce que le contrat devrait prevoir","para_idx":5}]}\n\n'
+        "CONFORMITE (si references juridiques presentes dans le contexte): identifie les clauses non conformes aux lois, doctrine ou jurisprudences ci-dessus. Chaque element compliance doit citer sa source exacte du contexte. Si pas de references juridiques dans le contexte: compliance=[].\n"
+        "R\u00e8gles:\n"
         "- MINIMUM 8 modifications obligatoires ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ un juriste qui en trouve moins de 8 n'a pas analysÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© exhaustivement\n"
         "- para_idx: numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
@@ -764,6 +817,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es sur le RAG"
     result["_paragraphs"] = paragraphs
+    # Extract compliance if present
+    compliance = result.get("compliance", [])
+    if not isinstance(compliance, list):
+        compliance = []
+    result["compliance"] = compliance
+    result["_has_legal_context"] = bool(legal_context)
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
