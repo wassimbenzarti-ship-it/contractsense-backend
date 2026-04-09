@@ -1693,6 +1693,7 @@ async function showAnaDetail(idx) {
     actionBar='<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
       +'<button onclick="validateByDirector(\''+ana.id+'\')" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">Valider et transmettre à l\'admin</button>'
       +'<button onclick="requestRevision(\''+ana.id+'\')" style="padding:9px 18px;background:#ef444422;border:1px solid #ef4444;color:#ef4444;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Demander une révision</button>'
+      +'<button id="btn-save-director-'+ana.id+'" onclick="saveDirectorChanges(\''+ana.id+'\')" style="padding:9px 18px;background:#1a2035;border:1px solid #2a3040;color:#a0a8c0;border-radius:8px;font-size:13px;cursor:pointer">Sauvegarder</button>'
       +'</div>';
   }
   if(isDirecteur&&st==='validated'){
@@ -2466,54 +2467,76 @@ async function initiateCMIPayment(nbUsers, total, role){
   }
 }
 
+async function saveDirectorChanges(id){
+  var note=document.getElementById('director-note-input');
+  var noteVal=note?note.value.trim():'';
+  var btn=document.getElementById('btn-save-director-'+id);
+  if(btn){btn.textContent='⏳...';btn.disabled=true;}
+  try{
+    var r=await fetch(BACKEND+'/analyses/save-director/'+id,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({modifications:_modsWithMeta(window._currentMods),director_notes:noteVal})
+    });
+    var d=r.ok?await r.json().catch(function(){return{};}):{};
+    if(r.ok&&d.status==='ok'){
+      if(btn){btn.textContent='✓ Sauvegardé';setTimeout(function(){if(btn){btn.textContent='Sauvegarder';btn.disabled=false;}},2000);}
+      // Update local data so it survives navigation
+      var ana=(window._userAnalyses||[])[window._anaIdx||0];
+      if(ana){ana.modifications=_modsWithMeta(window._currentMods);ana.director_notes=noteVal;}
+    } else {
+      if(btn){btn.textContent='Sauvegarder';btn.disabled=false;}
+      alert('Erreur sauvegarde: '+(d.error||r.status));
+    }
+  }catch(e){
+    if(btn){btn.textContent='Sauvegarder';btn.disabled=false;}
+    alert('Erreur réseau: '+e.message);
+  }
+}
+
 async function requestRevision(id){
   var note=document.getElementById('director-note-input');
   var noteVal=note?note.value.trim():'';
   if(!confirm('Renvoyer cette analyse au juriste avec une demande de révision ?')) return;
-  // Recapturer les modifications inline (proposed-*) éditées par le directeur
-  (window._currentMods||[]).forEach(function(m){
-    var el=document.getElementById('proposed-'+m.id);
-    if(el){var t=el.innerText.trim();if(t&&t!==m.proposed)m.proposed=t;}
-  });
-  // Appeler le backend (service role key bypasse RLS)
-  var r=await fetch(BACKEND+'/analyses/request-revision/'+id,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({modifications:_modsWithMeta(window._currentMods),director_notes:noteVal,director_email:_cu.email})
-  });
-  var d=r.ok?await r.json().catch(function(){return{};}):{};
-  if(r.ok&&d.status==='ok'){
-    alert('Renvoyé pour révision. Le juriste verra votre note lors de sa prochaine connexion.');
-    window._juristesData=null;
-    var savedIdx=window._anaIdx||0;
-    await loadDash();
-    showAnaDetail(savedIdx);
-  } else { alert('Erreur: '+(d.error||r.status)); }
+  try{
+    var r=await fetch(BACKEND+'/analyses/request-revision/'+id,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({modifications:_modsWithMeta(window._currentMods),director_notes:noteVal,director_email:_cu&&_cu.email||''})
+    });
+    var d=r.ok?await r.json().catch(function(){return{};}):{};
+    if(r.ok&&d.status==='ok'){
+      alert('Renvoyé pour révision. Le juriste verra votre note lors de sa prochaine connexion.');
+      window._juristesData=null;
+      var savedIdx=window._anaIdx||0;
+      await loadDash();
+      showAnaDetail(savedIdx);
+    } else { alert('Erreur révision: '+(d.error||r.status)); }
+  }catch(e){ alert('Erreur réseau révision: '+e.message); }
 }
 
 async function validateByDirector(id){
   if(!confirm('Valider cette analyse et la transmettre à l\'admin pour intégration dans le RAG ?')) return;
-  // Sauvegarder les modifications du directeur via backend (service role key bypasse RLS)
   var mods=window._currentMods||[];
-  var r=await fetch(BACKEND+'/analyses/validate-by-director/'+id,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({modifications:_modsWithMeta(mods),director_email:_cu.email})
-  });
-  var d=r.ok?await r.json().catch(function(){return{};}):{};
-  if(r.ok&&d.status==='ok'){
-    // Envoyer à la file admin via queue/add
-    var ana=(window._userAnalyses||[])[window._anaIdx||0]||{};
-    var decisions={};
-    mods.forEach(function(m,i){decisions[String(m.id||i+1)]='accepted';});
-    await fetch(BACKEND+'/queue/add',{
+  try{
+    var r=await fetch(BACKEND+'/analyses/validate-by-director/'+id,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({filename:ana.filename||'Contrat',contract_type:ana.contract_type||'',partie:ana.partie||'',accepted_modifications:JSON.stringify(mods),decisions:JSON.stringify(decisions),submitted_by:_cu.email,score:80,analysis_id:id,juriste_email:ana.user_email||''})
+      body:JSON.stringify({modifications:_modsWithMeta(mods),director_email:_cu&&_cu.email||''})
     });
-    alert('Analyse validée et transmise à l\'admin pour intégration dans le RAG.');
-    window._juristesData=null;
-    var savedIdx=window._anaIdx||0;
-    await loadDash();
-    showAnaDetail(savedIdx);
-  } else { alert('Erreur ('+r.status+')'); }
+    var d=r.ok?await r.json().catch(function(){return{};}):{};
+    if(r.ok&&d.status==='ok'){
+      var ana=(window._userAnalyses||[])[window._anaIdx||0]||{};
+      var decisions={};
+      mods.forEach(function(m,i){decisions[String(m.id||i+1)]='accepted';});
+      await fetch(BACKEND+'/queue/add',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({filename:ana.filename||'Contrat',contract_type:ana.contract_type||'',partie:ana.partie||'',accepted_modifications:JSON.stringify(mods),decisions:JSON.stringify(decisions),submitted_by:_cu&&_cu.email||'',score:80,analysis_id:id,juriste_email:ana.user_email||''})
+      });
+      alert('Analyse validée et transmise à l\'admin pour intégration dans le RAG.');
+      window._juristesData=null;
+      var savedIdx=window._anaIdx||0;
+      await loadDash();
+      showAnaDetail(savedIdx);
+    } else { alert('Erreur validation: '+(d.error||r.status)); }
+  }catch(e){ alert('Erreur réseau validation: '+e.message); }
 }
 
 function filterAndShowAnalyses(juristeEmail){

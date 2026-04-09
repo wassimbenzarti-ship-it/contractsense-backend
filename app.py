@@ -1440,7 +1440,8 @@ def request_revision_by_director(analysis_id):
         patch = {
             "status": "revision_requested",
             "modifications": modifications,
-            "director_email": data.get("director_email", "")
+            "director_email": data.get("director_email", ""),
+            "director_notes": director_notes
         }
         # Use service role key to bypass RLS for cross-user operations
         _skey = SUPA_SERVICE_KEY or SUPA_KEY
@@ -1459,6 +1460,32 @@ def request_revision_by_director(analysis_id):
         if not rows:
             return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
         return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/save-director/<analysis_id>", methods=["POST", "OPTIONS"])
+def save_director_changes(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        patch = {
+            "modifications": data.get("modifications", []),
+            "director_notes": (data.get("director_notes") or "").strip()
+        }
+        _skey = SUPA_SERVICE_KEY or SUPA_KEY
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": _skey,
+            "Authorization": "Bearer " + _skey,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
