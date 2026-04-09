@@ -1558,6 +1558,11 @@ def health():
     rag = load_rag()
     return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
+@app.route("/app-v2.html", methods=["GET"])
+@app.route("/", methods=["GET"])
+def serve_frontend():
+    return send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
+
 @app.route("/identify-parties", methods=["POST", "OPTIONS"])
 def identify_parties_route():
     if request.method == "OPTIONS": return "", 204

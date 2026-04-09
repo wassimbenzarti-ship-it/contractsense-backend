@@ -1,0 +1,2556 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<title>Omniscient</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0c12; color: #e2e5f0; font-family: system-ui, sans-serif; min-height: 100vh; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.fadein { animation: fadeIn 0.35s ease; }
+.wrap { max-width: 820px; margin: 0 auto; padding: 36px 20px 80px; }
+.logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 19px; margin-bottom: 44px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #5b7cfa; box-shadow: 0 0 14px #5b7cfa; }
+.card { background: #111420; border: 1px solid #1f2537; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+label { display: block; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+input, select, textarea { width: 100%; background: #181c2a; border: 1px solid #1f2537; border-radius: 9px; padding: 10px 13px; color: #e2e5f0; font-size: 13px; font-family: inherit; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #5b7cfa; }
+textarea { min-height: 160px; resize: vertical; line-height: 1.6; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.btn-blue { padding: 10px 18px; background: #5b7cfa; border: none; border-radius: 9px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-main { width: 100%; padding: 15px; background: linear-gradient(135deg, #5b7cfa, #8b5cf6); border: none; border-radius: 11px; color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 4px; }
+.btn-main:disabled { opacity: 0.4; cursor: not-allowed; }
+.tabs { display: flex; gap: 3px; background: #111420; border: 1px solid #1f2537; border-radius: 10px; padding: 3px; width: fit-content; margin-bottom: 16px; }
+.tab { padding: 7px 16px; border-radius: 8px; border: none; background: none; color: #6b7280; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { background: #181c2a; color: #e2e5f0; border-bottom-color: #5b7cfa; }
+.drop { border: 1.5px dashed #1f2537; border-radius: 14px; padding: 38px 24px; text-align: center; cursor: pointer; background: #111420; margin-bottom: 14px; }
+.drop:hover { border-color: #5b7cfa; background: rgba(91,124,250,0.05); }
+.tags { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+.tag { padding: 2px 9px; border-radius: 20px; border: 1px solid #1f2537; color: #6b7280; font-size: 11px; }
+.file-ok { display: flex; align-items: center; gap: 9px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 9px; padding: 11px 15px; margin-bottom: 14px; font-size: 13px; }
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 16px; }
+select { appearance: none; }
+.error { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 9px; padding: 11px 15px; color: #ef4444; font-size: 13px; margin-top: 12px; }
+.loading { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 52px 0; }
+.spinner { width: 36px; height: 36px; border: 2px solid #1f2537; border-top-color: #5b7cfa; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.steps { display: flex; flex-direction: column; gap: 8px; }
+.step { font-size: 13px; color: #6b7280; transition: color 0.4s; }
+.step.done { color: #10b981; }
+.key-saved { display: flex; justify-content: space-between; align-items: center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 9px; padding: 11px 15px; margin-bottom: 20px; font-size: 13px; color: #10b981; }
+h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; margin-bottom: 10px; }
+.accent { background: linear-gradient(135deg, #5b7cfa, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.desc { color: #6b7280; font-size: 14px; line-height: 1.65; max-width: 420px; margin-bottom: 28px; }
+.partie-btn { text-align: left; padding: 18px 20px; background: #111420; border: 1px solid #1f2537; border-radius: 13px; color: #e2e5f0; cursor: pointer; transition: all 0.2s; width: 100%; margin-bottom: 10px; }
+.partie-btn:hover { border-color: #5b7cfa; background: rgba(91,124,250,0.08); }
+.partie-btn .name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.partie-btn .desc2 { color: #6b7280; font-size: 13px; }
+.mod-card { background: #111420; border: 1px solid #1f2537; border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+.mod-card.accepted { border-color: #10b981; }
+.mod-card.rejected { border-color: #ef4444; opacity: 0.6; }
+.mod-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #1f2537; flex-wrap: wrap; gap: 8px; }
+.mod-name { font-weight: 700; font-size: 15px; }
+.risk-pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; white-space: nowrap; }
+.mod-body { padding: 20px; }
+.mod-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+.mod-original { background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 9px; padding: 14px; font-size: 13px; line-height: 1.65; margin-bottom: 12px; }
+.mod-proposed { background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); border-radius: 9px; padding: 14px; font-size: 13px; line-height: 1.65; margin-bottom: 16px; }
+.mod-reason { color: #6b7280; font-size: 12px; line-height: 1.6; margin-bottom: 16px; }
+.mod-actions { display: flex; gap: 10px; }
+.btn-accept { flex: 1; padding: 10px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); border-radius: 9px; color: #10b981; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-accept.active { background: #10b981; color: #fff; }
+.btn-reject { flex: 1; padding: 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 9px; color: #ef4444; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-reject.active { background: #ef4444; color: #fff; }
+.mod-status { text-align: center; padding: 8px; font-size: 12px; font-weight: 600; margin-top: 10px; }
+.review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; padding-bottom: 18px; border-bottom: 1px solid #1f2537; flex-wrap: wrap; gap: 12px; }
+.review-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.stat { padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 12px; }
+.stat-pending { background: rgba(91,124,250,0.15); color: #5b7cfa; }
+.stat-accepted { background: rgba(16,185,129,0.15); color: #10b981; }
+.stat-rejected { background: rgba(239,68,68,0.15); color: #ef4444; }
+.export-section { background: #111420; border: 1px solid #1f2537; border-radius: 14px; padding: 24px; margin-top: 28px; text-align: center; }
+.btn-export { display: inline-block; padding: 13px 28px; background: linear-gradient(135deg, #5b7cfa, #8b5cf6); border: none; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.btn-new { display: block; margin: 12px auto 0; padding: 10px 22px; background: none; border: 1px solid #1f2537; border-radius: 9px; color: #6b7280; font-size: 13px; cursor: pointer; }
+@media (max-width: 580px) { .opts { grid-template-columns: 1fr; } .mod-actions { flex-direction: column; } }
+
+<style>
+#auth-ov{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(8,10,18,.93);z-index:9999;align-items:center;justify-content:center}
+#auth-ov.show{display:flex}
+#auth-box{background:#0f1320;border:1px solid #1f2537;border-radius:16px;padding:32px;width:90%;max-width:380px;position:relative;margin:auto}
+#auth-box h2{color:#e2e5f0;font-size:20px;margin-bottom:20px}
+.ai{width:100%;background:#181c2a;border:1px solid #1f2537;border-radius:8px;padding:10px 14px;color:#e2e5f0;font-size:14px;margin-bottom:10px;box-sizing:border-box}
+.ab{width:100%;padding:11px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px}
+.al{color:#5b7cfa;cursor:pointer;font-size:13px}
+.ax{position:absolute;top:12px;right:14px;background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer}
+.ae{color:#ef4444;font-size:12px;margin-bottom:8px;display:none}
+.ao{color:#10b981;font-size:12px;margin-bottom:8px;display:none}
+#ubar{display:none;align-items:center;gap:10px;background:#0f1320;border:1px solid #1f2537;border-radius:10px;padding:8px 14px;margin-bottom:14px}
+#ubar.show{display:flex}
+#ueml{font-size:13px;color:#a0a8c0;flex:1}
+.usb{padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid #1f2537}
+#dash-ov{display:none;position:fixed;inset:0;background:rgba(8,10,18,.97);z-index:999;overflow-y:auto;padding:30px 20px}
+#dash-ov.show{display:block}
+#dash-in{max-width:840px;margin:0 auto}
+#dash-in h2{color:#e2e5f0;font-size:22px;font-weight:700;margin-bottom:4px}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+.sb{background:#0f1320;border:1px solid #1f2537;border-radius:10px;padding:16px;text-align:center}
+.sn{font-size:26px;font-weight:700;color:#5b7cfa}
+.sl{font-size:12px;color:#6b7280;margin-top:4px}
+.dt{display:flex;gap:8px;margin:16px 0}
+.dtb{padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;border:1px solid #1f2537;color:#6b7280;background:#0f1320}
+.dtb.active{background:#5b7cfa;color:#fff;border-color:#5b7cfa}
+.ds{display:none}.ds.active{display:block}
+.ac{background:#0f1320;border:1px solid #1f2537;border-radius:10px;padding:14px;margin-bottom:8px}
+.ac h4{font-size:13px;font-weight:600;color:#e2e5f0;margin-bottom:3px}
+.ac p{font-size:12px;color:#6b7280}
+.mz{border:2px dashed #1f2537;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:14px;color:#6b7280;display:block;font-size:13px}
+.mz:hover{border-color:#5b7cfa;color:#5b7cfa}
+.dclose{position:fixed;top:18px;right:18px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;padding:8px 16px;color:#e2e5f0;cursor:pointer;font-size:13px}
+
+.ana-detail{background:#0f1320;border:1px solid #1f2537;border-radius:12px;padding:20px;margin-top:16px;display:none}
+.ana-detail.show{display:block}
+.mod-user-card{background:#181c2a;border:1px solid #1f2537;border-radius:8px;padding:12px;margin-bottom:10px}
+.mod-user-card h4{font-size:13px;font-weight:600;color:#e2e5f0;margin-bottom:6px}
+.mod-user-edit{width:100%;background:#0f1320;border:1px solid #1f2537;border-radius:6px;padding:8px;color:#e2e5f0;font-size:12px;min-height:80px;resize:vertical}
+.risk-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-bottom:6px}
+.risk-high{background:rgba(239,68,68,.15);color:#ef4444}
+.risk-med{background:rgba(245,158,11,.15);color:#f59e0b}
+.risk-low{background:rgba(16,185,129,.15);color:#10b981}
+.btn-dl-user{padding:10px 20px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;margin-top:12px}
+</style>
+<div id="auth-ov">
+<div id="auth-box">
+<button class="ax" onclick="closeAuth()">x</button>
+<h2 id="atitle">Connexion</h2>
+<div id="afl">
+<input class="ai" type="email" id="ae1" placeholder="Email"/>
+<input class="ai" type="password" id="ap1" placeholder="Mot de passe"/>
+<div id="aerr" class="ae"></div>
+<button class="ab" onclick="doLogin()">Se connecter</button>
+<div style="text-align:center;font-size:13px;color:#6b7280">Pas de compte ? <span class="al" onclick="showReg()">Creer un compte</span></div></div>
+<div id="afr" style="display:none">
+<input class="ai" type="email" id="ae2" placeholder="Email"/>
+<input class="ai" type="password" id="ap2" placeholder="Mot de passe (6+)"/>
+<div id="aerr2" class="ae"></div><div id="aok2" class="ao"></div>
+<button class="ab" onclick="doReg()">Creer mon compte</button>
+<div style="text-align:center;font-size:13px;color:#6b7280">Deja un compte ? <span class="al" onclick="showLogin()">Se connecter</span></div>
+</div>
+</div>
+</div>
+<div id="dash-ov">
+<button class="dclose" onclick="closeDash()">x Fermer</button>
+<div id="dash-in">
+<div id="dash-role-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(91,124,250,0.12);border:1px solid rgba(91,124,250,0.3);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#5b7cfa;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px"></div>
+<h2 id="dash-title">Mon espace</h2>
+<p id="deml" style="color:#6b7280;font-size:13px;margin-bottom:12px"></p>
+<div class="sg">
+<div class="sb"><div class="sn" id="sta">0</div><div class="sl" id="sl-analyses">Analyses</div></div>
+<div class="sb"><div class="sn" id="stm">0</div><div class="sl">Modeles</div></div>
+<div class="sb" id="sb-juristes" style="display:none"><div class="sn" id="stj">0</div><div class="sl">Juristes</div></div>
+<div class="sb"><div class="sn" id="stc">0</div><div class="sl">Clauses</div></div>
+<div class="sb" id="sb-quota" style="display:none"><div class="sn" id="stq">—</div><div class="sl">Analyses restantes</div></div>
+</div>
+<div class="dt">
+<div class="dtb active" id="dtb-analyses" onclick="dtab('analyses')">Analyses</div>
+<div class="dtb" onclick="dtab('models')">Modeles</div>
+<div class="dtb" id="dtb-juristes" onclick="dtab('juristes')" style="display:none">Equipe</div>
+<div class="dtb" id="dtb-abonnement" onclick="dtab('abonnement')" style="display:none">💳 Abonnement</div>
+<div class="dtb" id="dtb-nouvelle" onclick="dtab('nouvelle')">➕ Analyse</div>
+</div>
+<div id="d-analyses" class="ds active">
+<div id="juriste-filter-bar" style="display:none;margin-bottom:10px">
+  <select id="juriste-filter" onchange="filterAnalysesByJuriste(this.value)" style="background:#1a2035;border:1px solid #1f2537;border-radius:6px;padding:6px 10px;color:#e2e5f0;font-size:12px;width:100%">
+    <option value="">Tous les juristes</option>
+  </select>
+</div>
+<div id="alist"></div>
+</div>
+<div id="d-models" class="ds">
+<div id="model-upload-info" style="display:none;background:rgba(91,124,250,0.08);border:1px solid rgba(91,124,250,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#a0a8c0;line-height:1.6"></div>
+<label class="mz" for="minp">+ Soumettre un modele de contrat</label>
+<input type="file" id="minp" accept=".pdf,.docx,.txt" style="display:none" onchange="upMdl(this)"/>
+<div id="mlist"></div>
+</div>
+<div id="d-juristes" class="ds">
+<div id="juristes-list"><div style="color:#6b7280;font-size:13px;padding:20px 0">Chargement...</div></div>
+</div>
+<div id="d-abonnement" class="ds">
+<div id="abonnement-content"><div style="color:#6b7280;font-size:13px">Chargement...</div></div>
+</div>
+</div>
+<div id="d-nouvelle" class="ds">
+  <div id="d-ana-form">
+    <div style="font-size:15px;font-weight:700;color:#e2e5f0;margin-bottom:14px">Nouvelle analyse</div>
+    <div id="d-drop-area" onclick="document.getElementById('d-file-input').click()" style="cursor:pointer;border:2px dashed #1f2537;border-radius:12px;padding:22px;text-align:center;margin-bottom:10px" onmouseover="this.style.borderColor='#5b7cfa'" onmouseout="this.style.borderColor='#1f2537'">
+      <div style="font-size:22px;margin-bottom:5px">📤</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:3px">Déposez votre contrat ou cliquez</div>
+      <div style="color:#6b7280;font-size:11px">PDF · DOCX · TXT</div>
+    </div>
+    <input type="file" id="d-file-input" accept=".pdf,.docx,.txt,.doc" style="display:none" onchange="dAnaOnFile(this)"/>
+    <div id="d-file-ok" style="display:none;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:8px 12px;font-size:12px;color:#10b981;margin-bottom:10px">✅ <span id="d-file-name"></span></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+      <label style="font-size:11px;color:#6b7280;white-space:nowrap">Type :</label>
+      <select id="d-contract-type" style="flex:1;background:#1a2035;border:1px solid #1f2537;border-radius:7px;padding:6px 10px;color:#e2e5f0;font-size:12px">
+        <option value="generic">Générique</option><option value="nda">NDA</option><option value="saas">SaaS</option>
+        <option value="purchase">Achat/Vente</option><option value="contrat de travail CDI">CDI</option>
+        <option value="contrat de travail CDD">CDD</option><option value="employment">RH / Autre</option>
+        <option value="partnership">Partenariat</option>
+      </select>
+    </div>
+    <button onclick="dAnaStart()" style="width:100%;padding:11px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:9px;color:#fff;font-weight:700;font-size:14px;cursor:pointer">Analyser →</button>
+    <div id="d-ana-error" style="display:none;color:#ef4444;font-size:12px;margin-top:8px;padding:8px 12px;background:rgba(239,68,68,0.08);border-radius:7px"></div>
+  </div>
+  <div id="d-ana-loading" style="display:none;text-align:center;padding:32px 0">
+    <div style="width:30px;height:30px;border:3px solid #1f2537;border-top-color:#5b7cfa;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 14px"></div>
+    <div id="d-ana-status" style="font-size:13px;color:#6b7280">Analyse en cours...</div>
+  </div>
+  <div id="d-ana-parties" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:5px">Quelle partie représentez-vous ?</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:14px">L'IA adaptera ses modifications pour protéger vos intérêts.</div>
+    <div id="d-parties-list"></div>
+    <button onclick="dAnaReset()" style="display:block;margin:12px auto 0;padding:7px 18px;background:none;border:1px solid #1f2537;border-radius:8px;color:#6b7280;font-size:12px;cursor:pointer">← Retour</button>
+  </div>
+  <div id="d-ana-review" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">
+      <div style="font-size:14px;font-weight:700">Révision du contrat</div>
+      <div id="d-review-stats"></div>
+    </div>
+    <div id="d-mods-list"></div>
+    <div id="d-compliance-section"></div>
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid #1f2537;display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="exportDocx()" style="flex:1;padding:10px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:9px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">⬇ Télécharger avec Track Changes</button>
+      <button onclick="dAnaReset()" style="padding:10px 14px;background:none;border:1px solid #1f2537;border-radius:9px;color:#6b7280;font-size:12px;cursor:pointer">🔄 Nouvelle</button>
+    </div>
+  </div>
+</div>
+</div>
+<div id="ubar">
+<span id="ueml"></span>
+<button class="usb" style="background:#1a2035;color:#e2e5f0" onclick="showDash()">Mon espace</button>
+<button class="usb" style="background:#2a1515;color:#ef4444;border-color:#3a1f1f" onclick="doOut()">Deconnexion</button>
+</div>
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><div class="dot"></div>Omniscient</div>
+
+  <!-- STEP 2: Upload form -->
+  <div id="step-form">
+    <h1 class="fadein">Révisez vos contrats<br/><span class="accent">avec l'IA.</span></h1>
+    <p class="desc">Uploadez votre contrat. L'IA identifie les parties, vous choisissez laquelle protéger, puis propose des modifications avec Track Changes.</p>
+
+    <div class="tabs">
+      <button class="tab active" id="tab-upload">📤 Uploader</button>
+      <button class="tab" id="tab-text"> Coller du texte</button>
+    </div>
+
+    <div id="upload-zone">
+      <div class="drop" id="drop-area">
+        <div style="font-size:30px;margin-bottom:10px">📤</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:5px">Déposez votre contrat ici</div>
+        <div style="color:#6b7280;font-size:13px">ou cliquez pour sélectionner</div>
+        <div class="tags"><span class="tag">PDF</span><span class="tag">DOCX</span><span class="tag">TXT</span></div>
+      </div>
+      <input type="file" id="file-input" accept=".pdf,.docx,.txt,.doc" style="display:none"/>
+      <div id="file-ok" style="display:none" class="file-ok">
+        <span></span>
+        <span id="file-name" style="color:#10b981;font-size:13px"></span>
+        <span id="file-size" style="color:#6b7280;font-size:11px;margin-left:auto"></span>
+      </div>
+    </div>
+
+    <div id="text-zone" style="display:none">
+      <textarea id="contract-text" placeholder="Collez le texte de votre contrat ici..." style="margin-bottom:14px"></textarea>
+    </div>
+
+    <div class="opts">
+      <div>
+        <label>Type</label>
+        <select id="type">
+          <option value="generic">Générique</option>
+          <option value="nda">NDA</option>
+          <option value="saas">SaaS</option>
+          <option value="purchase">Achat/Vente</option>
+          <option value="contrat de travail CDI">CDI</option>
+          <option value="contrat de travail CDD">CDD</option>
+          <option value="employment">RH / Autre</option>
+          <option value="partnership">Partenariat</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-main" id="btn-analyze">⬆ Analyser le contrat</button>
+    <div id="usage-counter" style="text-align:center;font-size:12px;color:#6b7280;margin-top:10px"></div>
+    <div id="access-code-section" style="display:none;margin-top:16px;background:rgba(91,124,250,0.06);border:1px solid rgba(91,124,250,0.2);border-radius:10px;padding:16px">
+      <div style="font-size:13px;font-weight:600;color:#e2e5f0;margin-bottom:12px">= Limite de 3 analyses atteinte</div>
+      <a href="https://westfieldavocats.com/produit/abonnement-omniscient/" target="_blank" style="display:block;text-align:center;padding:12px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border-radius:8px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:14px">
+        ⬆ Souscrire à l'accès illimité ✅
+      </a>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="flex:1;height:1px;background:#1f2537"></div>
+        <div style="font-size:11px;color:#6b7280">ou entrez votre code d'accès</div>
+        <div style="flex:1;height:1px;background:#1f2537"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="access-code-input" placeholder="Code WF-XXXXX..." style="flex:1;background:#181c2a;border:1px solid #1f2537;border-radius:8px;padding:9px 12px;color:#e2e5f0;font-size:13px"/>
+        <button onclick="applyAccessCode()" style="padding:9px 18px;background:#5b7cfa;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Activer</button>
+      </div>
+      <div id="access-code-error" style="display:none;color:#ef4444;font-size:12px;margin-top:6px"></div>
+      <div style="margin-top:12px;font-size:11px;color:#6b7280;text-align:center">
+        📧 contact&#64;westfieldavocats.com 📞 📞 +212 6 34 39 44 90
+      </div>
+    </div>
+    <div id="form-error" style="display:none" class="error"></div>
+  </div>
+
+  <!-- STEP 3: Loading -->
+  <div id="step-loading" style="display:none" class="loading">
+    <div class="spinner"></div>
+    <div class="steps">
+      <div class="step" id="s0">⏳ Lecture du document...</div>
+      <div class="step" id="s1">⏳ Identification des parties...</div>
+      <div class="step" id="s2">⏳ Analyse des risques...</div>
+      <div class="step" id="s3">⏳ Rédaction des modifications...</div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Choose partie -->
+  <div id="step-parties" style="display:none" class="fadein">
+    <h2 style="font-size:20px;font-weight:800;margin-bottom:8px">Quelle partie représentez-vous ?</h2>
+    <p style="color:#6b7280;font-size:14px;margin-bottom:24px">L'IA adaptera ses modifications pour protéger vos intérêts.</p>
+    <div id="parties-list"></div>
+    <button id="btn-back" style="display:block;margin:16px auto 0;padding:9px 20px;background:none;border:1px solid #1f2537;border-radius:9px;color:#6b7280;font-size:13px;cursor:pointer">← Retour</button>
+  </div>
+
+  <!-- STEP 5: Review modifications -->
+  <div id="step-review" style="display:none" class="fadein">
+    <div class="review-header">
+      <div style="font-size:20px;font-weight:800">Révision du contrat</div>
+      <div class="review-stats" id="review-stats"></div>
+    </div>
+    <div id="mods-list"></div>
+    <div class="export-section">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Générer le document final</div>
+      <div id="export-desc" style="color:#6b7280;font-size:13px;margin-bottom:20px;line-height:1.6"></div>
+      <button class="btn-export" id="btn-export"> Télécharger avec Track Changes</button>
+      <button class="btn-new" id="btn-new">🔄 Analyser un autre contrat</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var BACKEND = 'https://web-production-f96f7.up.railway.app';
+var apiKey = 'ok';  // Clé gérée côté serveur Railway
+var curFile = null;
+var curMode = 'upload';
+var modifications = [];
+var decisions = {};
+var savedFormData = null;
+var savedLang = "fr";
+var savedType = "generic";
+var savedText = "";
+
+//  Init 
+document.addEventListener('DOMContentLoaded', function() {
+  // Restaurer la session apres refresh ou retour OAuth Google
+  (async function() {
+    var hash = window.location.hash;
+    if (hash && hash.indexOf('access_token=') !== -1) {
+      var params = {};
+      hash.slice(1).split('&').forEach(function(p) { var kv = p.split('='); params[kv[0]] = decodeURIComponent(kv[1] || ''); });
+      if (params.access_token) {
+        localStorage.setItem('sbt', params.access_token);
+        if (params.refresh_token) localStorage.setItem('sbr', params.refresh_token);
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        if(params.type==='signup'||params.type==='recovery')localStorage.setItem('cs_dash_open','1');
+      }
+    }
+    await chkSess();
+    // Retour CMI paiement
+    var urlParams=new URLSearchParams(window.location.search);
+    var payStatus=urlParams.get('payment');
+    if(payStatus==='success'){
+      history.replaceState(null,'',window.location.pathname);
+      setTimeout(function(){alert('✅ Paiement confirmé ! Vos 10 analyses ont été renouvelées pour tous vos utilisateurs.');if(_cu)showDash();},500);
+    } else if(payStatus==='failed'){
+      history.replaceState(null,'',window.location.pathname);
+      setTimeout(function(){alert('❌ Paiement échoué ou annulé. Réessayez depuis votre tableau de bord.');},500);
+    }
+  })();
+  // Update usage counter from Supabase (after chkSess) or localStorage fallback
+  (async function() {
+    var counter = document.getElementById('usage-counter');
+    if (!counter) return;
+    if (_cu) {
+      try {
+        var r = await fetch(BACKEND + '/account/info', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({email: _cu.email})
+        });
+        if (r.ok) {
+          var acc = await r.json();
+          var rem = acc.analyses_remaining;
+          if (acc.is_admin || rem === -1) {
+            counter.textContent = '∞ Accès illimité'; counter.style.color = '#10b981';
+          } else if (rem > 0) {
+            counter.textContent = rem + ' analyse' + (rem > 1 ? 's' : '') + ' restante' + (rem > 1 ? 's' : '');
+          } else {
+            counter.textContent = '❌ Quota épuisé'; counter.style.color = '#ef4444';
+          }
+          return;
+        }
+      } catch(e) {}
+    }
+    // Fallback: non connecté → localStorage
+    var usage = parseInt(localStorage.getItem('cs_usage') || '0');
+    var remaining = 3 - usage;
+    if (remaining > 0) {
+      counter.textContent = remaining + ' analyse' + (remaining > 1 ? 's' : '') + ' gratuite' + (remaining > 1 ? 's' : '') + ' restante' + (remaining > 1 ? 's' : '');
+    } else {
+      counter.innerHTML = '❌ Limite atteinte';
+      counter.style.color = '#ef4444';
+    }
+  })();
+
+    // Tabs
+  document.getElementById('tab-upload').addEventListener('click', function() {
+    curMode = 'upload';
+    this.classList.add('active');
+    document.getElementById('tab-text').classList.remove('active');
+    show('upload-zone');
+    hide('text-zone');
+  });
+  document.getElementById('tab-text').addEventListener('click', function() {
+    curMode = 'text';
+    this.classList.add('active');
+    document.getElementById('tab-upload').classList.remove('active');
+    hide('upload-zone');
+    show('text-zone');
+  });
+
+  // Drop zone
+  var drop = document.getElementById('drop-area');
+  drop.addEventListener('click', function() { document.getElementById('file-input').click(); });
+  drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.style.borderColor = '#5b7cfa'; });
+  drop.addEventListener('dragleave', function() { drop.style.borderColor = '#1f2537'; });
+  drop.addEventListener('drop', function(e) {
+    e.preventDefault();
+    drop.style.borderColor = '#1f2537';
+    setFile(e.dataTransfer.files[0]);
+  });
+  document.getElementById('file-input').addEventListener('change', function() {
+    var f = this.files[0];
+    if (f && f.name.toLowerCase().endsWith('.doc') && !f.name.toLowerCase().endsWith('.docx')) {
+      showErr("form-error", "⚠️ Format .doc detecte. Convertissez en .docx pour les Track Changes complets. L'analyse reste possible mais l'export sera limite.");
+    } else {
+      hideErr('form-error');
+    }
+    setFile(f);
+  });
+
+  // Analyze
+  document.getElementById('btn-analyze').addEventListener('click', analyze);
+
+  // Back
+  document.getElementById('btn-back').addEventListener('click', function() {
+    hide('step-parties');
+    show('step-form');
+  });
+
+  // Export + New
+  document.getElementById('btn-export').addEventListener('click', exportDoc);
+  document.getElementById('btn-new').addEventListener('click', reset);
+});
+
+//  Helpers 
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function showFlex(id) { document.getElementById(id).style.display = 'flex'; }
+function showErr(id, msg) { var el = document.getElementById(id); el.innerHTML = msg; el.style.display = 'block'; }
+function hideErr(id) { document.getElementById(id).style.display = 'none'; }
+
+function showKeyBar() {
+  hide('step-key');
+  show('key-saved-bar');
+}
+
+function setFile(f) {
+  if (!f) return;
+  curFile = f;
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('file-size').textContent = (f.size/1024).toFixed(0) + ' KB';
+  show('file-ok');
+}
+
+function saveKey() {
+  var k = document.getElementById('api-key').value.trim();
+  if (!k || k.indexOf('sk-') !== 0) {
+    showErr('key-error', '❌ Clé invalide  doit commencer par sk-');
+    return;
+  }
+  localStorage.setItem('cs_key', k);
+  hideErr('key-error');
+  showKeyBar();
+  show('step-form');
+}
+
+function stepDone(i) {
+  var el = document.getElementById('s' + i);
+  var labels = ['Lecture du document','Identification des parties','Analyse des risques','Rédaction des modifications'];
+  if (el) { el.classList.add('done'); el.textContent = ' ' + labels[i]; }
+}
+
+function stepReset() {
+  var labels = ['Lecture du document','Identification des parties','Analyse des risques','Rédaction des modifications'];
+  for (var i = 0; i < 4; i++) {
+    var el = document.getElementById('s' + i);
+    if (el) { el.classList.remove('done'); el.textContent = '⏳ ' + labels[i]; }
+  }
+}
+
+function rc(r) { return r === 'high' ? '#ef4444' : r === 'medium' ? '#f59e0b' : '#10b981'; }
+function rl(r) { return r === 'high' ? 'Risque élevé' : r === 'medium' ? 'Risque modéré' : 'Faible risque'; }
+
+function buildFormData() {
+  var fd = new FormData();
+  fd.append('lang', 'auto');
+  fd.append('type', document.getElementById('type').value);
+  if (_cu && _cu.email) fd.append('user_email', _cu.email);
+  if (curMode === 'upload' && curFile) {
+    fd.append('file', curFile);
+  } else {
+    var txt = document.getElementById('contract-text').value || savedText;
+    fd.append('file', new Blob([txt], {type:'text/plain'}), 'contract.txt');
+  }
+  return fd;
+}
+
+//  Step 1: Analyze à identify parties 
+async function analyze() {
+  hideErr('form-error');
+
+  // Restore session if not yet loaded
+  if(!_cu) await chkSess();
+
+  // Gate : vérifier quota via backend (gère reset hebdo + is_admin)
+  if(_cu){
+    try{
+      var accR=await fetch(BACKEND+'/account/info',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:_cu.email})
+      });
+      if(accR.ok){
+        var acc=await accR.json();
+        if(!acc.is_admin && acc.analyses_remaining!==-1 && !acc.can_analyze){
+          var subEnd=acc.subscription_end?new Date(acc.subscription_end).toLocaleDateString('fr-FR'):'';
+          var reason=acc.blocked_reason||'';
+          if(acc.role==='juriste'){
+            var msg=acc.message||'Votre directeur doit souscrire un abonnement pour que vous puissiez analyser.';
+            showErr('form-error','&#128274; <strong>Accès restreint</strong><br><br>'+msg);
+          } else if(acc.payment_status==='active'){
+            showErr('form-error','Vos 20 analyses de ce mois sont épuisées. Renouvellement le '+subEnd+'.');
+          } else {
+            showErr('form-error',
+              '<strong>Vos 3 analyses gratuites de la semaine sont épuisées.</strong><br><br>'
+              +'Plan Solo/Directeur : 950 DH HT/mois · 20 analyses<br>'
+              +'<button onclick="showDash();dtab(\'abonnement\')" style="margin-top:10px;padding:10px 20px;background:linear-gradient(135deg,#c8a94b,#f0c060);border:none;border-radius:8px;color:#0a0c12;font-weight:700;cursor:pointer;font-size:14px">&#128179; Souscrire maintenant</button>'
+            );
+          }
+          return;
+        }
+      }
+    }catch(e){console.log('Gate check error:',e);}
+  }
+  // Utilisateur non connecté → limite localStorage (3/semaine)
+  if(!_cu){
+    var usage = parseInt(localStorage.getItem('cs_usage') || '0');
+    if (usage >= 3) {
+      showErr('form-error','<strong>3 analyses gratuites utilisées.</strong><br>Créez un compte pour continuer.');
+      return;
+    }
+  }
+
+  var txt = document.getElementById('contract-text').value;
+  if (curMode === 'upload' && !curFile) { showErr('form-error', '📤 Uploade un fichier.'); return; }
+  if (curMode === 'text' && txt.trim().length < 50) { showErr('form-error', '❌ Colle au moins 50 caractères.'); return; }
+
+  hide('step-form');
+  showFlex('step-loading');
+  stepReset();
+  stepDone(0);
+  setTimeout(function() { stepDone(1); }, 800);
+
+  // Save params for later reuse
+  savedLang = 'auto';
+  savedType = document.getElementById('type').value;
+  savedText = document.getElementById('contract-text').value;
+
+  try {
+    var fd2 = buildFormData();
+    var resp = await fetch(BACKEND + '/identify-parties', { method: 'POST', body: fd2 });
+    if (!resp.ok) {
+      var errData = {};
+      try { errData = await resp.json(); } catch(_) {}
+      throw new Error(errData.error || ('Erreur serveur (' + resp.status + ')'));
+    }
+    var data = await resp.json();
+
+    hide('step-loading');
+    renderParties(data.parties || []);
+  } catch(e) {
+    hide('step-loading');
+    show('step-form');
+    showErr('form-error', '&#10060; ' + (e.message || 'Erreur inattendue.'));
+  }
+}
+
+//  Step 2: Show parties 
+function renderParties(parties) {
+  var list = document.getElementById('parties-list');
+  list.innerHTML = '';
+  parties.forEach(function(p) {
+    var btn = document.createElement('button');
+    btn.className = 'partie-btn';
+    // Show name + generic role
+    var roleLabel = p.party_label || p.description || p.role || '';
+    btn.innerHTML = 
+      '<div class="name">' + p.name + '</div>' +
+      '<div class="desc2">' + p.description + '</div>' +
+      (roleLabel ? '<div style="margin-top:4px;font-size:11px;color:#5b7cfa;font-weight:600">' + roleLabel + '</div>' : '');
+    // Pass party_label (generic role) not company name
+    btn.addEventListener('click', function() { analyzeWithPartie(p.party_label || p.description || p.name); });
+    list.appendChild(btn);
+  });
+  show('step-parties');
+}
+
+//  Step 3: Analyze with selected partie 
+async function analyzeWithPartie(partieName) {
+  selectedPartie = partieName;
+  hide('step-parties');
+  showFlex('step-loading');
+  stepDone(2);
+  setTimeout(function() { stepDone(3); }, 1400);
+
+  // Ensure session is restored before sending user_email
+  if (!_cu) await chkSess();
+
+  try {
+    var fd = buildFormData();
+    fd.append('partie', partieName);
+
+    var resp = await fetch(BACKEND + '/analyze', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      var errData = {};
+      try { errData = await resp.json(); } catch(_) {}
+      throw new Error(errData.error || ('Erreur serveur (' + resp.status + ')'));
+    }
+    var data = await resp.json();
+
+    modifications = data.modifications || [];
+    window._compliance = data.compliance || [];
+    decisions = {};
+    modifications.forEach(function(m) { decisions[m.id] = 'pending'; });
+    if (data.file_storage_path) window._fileStoragePath = data.file_storage_path;
+    if (data.file_cache_id) window._fileCacheId = data.file_cache_id;
+
+    // Extraire toutes les clauses du contrat pour le dropdown "ajouter une clause"
+    // Utiliser savedText (mode texte) ou lire le fichier uploadé (mode fichier)
+    var contractText = savedText || data.text || data.document_text || '';
+    if(!contractText && curFile) contractText = await _readFileText(curFile);
+    if(contractText && !savedText) savedText = contractText; // cache pour saveAna
+    window._allContractClauses = _extractContractClauses(contractText);
+    // Fallback: if regex-based extraction found nothing, use backend paragraph list
+    if(!window._allContractClauses.length && data._paragraphs && data._paragraphs.length) {
+      window._allContractClauses = data._paragraphs.map(function(p) {
+        return { name: p.text.slice(0, 80), text: p.text, idx: p.idx };
+      }).filter(function(c) { return c.name.length > 5; });
+    }
+
+    hide('step-loading');
+    renderReview();
+  } catch(e) {
+    hide('step-loading');
+    show('step-form');
+    showErr('form-error', '✅ ' + (e.message || 'Erreur inattendue.'));
+  }
+}
+
+//  Step 4: Review 
+function applyAccessCode() {
+  var code = document.getElementById('access-code-input').value.trim().toUpperCase();
+  // Valid codes stored in localStorage by admin
+  var validCodes = JSON.parse(localStorage.getItem('omniscient_codes') || '[]');
+  // Also check hardcoded prefix pattern: WF-XXXXX
+  var isValid = validCodes.includes(code) || /^WF-[A-Z0-9]{5,10}$/.test(code);
+  if (isValid) {
+    localStorage.setItem('cs_access', code);
+    localStorage.setItem('cs_usage', '0'); // Reset counter
+    document.getElementById('access-code-section').style.display = 'none';
+    document.getElementById('usage-counter').textContent = ' Accès illimité activé';
+    document.getElementById('usage-counter').style.color = '#10b981';
+    hideErr('form-error');
+    alert(' Code valide ! Accès illimité activé.');
+  } else {
+    document.getElementById('access-code-error').style.display = 'block';
+    document.getElementById('access-code-error').textContent = '❌ Code invalide. Contactez contact&#64;westfieldavocats.com';
+  }
+}
+
+function onProposedEdit(id, el) {
+  // Save user-edited version
+  var mod = modifications.find(function(m) { return m.id === id; });
+  if (mod) {
+    mod.proposed_user = el.innerText.trim();
+    // Visual feedback
+    el.style.borderColor = '#f59e0b';
+    el.style.background = 'rgba(245,158,11,0.06)';
+  }
+}
+
+function decide(id, decision) {
+  // If user edited the proposed text, save it back to modifications
+  var mod = modifications.find(function(m) { return m.id === id; });
+  if (mod && decision === 'accepted') {
+    var editedEl = document.getElementById('proposed-' + id);
+    if (editedEl) {
+      var edited = editedEl.innerText.trim();
+      if (edited && edited !== mod.proposed) {
+        mod.proposed_edited = edited;
+        mod.proposed = edited; // Use edited version for export
+      }
+    }
+  }
+  decisions[id] = decision;
+  var card = document.getElementById('card-' + id);
+  var btnA = document.getElementById('ba-' + id);
+  var btnR = document.getElementById('br-' + id);
+  var status = document.getElementById('st-' + id);
+  card.classList.remove('accepted','rejected');
+  btnA.classList.remove('active');
+  btnR.classList.remove('active');
+  if (decision === 'accepted') {
+    card.classList.add('accepted');
+    btnA.classList.add('active');
+    status.textContent = ' Modification acceptée';
+    status.style.color = '#10b981';
+  } else {
+    card.classList.add('rejected');
+    btnR.classList.add('active');
+    status.textContent = 'L Texte original conservé';
+    status.style.color = '#ef4444';
+  }
+  updateStats();
+}
+
+function updateStats() {
+  var a = Object.values(decisions).filter(function(d){return d==='accepted';}).length;
+  var r = Object.values(decisions).filter(function(d){return d==='rejected';}).length;
+  var p = Object.values(decisions).filter(function(d){return d==='pending';}).length;
+  var _sh = '<span class="stat stat-pending">' + p + ' en attente</span><span class="stat stat-accepted">' + a + ' acceptées</span><span class="stat stat-rejected">' + r + ' refusées</span>';
+  var _s1=document.getElementById('review-stats'); if(_s1)_s1.innerHTML=_sh;
+  var _s2=document.getElementById('d-review-stats'); if(_s2)_s2.innerHTML=_sh;
+}
+
+function renderCompliance() {
+  var _compId = _dashAnalysis ? 'd-compliance-section' : 'compliance-section';
+  var _modsId = _dashAnalysis ? 'd-mods-list' : 'mods-list';
+  var container = document.getElementById(_compId);
+  if (!container) {
+    container = document.createElement('div');
+    container.id = _compId;
+    var modsList = document.getElementById(_modsId);
+    if(modsList) modsList.parentNode.insertBefore(container, modsList.nextSibling);
+  }
+  var items = window._compliance || [];
+  if (!items.length) {
+    container.innerHTML = '';
+    return;
+  }
+  var sevColor = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
+  var sevLabel = { high: 'Critique', medium: 'Modéré', low: 'Faible' };
+  var typeLabel = { loi: 'LOI', doctrine: 'DOCTRINE', jurisprudence: 'JURISPRUDENCE' };
+  var html = '<div style="margin-top:24px;margin-bottom:8px;font-size:17px;font-weight:800;color:#e2e8f0;letter-spacing:0.01em;">⚖ Analyse de conformité juridique</div>';
+  html += '<div style="font-size:12px;color:#6b7280;margin-bottom:14px;">Basée sur les lois, doctrine et jurisprudences de la base documentaire RAG</div>';
+  items.forEach(function(c) {
+    var color = sevColor[c.severity] || '#6b7280';
+    var sLabel = sevLabel[c.severity] || c.severity;
+    var tLabel = typeLabel[(c.type || '').toLowerCase()] || (c.type || 'RÉFÉRENCE').toUpperCase();
+    html += '<div style="background:#0d1017;border:1px solid ' + color + '33;border-left:3px solid ' + color + ';border-radius:10px;padding:14px 16px;margin-bottom:12px;">' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">' +
+        '<span style="background:' + color + '22;color:' + color + ';font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;">' + sLabel + '</span>' +
+        '<span style="background:#1e293b;color:#94a3b8;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">' + tLabel + '</span>' +
+        (c.source ? '<span style="font-size:11px;color:#5b7cfa;font-style:italic;">' + _escH(c.source) + '</span>' : '') +
+      '</div>' +
+      '<div style="font-size:13px;color:#e2e8f0;margin-bottom:6px;">' + _escH(c.issue || '') + '</div>' +
+      (c.recommendation ? '<div style="font-size:12px;color:#94a3b8;border-top:1px solid #1f2537;padding-top:8px;margin-top:6px;"> Recommandation : ' + _escH(c.recommendation) + '</div>' : '') +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function renderReview() {
+  var list = document.getElementById(_dashAnalysis ? 'd-mods-list' : 'mods-list');
+  list.innerHTML = '';
+  modifications.forEach(function(m) {
+    var color = rc(m.risk);
+    var div = document.createElement('div');
+    div.className = 'mod-card';
+    div.id = 'card-' + m.id;
+    div.innerHTML =
+      '<div class="mod-header">' +
+        '<div class="mod-name">' + m.clause_name + '</div>' +
+        '<span class="risk-pill" style="background:' + color + '20;color:' + color + '">' + rl(m.risk) + '</span>' +
+      '</div>' +
+      '<div class="mod-body">' +
+        (m.rag_source ? '<div style="background:rgba(91,124,250,0.08);border:1px solid rgba(91,124,250,0.2);border-radius:7px;padding:5px 10px;font-size:11px;color:#5b7cfa;margin-bottom:10px;">>🧠 Basé sur: ' + m.rag_source + '</div>' : '') +
+        '<div class="mod-reason">💡 ' + m.reason + '</div>' +
+        '<div class="mod-label" style="color:#ef4444">⚠ Texte original</div>' +
+        '<div class="mod-original">' + m.original + '</div>' +
+        '<div class="mod-label" style="color:#10b981"> Modification proposée <span style="color:#6b7280;font-size:10px;font-weight:400">(éditable)</span></div>' +
+        '<div class="mod-proposed" id="proposed-' + m.id + '" contenteditable="true" spellcheck="true" style="cursor:text;outline:none;" oninput="onProposedEdit(' + m.id + ', this)">' + m.proposed + '</div>' +
+        '<div class="mod-actions">' +
+          '<button class="btn-accept" id="ba-' + m.id + '" onclick="decide(' + m.id + ',\'accepted\')"> Accepter</button>' +
+          '<button class="btn-reject" id="br-' + m.id + '" onclick="decide(' + m.id + ',\'rejected\')">L Refuser</button>' +
+        '</div>' +
+        '<div class="mod-status" id="st-' + m.id + '"></div>' +
+      '</div>';
+    list.appendChild(div);
+  });
+
+  var isDocx = curFile && (curFile.name.endsWith('.docx') || curFile.name.endsWith('.doc'));
+  document.getElementById('export-desc').innerHTML = isDocx
+    ? 'Le fichier DOCX original sera téléchargé avec les <strong>vraies Track Changes Word</strong>  mise en forme préservée.'
+    : 'Un document Word sera généré avec les modifications acceptées en Track Changes.';
+
+  updateStats();
+  renderCompliance();
+  if (_dashAnalysis) { document.getElementById('d-ana-review').style.display = ''; return; }
+  show('step-review');
+
+  // Pour les juristes : afficher le bouton Soumettre + section "Ajouter une clause"
+  // directement dans l'étape révision (sans attendre le téléchargement)
+  var jAct = document.getElementById('review-juriste-bar');
+  if(!jAct) {
+    jAct = document.createElement('div');
+    jAct.id = 'review-juriste-bar';
+    var exportSec = document.querySelector('.export-section');
+    if(exportSec) exportSec.parentNode.insertBefore(jAct, exportSec);
+  }
+  if(!_userRole) { checkRole().then(function(){ _renderReviewJuristeBar(); }); }
+  else { _renderReviewJuristeBar(); }
+}
+
+function _renderReviewJuristeBar(){
+  var jAct = document.getElementById('review-juriste-bar');
+  if(!jAct) return;
+  if(_userRole && _userRole !== 'juriste') { jAct.innerHTML=''; return; }
+  var alreadyNames = modifications.map(function(m){ return (m.clause_name||'').toLowerCase(); });
+  var contractClauses = window._allContractClauses||[];
+  var remaining = contractClauses.filter(function(c){ return alreadyNames.indexOf((c.name||'').toLowerCase())<0; });
+  var hasContractClauses = remaining.length > 0;
+  var optionsHtml = hasContractClauses
+    ? remaining.map(function(c){
+        var safe=c.name.replace(/"/g,'&quot;');
+        var safeT=(c.text||'').replace(/"/g,'&quot;').replace(/\n/g,' ').slice(0,500);
+        return '<option value="'+safe+'" data-text="'+safeT+'">'+_escH(c.name)+'</option>';
+      }).join('')
+    : '';
+  jAct.innerHTML =
+    '<div style="background:#0d1017;border:1px solid #1f2537;border-radius:12px;padding:16px;margin-bottom:16px">'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
+    +'<button id="btn-submit-review" onclick="saveAndSubmitFromReview()" style="padding:10px 20px;background:#f59e0b;border:none;border-radius:8px;color:#000;font-weight:700;font-size:13px;cursor:pointer">Soumettre au directeur pour validation →</button>'
+    +'<span style="font-size:11px;color:#4a5470">Vous pouvez aussi télécharger le DOCX ci-dessous.</span>'
+    +'</div>'
+    +'<div style="border-top:1px solid #1f2537;padding-top:12px">'
+    +'<div style="font-size:12px;font-weight:700;color:#5b7cfa;margin-bottom:4px">+ Signaler une clause inacceptable non détectée</div>'
+    +(hasContractClauses?'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">'+remaining.length+' clause(s) du contrat non analysée(s)</div>':'')
+    +(!hasContractClauses?'<label style="display:inline-flex;align-items:center;gap:8px;padding:7px 12px;background:#181c2a;border:1px solid #2a3040;border-radius:7px;color:#6b7280;font-size:11px;cursor:pointer;margin-bottom:10px">'
+      +'<input type="file" accept=".docx,.txt" style="display:none" onchange="reExtractClausesReview(this)">'
+      +'📂 Recharger le contrat pour lister les clauses</label>':'')
+    +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">'
+    +(hasContractClauses?'<select id="add-clause-select" onchange="_syncClause(this)" style="flex:2;min-width:200px;background:#181c2a;border:1px solid #2a3040;border-radius:6px;padding:7px 10px;font-size:12px;color:#e2e5f0;margin:0">'
+      +'<option value="">— Sélectionner une clause du contrat —</option>'
+      +optionsHtml
+      +'</select>':'')
+    +'<input type="text" id="add-clause-name-r" placeholder="'+(hasContractClauses?'ou saisir librement':'Nom de la clause')+'\" style="flex:1;min-width:130px;background:#181c2a;border:1px solid #2a3040;border-radius:6px;padding:7px 10px;font-size:12px;color:#e2e5f0;box-sizing:border-box">'
+    +'</div>'
+    +'<textarea id="add-clause-orig-r" placeholder="Texte de la clause (rempli automatiquement si sélectionnée ci-dessus)" style="width:100%;background:#181c2a;border:1px solid #2a3040;border-radius:6px;padding:8px 10px;font-size:12px;color:#e2e5f0;min-height:70px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit;margin-bottom:8px"></textarea>'
+    +'<button id="add-clause-btn-r" onclick="analyzeManualClauseInReview()" style="padding:8px 16px;background:#5b7cfa;border:none;border-radius:7px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Analyser avec l\'IA et ajouter</button>'
+    +'</div>'
+    +'</div>';
+}
+
+function _syncClause(sel){
+  var opt=sel.options[sel.selectedIndex];
+  var inp=document.getElementById('add-clause-name-r');
+  var ta=document.getElementById('add-clause-orig-r');
+  if(inp&&opt.value) inp.value=opt.value;
+  if(ta&&opt.dataset.text) ta.value=opt.dataset.text;
+  sel.value='';
+}
+function _syncClauseDash(sel){
+  var opt=sel.options[sel.selectedIndex];
+  var inp=document.getElementById('add-clause-name');
+  var ta=document.getElementById('add-clause-orig');
+  if(inp&&opt.value) inp.value=opt.value;
+  if(ta&&opt.dataset.text) ta.value=opt.dataset.text;
+  sel.value='';
+}
+// Re-extraction des clauses depuis un fichier rechargé (tableau de bord)
+async function reExtractClausesDash(inp, idx){
+  if(!inp.files||!inp.files[0]) return;
+  var label=inp.parentElement;
+  if(label) label.textContent='⏳ Extraction en cours…';
+  var text=await _readFileText(inp.files[0]);
+  var clauses=_extractContractClauses(text);
+  if(!clauses.length){ if(label) label.textContent='⚠️ Aucune clause détectée — essayez un fichier TXT'; return; }
+  window._allContractClauses=clauses;
+  // Sauvegarder immédiatement dans Supabase pour les prochaines fois
+  var ana=(window._userAnalyses||[])[idx];
+  if(ana&&ana.id){
+    var mods=window._currentMods||[];
+    _patchAnalysis(ana.id,{modifications:_modsWithMeta(mods)}).catch(function(){});
+  }
+  showAnaDetail(idx);
+}
+// Re-extraction des clauses depuis un fichier rechargé (flux analyse directe)
+async function reExtractClausesReview(inp){
+  if(!inp.files||!inp.files[0]) return;
+  var label=inp.parentElement;
+  if(label) label.textContent='⏳ Extraction en cours…';
+  var text=await _readFileText(inp.files[0]);
+  var clauses=_extractContractClauses(text);
+  if(!clauses.length){ if(label) label.textContent='⚠️ Aucune clause détectée — essayez un fichier TXT'; return; }
+  window._allContractClauses=clauses;
+  _renderReviewJuristeBar();
+}
+// Lit un fichier en texte brut (txt) ou extrait le texte d'un DOCX via JSZip
+async function _readFileText(file){
+  if(!file) return '';
+  var name=file.name.toLowerCase();
+  if(name.endsWith('.txt')||name.endsWith('.text')){
+    return new Promise(function(res){
+      var r=new FileReader();
+      r.onload=function(e){res(e.target.result||'');};
+      r.onerror=function(){res('');};
+      r.readAsText(file,'utf-8');
+    });
+  }
+  if(name.endsWith('.docx')){
+    try{
+      // Charger JSZip à la demande
+      if(!window.JSZip){
+        await new Promise(function(res,rej){
+          var s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      var zip=await JSZip.loadAsync(file);
+      var docXml=zip.file('word/document.xml');
+      if(!docXml) return '';
+      var xml=await docXml.async('text');
+      // Reconstituer les paragraphes : <w:p> = nouvelle ligne, <w:t> = texte
+      var paras=xml.split(/<w:p[ >]/);
+      return paras.map(function(p){
+        return (p.match(/<w:t[^>]*>([^<]*)<\/w:t>/g)||[]).map(function(m){
+          return m.replace(/<[^>]+>/g,'');
+        }).join('');
+      }).filter(Boolean).join('\n');
+    }catch(e){return '';}
+  }
+  return '';
+}
+
+// Extrait les clauses d'un texte de contrat (Article X, Clause X, 1. Objet, etc.)
+function _extractContractClauses(text){
+  if(!text||text.length<50) return [];
+  var lines=text.split('\n');
+  var clauses=[];
+  var curName=null;
+  var curLines=[];
+  // Détecte les en-têtes de clauses dans les formats français courants :
+  // "Article 1", "ARTICLE 1 -", "Clause 2 :", "Section 3", "Chapitre", "Titre"
+  // "1.", "1.1", "1.1.", "I.", "I -", "A.", "(1)", lignes entièrement en majuscules courtes
+  var headRe=/^(article|clause|section|chapitre|titre|annexe)\b/i;
+  var numRe=/^(\d+(\.\d+)*\.?|[IVXivx]+\.?|[A-Z]\.)\s+\S/;
+  var allCapsRe=/^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜÇ\s\d\-–:]{6,80}$/;
+  lines.forEach(function(line){
+    var t=line.trim();
+    if(!t) return;
+    var isHead=t.length<180&&(
+      headRe.test(t)||
+      numRe.test(t)||
+      (allCapsRe.test(t)&&t.length>5&&t===t.toUpperCase()&&/[A-ZÀ-Ü]{3}/.test(t))
+    );
+    if(isHead){
+      if(curName&&curLines.length>0) clauses.push({name:curName,text:curLines.join('\n').trim()});
+      else if(curName) clauses.push({name:curName,text:''});
+      curName=t; curLines=[];
+    } else if(curName){
+      curLines.push(t);
+      // Limiter le texte stocké à 600 caractères
+      if(curLines.join('\n').length>600) return;
+    }
+  });
+  if(curName) clauses.push({name:curName,text:curLines.join('\n').trim().slice(0,600)});
+  return clauses.filter(function(c){return c.name.length>2;}).slice(0,80);
+}
+
+// Ajoute la métadonnée des clauses dans un tableau de modifications
+function _modsWithMeta(mods){
+  var list=(mods||[]).filter(function(m){return !m._isClauseMeta&&!m._isFileMeta;});
+  if(window._allContractClauses&&window._allContractClauses.length){
+    list=[{_isClauseMeta:true,clauses:window._allContractClauses}].concat(list);
+  }
+  if(window._fileStoragePath||window._fileCacheId){
+    list=[{_isFileMeta:true,file_storage_path:window._fileStoragePath||'',file_cache_id:window._fileCacheId||''}].concat(list);
+  }
+  return list;
+}
+
+async function saveAndSubmitFromReview(){
+  if(!_cu){ showAuth(); return; }
+  if(!_userRole) await checkRole();
+  var btn = document.getElementById('btn-submit-review');
+  if(btn){ btn.textContent='\u23f3 Sauvegarde...'; btn.disabled=true; }
+  try{
+    // Recapture inline edits from contenteditable fields before saving
+    modifications.forEach(function(m) {
+      var el = document.getElementById('proposed-' + m.id);
+      if (el) {
+        var edited = el.innerText.trim();
+        if (edited && edited !== m.proposed) {
+          m.proposed = edited;
+        }
+      }
+    });
+    await saveAna(curFile?curFile.name:'Contrat', savedType||'generic', selectedPartie||'', modifications);
+    var anaId = window._lastSavedAnaId;
+    if(anaId){
+      await _patchAnalysis(anaId, {status:'pending_review', modifications:_modsWithMeta(modifications)});
+      alert('Analyse soumise au directeur. Il sera notifi\u00e9 lors de sa prochaine connexion.');
+    } else {
+      alert('Analyse sauvegard\u00e9e.');
+    }
+    showDash();
+  }catch(e){
+    alert('Erreur : '+e.message);
+    if(btn){ btn.textContent='Soumettre au directeur \u2192'; btn.disabled=false; }
+  }
+}
+
+async function analyzeManualClauseInReview(){
+  var name = (document.getElementById('add-clause-name-r')||{}).value||'';
+  name = name.trim();
+  if(!name){ alert('Veuillez saisir ou s\u00e9lectionner le nom de la clause.'); return; }
+  var orig = ((document.getElementById('add-clause-orig-r')||{}).value||'').trim();
+  var btn = document.getElementById('add-clause-btn-r');
+  if(btn){ btn.textContent='\u23f3 Analyse en cours...'; btn.disabled=true; }
+  try{
+    var r = await fetch(BACKEND+'/analyze-clause', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        clause_name: name,
+        clause_text: orig,
+        type: savedType||'general',
+        partie: selectedPartie||'',
+        user_email: (_cu&&_cu.email)||''
+      })
+    });
+    if(!r.ok){ var e=await r.json(); throw new Error(e.error||'Erreur serveur'); }
+    var data = await r.json();
+    var newMod = {
+      id: Date.now(),
+      clause_name: name,
+      original: orig||data.original||name,
+      proposed: data.proposed||orig||name,
+      risk: data.risk||'medium',
+      reason: data.reason||'Clause analys\u00e9e \u00e0 la demande'
+    };
+    modifications.push(newMod);
+    decisions[String(newMod.id)] = 'accepted';
+    renderReview();
+    // Clear inputs
+    var ni=document.getElementById('add-clause-name-r'); if(ni) ni.value='';
+    var ti=document.getElementById('add-clause-orig-r'); if(ti) ti.value='';
+    if(btn){ btn.textContent='Analyser avec l\u0027IA et ajouter'; btn.disabled=false; }
+  }catch(e){
+    alert('Erreur : '+e.message);
+    if(btn){ btn.textContent='Analyser avec l\u0027IA et ajouter'; btn.disabled=false; }
+  }
+}
+
+//  Export 
+async function exportDoc() {
+  var btn = document.getElementById('btn-export');
+  btn.textContent = '⏳ Génération en cours...';
+  btn.disabled = true;
+  try {
+    // Recapture all inline edits from contenteditable fields before export
+    modifications.forEach(function(m) {
+      var el = document.getElementById('proposed-' + m.id);
+      if (el) {
+        var edited = el.innerText.trim();
+        if (edited && edited !== m.proposed) {
+          m.proposed = edited;
+        }
+      }
+    });
+    var fd = buildFormData();
+    fd.append('modifications', JSON.stringify(modifications));
+    fd.append('decisions', JSON.stringify(decisions));
+    var resp = await fetch(BACKEND + '/export', { method: 'POST', body: fd });
+    if (!resp.ok) { var e = await resp.json(); throw new Error(e.error); }
+    var blob = await resp.blob();
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'contrat-track-changes.docx';
+    a.click();
+    btn.textContent = ' ✅ Téléchargé !';
+    btn.style.background = '#10b981';
+    setTimeout(function() {
+      btn.textContent = ' Télécharger avec Track Changes';
+      btn.style.background = '';
+      btn.disabled = false;
+    }, 3000);
+
+    // Silent auto-contribute full contract to queue
+    contributeToQueue();
+  } catch(e) {
+    alert('❌ ' + e.message);
+    btn.disabled = false;
+    btn.textContent = ' Télécharger avec Track Changes';
+  }
+}
+
+//  Reset 
+async function contributeToQueue() {
+  // Save to user account when downloading
+  try {
+    var _fn = curFile ? curFile.name : 'Contrat';
+    var _ct = document.getElementById('contract-type') ? document.getElementById('contract-type').value : '';
+    var _pa = document.getElementById('partie-select') ? document.getElementById('partie-select').value : '';
+    await saveAna(_fn, _ct, _pa, modifications);
+  } catch(e) { console.log('saveAna:', e); }
+  try {
+    console.log('contributeToQueue: start', {
+      curFile: curFile ? curFile.name : null,
+      savedText: savedText ? savedText.length + ' chars' : null,
+      selectedPartie: selectedPartie,
+      modifications: modifications.length,
+      decisions: Object.keys(decisions).length
+    });
+
+    var fd = new FormData();
+    fd.append('lang', 'auto');
+    fd.append('type', savedType || 'generic');
+    fd.append('partie', selectedPartie || '');
+    fd.append('contract_type', savedType || 'generic');
+    fd.append('modifications', JSON.stringify(modifications));
+    fd.append('decisions', JSON.stringify(decisions));
+
+    if (curFile) {
+      fd.append('file', curFile);
+      console.log('contributeToQueue: using curFile', curFile.name);
+    } else if (savedText && savedText.length > 50) {
+      fd.append('file', new Blob([savedText], {type:'text/plain'}), 'contract.txt');
+      console.log('contributeToQueue: using savedText');
+    } else {
+      console.log('contributeToQueue: no file available, skipping');
+      return;
+    }
+
+    var resp = await fetch(BACKEND + '/rag/contribute', { method: 'POST', body: fd });
+    var data = await resp.json();
+    console.log('contributeToQueue: response', resp.status, data);
+  } catch(e) {
+    console.log('contributeToQueue ERROR:', e.message);
+  }
+}
+
+function reset() {
+  curFile = null;
+  modifications = [];
+  decisions = {};
+  savedFormData = null;
+  hide('step-review');
+  hide('step-parties');
+  hide('step-loading');
+  hide('file-ok');
+  document.getElementById('contract-text').value = '';
+  document.getElementById('file-input').value = '';
+  hideErr('form-error');
+  stepReset();
+  show('step-form');
+  window.scrollTo(0, 0);
+}
+
+var _su='https://nezxohrkikgjegnhgpyn.supabase.co';
+var _sk='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lenhvaHJraWtnamVnbmhncHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTQxNzYsImV4cCI6MjA4OTM5MDE3Nn0.zhBCacGGmIX-rVE9E9MUcbY2RpMomfq33lyq6DNU2kI';
+var _cu=null;
+var _userRole=null;
+var _isAdmin=false;
+var _userParentEmail=null;
+async function sf(p,o){o=o||{};var t=localStorage.getItem('sbt')||_sk;var h={'apikey':_sk,'Authorization':'Bearer '+t,'Content-Type':'application/json'};if(o.headers)Object.assign(h,o.headers);var r=await fetch(_su+p,Object.assign({},o,{headers:h}));if(r.status===401&&t!==_sk){var ok=await _refreshSession();if(ok){var t2=localStorage.getItem('sbt')||_sk;var h2={'apikey':_sk,'Authorization':'Bearer '+t2,'Content-Type':'application/json'};if(o.headers)Object.assign(h2,o.headers);return fetch(_su+p,Object.assign({},o,{headers:h2}));}}return r;}
+async function _refreshSession(){
+  var rt=localStorage.getItem('sbr');
+  if(!rt) return false;
+  var rr=await fetch(_su+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':_sk,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});
+  var rd=await rr.json();
+  if(rd.access_token){localStorage.setItem('sbt',rd.access_token);if(rd.refresh_token)localStorage.setItem('sbr',rd.refresh_token);setU(rd.user||_cu||{email:_cu&&_cu.email});return true;}
+  localStorage.removeItem('sbt');localStorage.removeItem('sbr');return false;
+}
+async function chkSess(){var t=localStorage.getItem('sbt');if(!t)return;var r=await sf('/auth/v1/user');if(r.ok){setU(await r.json());return;}var ok=await _refreshSession();if(!ok){localStorage.removeItem('sbt');localStorage.removeItem('sbr');showAuth();}}
+function setU(u){_cu=u;document.getElementById('ubar').classList.add('show');var emailDisplay=(u.email||'').replace('@','[at]'); document.getElementById('ueml').textContent='>> '+emailDisplay;document.getElementById('deml').textContent=(u.email||'').replace('@','[at]');var b=document.getElementById('nlbtn');if(b)b.style.display='none';closeAuth();checkRole();}
+async function doLogin(){var e=document.getElementById('ae1').value.trim(),p=document.getElementById('ap1').value,err=document.getElementById('aerr');err.style.display='none';if(!e||!p){err.textContent='Champs requis';err.style.display='block';return;}var r=await sf('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:e,password:p})});var d=await r.json();if(d.access_token){localStorage.setItem('sbt',d.access_token);if(d.refresh_token)localStorage.setItem('sbr',d.refresh_token);setU(d.user);}else{err.textContent=d.error_description||'Erreur';err.style.display='block';}}
+async function doReg(){var e=document.getElementById('ae2').value.trim(),p=document.getElementById('ap2').value,err=document.getElementById('aerr2'),ok=document.getElementById('aok2');err.style.display='none';ok.style.display='none';if(!e||p.length<6){err.textContent='Email + mdp 6+ requis';err.style.display='block';return;}var _redir=encodeURIComponent(window.location.origin+window.location.pathname);var r=await sf('/auth/v1/signup?redirect_to='+_redir,{method:'POST',body:JSON.stringify({email:e,password:p})});var d=await r.json();if(d.id||d.user){ok.textContent='Compte cree - verifiez votre email';ok.style.display='block';}else{err.textContent=d.error_description||'Erreur';err.style.display='block';}}
+async function doOut(){await sf('/auth/v1/logout',{method:'POST'});localStorage.removeItem('sbt');localStorage.removeItem('sbr');_cu=null;document.getElementById('ubar').classList.remove('show');var b=document.getElementById('nlbtn');if(b)b.style.display='';}
+function showAuth(){var o=document.getElementById('auth-ov');o.classList.add('show');o.style.display='flex';}
+function closeAuth(){var o=document.getElementById('auth-ov');o.classList.remove('show');o.style.display='none';}
+function showReg(){document.getElementById('afl').style.display='none';document.getElementById('afr').style.display='block';document.getElementById('atitle').textContent='Creer un compte';}
+function showLogin(){document.getElementById('afr').style.display='none';document.getElementById('afl').style.display='block';document.getElementById('atitle').textContent='Connexion';}
+var _dashAnalysis = false;
+var _dAnaCurFile = null;
+
+function dAnaOnFile(input) {
+  if (input.files && input.files.length) {
+    _dAnaCurFile = input.files[0]; curFile = _dAnaCurFile; curMode = 'upload';
+    document.getElementById('d-file-ok').style.display = '';
+    document.getElementById('d-file-name').textContent = _dAnaCurFile.name + ' (' + (_dAnaCurFile.size/1024).toFixed(0) + ' KB)';
+  }
+}
+
+function dAnaReset() {
+  _dashAnalysis = false; _dAnaCurFile = null;
+  modifications = []; decisions = {}; window._compliance = [];
+  ['d-ana-loading','d-ana-parties','d-ana-review'].forEach(function(id){ document.getElementById(id).style.display='none'; });
+  document.getElementById('d-ana-form').style.display = '';
+  document.getElementById('d-file-ok').style.display = 'none';
+  document.getElementById('d-file-input').value = '';
+  document.getElementById('d-mods-list').innerHTML = '';
+  document.getElementById('d-compliance-section').innerHTML = '';
+  document.getElementById('d-ana-error').style.display = 'none';
+}
+
+async function dAnaStart() {
+  var err = document.getElementById('d-ana-error'); err.style.display = 'none';
+  if (!_dAnaCurFile) { err.textContent = '📤 Sélectionnez un fichier'; err.style.display = ''; return; }
+  if (_cu) {
+    try {
+      var accR = await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+      if (accR.ok) { var acc = await accR.json(); if (!acc.is_admin && acc.analyses_remaining!==-1 && !acc.can_analyze) { err.textContent = acc.message||"Quota d'analyses épuisé."; err.style.display=''; return; } }
+    } catch(e) {}
+  }
+  curFile = _dAnaCurFile; curMode = 'upload';
+  savedType = document.getElementById('d-contract-type').value;
+  document.getElementById('d-ana-form').style.display = 'none';
+  document.getElementById('d-ana-loading').style.display = '';
+  document.getElementById('d-ana-status').textContent = 'Identification des parties...';
+  try {
+    var fd = new FormData();
+    fd.append('file', curFile); fd.append('lang','auto'); fd.append('type', savedType);
+    if (_cu && _cu.email) fd.append('user_email', _cu.email);
+    var resp = await fetch(BACKEND+'/identify-parties', {method:'POST', body:fd});
+    if (!resp.ok) { var ed={}; try{ed=await resp.json();}catch(x){} throw new Error(ed.error||'Erreur '+resp.status); }
+    var data = await resp.json();
+    document.getElementById('d-ana-loading').style.display = 'none';
+    dAnaShowParties(data.parties || []);
+  } catch(e) {
+    document.getElementById('d-ana-loading').style.display = 'none';
+    document.getElementById('d-ana-form').style.display = '';
+    err.textContent = '❌ ' + (e.message || 'Erreur inattendue'); err.style.display = '';
+  }
+}
+
+function dAnaShowParties(parties) {
+  document.getElementById('d-ana-parties').style.display = '';
+  var list = document.getElementById('d-parties-list'); list.innerHTML = '';
+  var arr = parties.length ? parties : [{name:'Analyser (générique)', party_label:'Partie', description:''}];
+  arr.forEach(function(p) {
+    var btn = document.createElement('button');
+    btn.className = 'partie-btn';
+    btn.innerHTML = '<div class="name">' + _escH(p.name||p) + '</div>' +
+      (p.description ? '<div class="desc2">' + _escH(p.description) + '</div>' : '') +
+      (p.party_label ? '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">' + _escH(p.party_label) + '</div>' : '');
+    btn.onclick = (function(role){ return function(){ dAnaAnalyze(role); }; })(p.party_label || p.description || p.name || p);
+    list.appendChild(btn);
+  });
+}
+
+async function dAnaAnalyze(partie) {
+  selectedPartie = partie;
+  document.getElementById('d-ana-parties').style.display = 'none';
+  document.getElementById('d-ana-loading').style.display = '';
+  document.getElementById('d-ana-status').textContent = 'Analyse juridique en cours...';
+  _dashAnalysis = true;
+  try {
+    var fd = new FormData();
+    fd.append('file', curFile); fd.append('partie', partie); fd.append('lang','auto');
+    fd.append('type', savedType || document.getElementById('d-contract-type').value);
+    if (_cu && _cu.email) fd.append('user_email', _cu.email);
+    var resp = await fetch(BACKEND+'/analyze', {method:'POST', body:fd});
+    if (!resp.ok) { var ed={}; try{ed=await resp.json();}catch(x){} throw new Error(ed.error||'Erreur '+resp.status); }
+    var data = await resp.json();
+    modifications = data.modifications || []; window._compliance = data.compliance || [];
+    decisions = {}; modifications.forEach(function(m){ decisions[m.id]='pending'; });
+    if (data.file_cache_id) window._fileCacheId = data.file_cache_id;
+    if (data.file_storage_path) window._fileStoragePath = data.file_storage_path;
+    document.getElementById('d-ana-loading').style.display = 'none';
+    renderReview();
+  } catch(e) {
+    _dashAnalysis = false;
+    document.getElementById('d-ana-loading').style.display = 'none';
+    document.getElementById('d-ana-parties').style.display = '';
+    var err = document.getElementById('d-ana-error');
+    err.textContent = '❌ ' + (e.message || 'Erreur inattendue'); err.style.display = '';
+  }
+}
+
+function showDash(){document.getElementById('dash-ov').classList.add('show');loadDash();}
+function closeDash(){document.getElementById('dash-ov').classList.remove('show');}
+function dtab(t){var names=['analyses','models','juristes','abonnement','nouvelle'];document.querySelectorAll('.dtb').forEach(function(el,i){el.classList.toggle('active',names[i]===t);});document.querySelectorAll('.ds').forEach(function(s){s.classList.remove('active');});document.getElementById('d-'+t).classList.add('active');if(t==='juristes')loadJuristes();if(t==='abonnement')loadAbonnement();if(t==='nouvelle')dAnaReset();}
+async function checkRole(){
+  if(!_cu)return;
+  try{
+    // Utilise la clé anon pour contourner la RLS utilisateur (même approche que loadJuristes)
+    var r=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=role,parent_email',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+    if(r.ok){
+      var d=await r.json();
+      if(d[0]){_userRole=d[0].role;_userParentEmail=d[0].parent_email;_isAdmin=!!d[0].is_admin;window._dirPayStatus=d[0].payment_status;}
+      else _userRole='directeur';
+    } else {
+      _userRole='directeur'; // fallback si fetch échoue
+    }
+  }catch(e){console.log('checkRole error:',e);_userRole='directeur';}
+  // Update UI for role — toujours exécuté même en cas d'erreur
+  try{
+    var badge=document.getElementById('dash-role-badge');
+    var title=document.getElementById('dash-title');
+    var slAna=document.getElementById('sl-analyses');
+    var modelInfo=document.getElementById('model-upload-info');
+    if(_userRole==='directeur'||_isAdmin){
+      var jBtn=document.getElementById('dtb-juristes');
+      if(jBtn)jBtn.style.display='';
+      var abBtn=document.getElementById('dtb-abonnement');
+      if(abBtn)abBtn.style.display='';
+      var sbJ=document.getElementById('sb-juristes');
+      if(sbJ)sbJ.style.display='';
+      if(badge)badge.textContent=_isAdmin?'Admin':'Direction Juridique';
+      if(title)title.textContent='Tableau de bord Direction';
+      if(slAna)slAna.textContent='Analyses equipe';
+      if(modelInfo)modelInfo.innerHTML='<strong style="color:#5b7cfa">Soumission de modele :</strong> Les modeles que vous soumettez sont transmis a l\'admin pour integration dans la base RAG partagee.';
+      if(modelInfo)modelInfo.style.display='';
+    } else if(_userRole==='juriste'){
+      if(badge)badge.textContent='Juriste';
+      if(title)title.textContent='Mon espace';
+      if(modelInfo)modelInfo.innerHTML='<strong style="color:#5b7cfa">Soumission de modele :</strong> Les modeles que vous soumettez sont d\'abord examines par votre directeur juridique avant integration.';
+      if(modelInfo)modelInfo.style.display='';
+      var abBtnJ=document.getElementById('dtb-abonnement');
+      if(abBtnJ)abBtnJ.style.display='';
+    }
+  }catch(e2){console.log('checkRole UI error:',e2);}
+}
+
+async function loadDash(){
+  if(!_cu)return;
+  if(!_userRole)await checkRole();
+  // Load analyses based on role
+  var a=[];
+  try{
+    if(_userRole==='juriste'){
+      // Afficher quota juriste
+      try{
+        var qr=await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+        if(qr.ok){
+          var qa=await qr.json();
+          var remQ=qa.analyses_remaining!==-1?qa.analyses_remaining:'∞';
+          var sqEl=document.getElementById('stq');
+          var sbqEl=document.getElementById('sb-quota');
+          if(sqEl)sqEl.textContent=remQ;
+          if(sbqEl)sbqEl.style.display='';
+        }
+      }catch(e2){}
+      // Juriste: only own analyses
+      var r1=await sf('/rest/v1/analyses?user_id=eq.'+_cu.id+'&order=created_at.desc&limit=50&select=id,filename,contract_type,partie,created_at,modifications,user_id,status,director_notes,director_email');
+      a=r1.ok?await r1.json():[];
+    } else {
+      // Directeur: afficher quota
+      try{
+        var qrD=await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+        if(qrD.ok){
+          var qaD=await qrD.json();
+          var remQD=qaD.analyses_remaining!==-1?qaD.analyses_remaining:'illim.';
+          var sqElD=document.getElementById('stq');var sbqElD=document.getElementById('sb-quota');
+          if(sqElD)sqElD.textContent=remQD;
+          if(sbqElD)sbqElD.style.display='';
+        }
+      }catch(e3){}
+      // Directeur: own analyses + juristes' analyses
+      var r1=await sf('/rest/v1/analyses?user_id=eq.'+_cu.id+'&order=created_at.desc&limit=50&select=id,filename,contract_type,partie,created_at,modifications,user_id,status,director_notes,director_email');
+      a=r1.ok?await r1.json():[];
+      // Also load juristes analyses (use anon key to bypass user-level RLS)
+      var rj=await fetch(_su+'/rest/v1/user_accounts?parent_email=eq.'+encodeURIComponent(_cu.email)+'&select=id,email,role,created_at',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+      if(rj.ok){
+        var juristes=await rj.json();
+        window._juristesData=juristes;
+        for(var i=0;i<juristes.length;i++){
+          var rja=await fetch(_su+'/rest/v1/analyses?user_email=eq.'+encodeURIComponent(juristes[i].email)+'&order=created_at.desc&limit=20&select=id,filename,contract_type,partie,created_at,modifications,user_id,status,director_notes,director_email',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+          if(rja.ok){var ja=await rja.json();a=a.concat(ja.map(function(x){x._juristeEmail=juristes[i].email;return x;}));}
+        }
+      }
+    }
+  }catch(e){console.log('loadDash error:',e);}
+  document.getElementById('sta').textContent=a.length;
+  window._userAnalyses=a;
+  // Populate juriste filter and count for directeur
+  if(_userRole==='directeur'){
+    var juristes=window._juristesData||[];
+    var stj=document.getElementById('stj');
+    if(stj)stj.textContent=juristes.length;
+    var filterBar=document.getElementById('juriste-filter-bar');
+    var filterSel=document.getElementById('juriste-filter');
+    if(juristes.length>0&&filterBar&&filterSel){
+      filterSel.innerHTML='<option value="">Toute l\'equipe ('+a.length+')</option>';
+      juristes.forEach(function(j){
+        var cnt=a.filter(function(x){return x._juristeEmail===j.email;}).length;
+        var opt=document.createElement('option');opt.value=j.email;opt.textContent=j.email+' ('+cnt+' analyses)';filterSel.appendChild(opt);
+      });
+      var ownCnt=a.filter(function(x){return !x._juristeEmail;}).length;
+      var optOwn=document.createElement('option');optOwn.value='__own__';optOwn.textContent='Mes propres analyses ('+ownCnt+')';filterSel.appendChild(optOwn);
+      filterBar.style.display='';
+    }
+  }
+  var STATUS_LABELS={'draft':'Brouillon','pending_review':'En attente directeur','in_review':'En cours de révision','revision_requested':'Renvoyé pour révision par le directeur juridique','validated':'Validé par directeur','final_validated':'Validé — dans le RAG'};
+  var STATUS_COLORS={'draft':'#4a5470','pending_review':'#f59e0b','in_review':'#5b7cfa','revision_requested':'#ef4444','validated':'#10b981','final_validated':'#10b981'};
+  window._renderAnalyses=function(list){
+    // Trier : analyses normales par date, [ADVERSE] insérées juste après leur originale
+    var sorted=[];
+    var normals=list.filter(function(x){return !x.filename||x.filename.indexOf('[ADVERSE]')<0;});
+    normals.forEach(function(x){
+      sorted.push(x);
+      var base=x.filename||'';
+      list.filter(function(a){return a.filename&&a.filename.indexOf('[ADVERSE] '+base)===0;}).forEach(function(a){sorted.push(a);});
+    });
+    // Ajouter les [ADVERSE] orphelines non encore insérées
+    list.filter(function(x){return x.filename&&x.filename.indexOf('[ADVERSE]')===0&&sorted.indexOf(x)<0;}).forEach(function(x){sorted.push(x);});
+    document.getElementById('alist').innerHTML=sorted.length===0
+      ?'<p style="color:#6b7280;font-size:13px;padding:20px 0">Aucune analyse</p>'
+      :sorted.map(function(x){
+        var realIdx=window._userAnalyses.indexOf(x);
+        var isAdverse=x.filename&&x.filename.indexOf('[ADVERSE]')===0;
+        var tag=x._juristeEmail?'<span style="font-size:10px;background:#5b7cfa22;color:#5b7cfa;padding:2px 6px;border-radius:10px;margin-left:6px">⚖ '+x._juristeEmail+'</span>':'';
+        var ct=x.contract_type?'<span style="background:#1f2537;color:#a0a8c0;padding:1px 6px;border-radius:4px;font-size:10px;margin-right:4px">'+x.contract_type+'</span>':'';
+        var pa=x.partie?'<span style="background:rgba(16,185,129,0.1);color:#10b981;padding:1px 6px;border-radius:4px;font-size:10px">'+x.partie+'</span>':'';
+        var st=x.status||'draft';
+        var stLabel=STATUS_LABELS[st]||st;
+        var stColor=STATUS_COLORS[st]||'#4a5470';
+        var stBadge='<span style="font-size:10px;background:'+stColor+'22;color:'+stColor+';padding:2px 7px;border-radius:10px;font-weight:600;margin-left:6px">'+stLabel+'</span>';
+        var needsAttention=((_userRole==='juriste'&&st==='revision_requested')||(_userRole==='directeur'&&(st==='pending_review'||st==='validated')));
+        var border=needsAttention?'border-color:#f59e0b':'';
+        var adverseStyle=isAdverse?'margin-left:20px;border-left:3px solid #8b5cf6;':'';
+        var displayName=isAdverse?'↳ '+x.filename:x.filename;
+        var canDelete=!x._juristeEmail; // juriste can delete own; directeur can delete juriste too
+        return '<div class="ac" id="ana-card-'+realIdx+'" style="cursor:pointer;'+border+adverseStyle+'">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px" onclick="toggleAnaDetail('+realIdx+')">'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:15px;font-weight:700;color:#e2e5f0;margin-bottom:4px;word-break:break-word">'+displayName+'</div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">'+tag+stBadge+'</div>'
+          +'<p style="margin-top:5px">'+ct+pa+'<span style="color:#4a5470;font-size:11px;margin-left:4px">'+new Date(x.created_at).toLocaleDateString('fr-FR')+'</span></p>'
+          +(x.director_notes&&st==='revision_requested'?'<p style="font-size:11px;color:#ef4444;margin-top:4px;background:rgba(239,68,68,0.06);padding:4px 8px;border-radius:4px">Note: '+x.director_notes+'</p>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">'
+          +'<span style="font-size:11px;color:#4a5470" id="ana-toggle-icon-'+realIdx+'">▼</span>'
+          +'<button onclick="event.stopPropagation();deleteAnalysis(\''+x.id+'\','+realIdx+')" title="Supprimer cette analyse" style="background:transparent;border:1px solid #ef444440;color:#ef4444;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;line-height:1">✕</button>'
+          +'</div>'
+          +'</div>'
+          +'<div id="ana-detail-inline-'+realIdx+'" style="display:none"></div>'
+          +'</div>';
+      }).join('');
+  };
+  window._renderAnalyses(a);
+  window.filterAnalysesByJuriste=function(val){
+    if(!val) return window._renderAnalyses(window._userAnalyses);
+    if(val==='__own__') return window._renderAnalyses(window._userAnalyses.filter(function(x){return !x._juristeEmail;}));
+    window._renderAnalyses(window._userAnalyses.filter(function(x){return x._juristeEmail===val;}));
+  };
+  var r2=await sf('/rest/v1/user_models?user_id=eq.'+_cu.id+'&order=created_at.desc&select=id,filename,created_at');
+  var m=r2.ok?await r2.json():[];
+  document.getElementById('stm').textContent=m.length;
+  var mlistHtml=m.length===0
+    ?'<p style="color:#6b7280;font-size:13px">Aucun modele soumis</p>'
+    :m.map(function(x){
+      return '<div class="ac" style="display:flex;justify-content:space-between;align-items:center">'
+        +'<div><h4>'+x.filename+'</h4><p>Soumis le '+new Date(x.created_at).toLocaleDateString('fr-FR')+'</p></div>'
+        +'<button onclick="deleteModel(\''+x.id+'\', this)" style="background:transparent;border:1px solid #ef4444;color:#ef4444;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">Supprimer</button>'
+        +'</div>';
+    }).join('');
+
+  // Si directeur : charger aussi les suggestions des juristes
+  if(_userRole==='directeur'){
+    try{
+      var rp=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+encodeURIComponent(_cu.email));
+      var pending=rp.ok?(await rp.json()).suggestions||[]:[];
+      if(pending.length){
+        mlistHtml='<div style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">'+pending.length+' modèle(s) en attente de validation</div>'
+          +pending.map(function(s){
+            var sid=s.id;
+            var preview=(s.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            return '<div class="ac" style="border-color:#f59e0b33" data-sid="'+sid+'">'
+              +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+              +'<div style="flex:1">'
+              +'<h4 style="margin-bottom:3px">'+(s.filename||'Modèle')+'</h4>'
+              +'<p style="margin-bottom:8px">Soumis par <strong style="color:#f59e0b">'+(s.suggested_by||'')+'</strong> · '+new Date(s.created_at).toLocaleDateString('fr-FR')+'</p>'
+              +'</div>'
+              +'<button onclick="this.closest(\'[data-sid]\').querySelector(\'.sugg-preview\').style.display=this.closest(\'[data-sid]\').querySelector(\'.sugg-preview\').style.display===\'none\'?\'\':\'none\'" '
+              +'style="background:#1a2035;border:1px solid #1f2537;color:#a0a8c0;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">👁 Voir contenu</button>'
+              +'</div>'
+              +'<div class="sugg-preview" style="display:none;background:#0a0c12;border:1px solid #1f2537;border-radius:6px;padding:10px;font-size:11px;color:#9ca3af;white-space:pre-wrap;max-height:500px;overflow-y:auto;margin-bottom:10px;line-height:1.6">'
+              +(preview||'(contenu vide)')
+              +'</div>'
+              +'<div style="display:flex;gap:8px">'
+              +'<button class="fwd-sugg-btn" style="background:#10b98122;border:1px solid #10b981;color:#10b981;padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">✅ Valider → Admin</button>'
+              +'<button class="rej-sugg-btn" style="background:#ef444422;border:1px solid #ef4444;color:#ef4444;padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer">❌ Rejeter</button>'
+              +'</div></div>';
+          }).join('')
+          +(m.length?'<div style="margin-top:20px;padding-top:16px;border-top:1px solid #1f2537"><div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Vos modèles</div>'+m.map(function(x){return '<div class="ac" style="display:flex;justify-content:space-between;align-items:center"><div><h4>'+x.filename+'</h4><p>Soumis le '+new Date(x.created_at).toLocaleDateString('fr-FR')+'</p></div><button onclick="deleteModel(\''+x.id+'\', this)" style="background:transparent;border:1px solid #ef4444;color:#ef4444;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">Supprimer</button></div>';}).join('')+'</div>':'');
+      }
+    }catch(e){console.log('Erreur chargement suggestions directeur:',e);}
+  }
+
+  var mlistEl=document.getElementById('mlist');
+  mlistEl.innerHTML=mlistHtml;
+  // Boutons suggestions dans l'onglet Modeles
+  mlistEl.querySelectorAll('.fwd-sugg-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){forwardSugg(this.closest('[data-sid]').getAttribute('data-sid'));});
+  });
+  mlistEl.querySelectorAll('.rej-sugg-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){rejectSuggDir(this.closest('[data-sid]').getAttribute('data-sid'));});
+  });
+
+  // Load juristes tab if directeur
+  if(_userRole==='directeur'||_isAdmin)loadJuristes();
+}
+async function upMdl(inp){
+  if(!_cu){showAuth();return;}
+  if(!_userRole) await checkRole();
+  var f=inp.files[0];if(!f)return;
+  var r=await sf('/rest/v1/user_models',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify({user_id:_cu.id,user_email:_cu.email,filename:f.name,category:'contract',is_public:false})});
+  if(r.ok){
+    var alertMsg='Modele uploade';
+    try{
+      var fd=new FormData();
+      fd.append('file',f);
+      fd.append('source',f.name);
+      fd.append('category','contract');
+      fd.append('suggested_by',_cu.email);
+      if(_userRole==='juriste' && _userParentEmail){
+        // Juriste -> soumet au directeur pour validation
+        fd.append('target_email',_userParentEmail);
+        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
+        var sd=await r2.json();
+        if(!r2.ok) throw new Error(sd.error||'Erreur suggest-to-director');
+        alertMsg='Modele soumis au directeur juridique pour validation';
+      } else {
+        // Directeur -> approche avant/après pour trouver l'ID créé et le forwarder à l'admin
+        var dirEmail=encodeURIComponent(_cu.email);
+        // 1. Snapshot des IDs existants dans la boite directeur
+        var idsBefore=[];
+        try{var rlB=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);if(rlB.ok){var lb=await rlB.json();idsBefore=(lb.suggestions||[]).map(function(s){return s.id;});}}catch(e){}
+        // 2. Créer la suggestion (directeur se soumet à lui-même)
+        fd.append('target_email',_cu.email);
+        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
+        var r2txt=await r2.text();
+        if(!r2.ok) throw new Error('suggest-to-director: '+r2.status+' '+r2txt);
+        // 3. Récupérer la liste après et trouver la nouvelle suggestion (diff des IDs)
+        var rlA=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);
+        if(rlA.ok){
+          var la=await rlA.json();
+          var newSuggs=(la.suggestions||[]).filter(function(s){return idsBefore.indexOf(s.id)<0;});
+          if(newSuggs.length>0){
+            var sid=newSuggs[0].id;
+            await fetch(BACKEND+'/suggestions/forward-to-admin/'+sid,{method:'POST'});
+            alertMsg='Modele soumis pour validation admin';
+          } else {
+            alertMsg='Modele soumis pour validation admin';
+          }
+        } else {
+          alertMsg='Modele soumis pour validation admin';
+        }
+      }
+    }catch(e2){console.log('Suggest error:',e2);alertMsg='Modele uploade (erreur soumission: '+e2.message+')';}
+    alert(alertMsg);
+    loadDash();
+  }else alert('Erreur upload');
+}
+
+async function _decrementAnalyses(){
+  if(!_cu)return;
+  try{
+    // Source de verite : backend /account/info
+    var curRem=3;
+    try{
+      var biR=await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+      if(biR.ok){var bi=await biR.json();if(bi.analyses_remaining===-1)return;if(bi.analyses_remaining!=null)curRem=bi.analyses_remaining;}
+    }catch(e2){}
+    if(curRem<=0)return;
+    var newVal=curRem-1;
+    // UPSERT : cree la ligne si elle n'existe pas (PATCH echoue silencieusement sur ligne inexistante)
+    await fetch(_su+'/rest/v1/user_accounts?on_conflict=email',{
+      method:'POST',
+      headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({email:_cu.email,analyses_remaining:newVal})
+    });
+  }catch(e){console.log('Decrement error:',e);}
+}
+async function saveAna(fn,ct,pa,mods){
+  if(!_cu) return;
+  var isJuriste=_userRole==='juriste';
+  var payload={user_id:_cu.id,user_email:_cu.email,filename:fn||'Contrat',contract_type:ct||'',partie:pa||'',modifications:_modsWithMeta(mods),status:isJuriste?'draft':'validated',director_email:_userParentEmail||''};
+  var r=await sf('/rest/v1/analyses',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)}).catch(function(){return null;});
+  if(r&&r.ok){
+    var d=await r.json().catch(function(){return[];});
+    if(d[0]) window._lastSavedAnaId=d[0].id;
+    _decrementAnalyses();
+  }
+  // Envoyer à l'admin queue UNIQUEMENT si directeur (le juriste doit d'abord passer par le directeur)
+  if(!isJuriste){
+    var decisions={};
+    (mods||[]).forEach(function(m,i){decisions[String(m.id||i+1)]='accepted';});
+    fetch(BACKEND+'/queue/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fn||'Contrat',contract_type:ct||'',partie:pa||'',accepted_modifications:JSON.stringify(mods||[]),decisions:JSON.stringify(decisions),submitted_by:_cu.email,score:75})}).catch(function(){});
+  }
+}
+
+
+async function deleteModel(modelId, btn) {
+  if(!confirm('Supprimer ce modele ? Cette action est irreversible.')) return;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    var r = await sf('/rest/v1/user_models?id=eq.' + modelId, {method:'DELETE'});
+    if(r.ok || r.status === 204) {
+      btn.closest('.ac').remove();
+      var stm = document.getElementById('stm');
+      if(stm) stm.textContent = Math.max(0, parseInt(stm.textContent||'0') - 1);
+    } else {
+      alert('Erreur lors de la suppression');
+      btn.disabled = false; btn.textContent = 'Supprimer';
+    }
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+    btn.disabled = false; btn.textContent = 'Supprimer';
+  }
+}
+
+async function getUserModelRAG(){
+  if(!_cu)return[];
+  var r=await sf('/rest/v1/user_models?user_id=eq.'+_cu.id+'&select=id,filename,content');
+  return r.ok?await r.json():[];
+}
+
+
+
+async function showAnaDetail(idx) {
+  window._anaIdx = idx;
+  var ana = (window._userAnalyses||[])[idx];
+  if(!ana) return;
+  // S'assurer que le rôle est chargé avant d'afficher les boutons conditionnels
+  if(!_userRole) await checkRole();
+  var mods = ana.modifications || [];
+  if(typeof mods === 'string') { try { mods = JSON.parse(mods); } catch(e) { mods = []; } }
+  // Extraire la métadonnée des clauses si elle a été sauvegardée
+  var clauseMeta = mods.find(function(m){ return m._isClauseMeta; });
+  window._allContractClauses = clauseMeta ? (clauseMeta.clauses||[]) : [];
+  var fileMeta = mods.find(function(m){ return m._isFileMeta; });
+  window._fileStoragePath = fileMeta ? (fileMeta.file_storage_path||'') : '';
+  window._fileCacheId = fileMeta ? (fileMeta.file_cache_id||'') : '';
+  mods = mods.filter(function(m){ return !m._isClauseMeta && !m._isFileMeta; });
+  window._currentMods = mods.map(function(m){ return Object.assign({}, m); });
+
+  var st=ana.status||'draft';
+  var stLabels={'draft':'Brouillon','pending_review':'En attente directeur','in_review':'En cours de révision','revision_requested':'Renvoyé pour révision par le directeur juridique','validated':'Validé par directeur','final_validated':'Validé — intégré au RAG'};
+  var stColors={'draft':'#4a5470','pending_review':'#f59e0b','in_review':'#5b7cfa','revision_requested':'#ef4444','validated':'#10b981','final_validated':'#10b981'};
+  var stColor=stColors[st]||'#4a5470';
+  var isJuriste=_userRole==='juriste';
+  var isDirecteur=_userRole==='directeur';
+
+  // Boutons d'action selon le rôle et le statut
+  var actionBar='';
+  if(isJuriste&&(st==='draft'||st==='revision_requested')){
+    actionBar='<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+      +'<button onclick="submitForReview(\''+ana.id+'\')" style="padding:9px 18px;background:#f59e0b;border:none;border-radius:8px;color:#000;font-weight:700;font-size:13px;cursor:pointer">Soumettre au directeur pour validation →</button>'
+      +'</div>';
+  }
+  if(isDirecteur&&ana._juristeEmail&&st!=='validated'&&st!=='final_validated'){
+    actionBar='<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+      +'<button onclick="validateByDirector(\''+ana.id+'\')" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">Valider et transmettre à l\'admin</button>'
+      +'<button onclick="requestRevision(\''+ana.id+'\')" style="padding:9px 18px;background:#ef444422;border:1px solid #ef4444;color:#ef4444;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer">Demander une révision</button>'
+      +'</div>';
+  }
+  if(isDirecteur&&st==='validated'){
+    actionBar='<div style="padding:10px 14px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:8px;font-size:13px;color:#10b981;margin-bottom:16px">Transmis à l\'admin pour validation RAG</div>';
+  }
+
+  // Note du directeur si révision demandée
+  var noteSection='';
+  if(ana.director_notes){
+    noteSection='<div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px;margin-bottom:16px">'
+      +'<div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:4px;text-transform:uppercase">Note du directeur</div>'
+      +'<div style="font-size:13px;color:#e2e5f0">'+ana.director_notes+'</div>'
+      +'</div>';
+  }
+
+  var html = '<div style="margin-top:16px;border-top:1px solid #1f2537;padding-top:16px">'
+    + '<div style="background:#0d1017;border-radius:10px;padding:14px;margin-bottom:14px">'
+    + '<div style="font-size:18px;font-weight:800;color:#e2e5f0;margin-bottom:6px;word-break:break-word">📄 ' + (ana.filename||'Contrat') + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">'
+    + (ana.contract_type?'<span style="background:#1f2537;color:#a0a8c0;padding:2px 8px;border-radius:4px;font-size:11px">'+ana.contract_type+'</span>':'')
+    + (ana.partie?'<span style="background:rgba(16,185,129,0.1);color:#10b981;padding:2px 8px;border-radius:4px;font-size:11px">'+ana.partie+'</span>':'')
+    + '<span style="font-size:11px;background:'+stColor+'22;color:'+stColor+';padding:2px 8px;border-radius:10px;font-weight:600">'+stLabels[st]+'</span>'
+    + (ana._juristeEmail?'<span style="font-size:11px;color:#5b7cfa">⚖ '+ana._juristeEmail+'</span>':'')
+    + '</div>'
+    + '</div>'
+    + noteSection
+    + actionBar;
+
+  if(!window._currentMods.length) {
+    html += '<p style="color:#6b7280;font-size:13px">Aucune modification enregistree.</p>';
+  }
+
+  window._currentMods.forEach(function(m, i) {
+    var risk = m.risk || 'medium';
+    var col = risk==='high' ? '#ef4444' : risk==='low' ? '#10b981' : '#f59e0b';
+    var lbl = risk==='high' ? 'Risque eleve' : risk==='low' ? 'Risque faible' : 'Risque modere';
+    html += '<div style="background:#181c2a;border:1px solid #2a3040;border-radius:10px;padding:16px;margin-bottom:12px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+      + '<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:' + col + '22;color:' + col + '">' + lbl + '</span>'
+      + '<strong style="color:#e2e5f0;font-size:14px">' + (m.clause_name||'Clause') + '</strong>'
+      + '</div>'
+      + '<p style="font-size:12px;color:#8892a4;margin-bottom:10px;line-height:1.5">' + (m.reason||'') + '</p>'
+      + '<div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Texte original</div>'
+      + '<div style="background:#0d1017;border-radius:6px;padding:10px;font-size:12px;color:#a0a8c0;margin-bottom:12px;line-height:1.6;white-space:pre-wrap">' + (m.original||'Non disponible') + '</div>'
+      + '<div style="font-size:11px;font-weight:600;color:#5b7cfa;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Proposition (modifiable)</div>'
+      + '<textarea style="width:100%;background:#0d1017;border:1px solid #2a3040;border-radius:6px;padding:10px;font-size:12px;color:#e2e5f0;min-height:80px;resize:vertical;box-sizing:border-box;line-height:1.6" '
+      + 'oninput="window._currentMods[' + i + '].proposed=this.value">' + (m.proposed||'') + '</textarea>'
+      + '</div>';
+  });
+
+  // Zone note directeur (visible uniquement pour le directeur en revue)
+  if(isDirecteur&&ana._juristeEmail&&st!=='validated'&&st!=='final_validated'){
+    html+='<div style="margin-top:12px">'
+      +'<div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;text-transform:uppercase">Note pour le juriste (optionnel)</div>'
+      +'<textarea id="director-note-input" placeholder="Ex: Vérifier la clause de résiliation, modifier la durée..." style="width:100%;background:#0d1017;border:1px solid #2a3040;border-radius:6px;padding:10px;font-size:12px;color:#e2e5f0;min-height:60px;resize:vertical;box-sizing:border-box"></textarea>'
+      +'</div>';
+  }
+  html += '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+    +'<button onclick="dlUserAnalysis()" style="flex:1;padding:11px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;color:#a0a8c0;font-size:13px;cursor:pointer;min-width:140px">Télécharger DOCX</button>'
+    +(isJuriste&&(st==='draft'||st==='revision_requested')?'<button onclick="submitForReview(\''+ana.id+'\')" style="flex:2;padding:11px;background:#f59e0b;border:none;border-radius:8px;color:#000;font-weight:700;font-size:13px;cursor:pointer">Soumettre au directeur →</button>':'')
+    +(isDirecteur&&ana._juristeEmail&&st!=='validated'&&st!=='final_validated'?'<button onclick="validateByDirector(\''+ana.id+'\')" style="flex:2;padding:11px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">Valider → admin</button>':'')
+    +'</div>'
+    // Section "Ajouter une clause" pour juriste en révision
+    +(isJuriste&&(st==='draft'||st==='revision_requested')?
+      (function(){
+        var doneNames=(window._currentMods||[]).map(function(m){return (m.clause_name||'').toLowerCase();});
+        var contractClauses=window._allContractClauses||[];
+        var rem=contractClauses.filter(function(c){return doneNames.indexOf((c.name||'').toLowerCase())<0;});
+        var hasReal=rem.length>0;
+        var optHtml=hasReal
+          ?rem.map(function(c){
+              var safe=c.name.replace(/"/g,'&quot;');
+              var safeT=(c.text||'').replace(/"/g,'&quot;').replace(/\n/g,' ').slice(0,500);
+              return '<option value="'+safe+'" data-text="'+safeT+'">'+_escH(c.name)+'</option>';
+            }).join('')
+          :'';
+        return '<div style="margin-top:16px;border:1px dashed #2a3040;border-radius:10px;padding:14px">'
+          +'<div style="font-size:12px;font-weight:700;color:#5b7cfa;margin-bottom:4px">+ Signaler une clause inacceptable non détectée</div>'
+          +(hasReal?'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">'+rem.length+' clause(s) du contrat non analysée(s)</div>':'')
+          +(!hasReal?'<label style="display:inline-flex;align-items:center;gap:8px;padding:7px 12px;background:#1a2035;border:1px solid #2a3040;border-radius:7px;color:#6b7280;font-size:11px;cursor:pointer;margin-bottom:10px">'
+            +'<input type="file" accept=".docx,.txt" style="display:none" onchange="reExtractClausesDash(this,'+idx+')">'
+            +'📂 Recharger le contrat pour lister les clauses</label>':'')
+          +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">'
+          +(hasReal?'<select id="add-clause-sel-d" onchange="_syncClauseDash(this)" style="flex:2;min-width:180px;background:#0d1017;border:1px solid #2a3040;border-radius:6px;padding:7px 10px;font-size:12px;color:#e2e5f0;margin:0">'
+            +'<option value="">— Sélectionner une clause du contrat —</option>'
+            +optHtml
+            +'</select>':'')
+          +'<input type="text" id="add-clause-name" placeholder="'+(hasReal?'ou saisir librement':'Nom de la clause')+'\" style="flex:1;min-width:120px;background:#0d1017;border:1px solid #2a3040;border-radius:6px;padding:7px 10px;font-size:12px;color:#e2e5f0;box-sizing:border-box">'
+          +'</div>'
+          +'<textarea id="add-clause-orig" placeholder="Texte rempli automatiquement à la sélection — modifiable" style="width:100%;background:#0d1017;border:1px solid #2a3040;border-radius:6px;padding:8px 10px;font-size:12px;color:#e2e5f0;min-height:80px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit;margin-bottom:8px"></textarea>'
+          +'<button id="add-clause-btn" onclick="analyzeManualClause()" style="padding:9px 18px;background:#5b7cfa;border:none;border-radius:7px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Analyser avec l\'IA et ajouter</button>'
+          +'</div>';
+      })()
+    :'')
+    // Section markups partie adverse — uniquement après validation directeur
+    +(st==='validated'||st==='final_validated'?
+      '<div style="margin-top:20px;border-top:1px solid #1f2537;padding-top:16px">'
+      +'<div style="font-size:12px;font-weight:700;color:#8b5cf6;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⚔ Version partie adverse</div>'
+      +'<div style="font-size:12px;color:#6b7280;margin-bottom:12px;line-height:1.5">Importez la version clean envoyée par la partie adverse (DOCX ou TXT). Le système analysera leur document et proposera des contre-rédactions basées sur vos clauses validées.</div>'
+      +'<label style="display:inline-block;padding:9px 18px;background:#1a2035;border:1px solid #8b5cf644;color:#8b5cf6;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600">'
+      +'<input type="file" id="adverse-file-inp" accept=".docx,.txt,.pdf" style="display:none" onchange="analyzeAdverse(\''+ana.id+'\',\''+ana.contract_type+'\',\''+ana.partie+'\')">'
+      +'⚔ Importer version adverse</label>'
+      +'<div id="adverse-result" style="margin-top:12px"></div>'
+      +'</div>'
+    :'')
+    + '</div>';
+
+  // Rendre inline dans la carte
+  var inlineDiv = document.getElementById('ana-detail-inline-'+idx);
+  if(inlineDiv) {
+    inlineDiv.innerHTML = html;
+    inlineDiv.style.display = 'block';
+    inlineDiv.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+}
+
+function toggleAnaDetail(idx){
+  var inlineDiv = document.getElementById('ana-detail-inline-'+idx);
+  var icon = document.getElementById('ana-toggle-icon-'+idx);
+  if(!inlineDiv) return;
+  var isOpen = inlineDiv.style.display !== 'none' && inlineDiv.innerHTML !== '';
+  if(isOpen){
+    inlineDiv.style.display = 'none';
+    if(icon) icon.textContent = '▼';
+    window._anaIdx = null;
+  } else {
+    showAnaDetail(idx);
+    if(icon) icon.textContent = '▲';
+  }
+}
+
+async function deleteAnalysis(id, idx){
+  if(!confirm('Supprimer cette analyse ? Cette action est irréversible.')) return;
+  var card = document.getElementById('ana-card-'+idx);
+  if(card) card.style.opacity='0.4';
+  try{
+    // Utiliser la clé anon + Prefer:return=representation pour détecter un blocage RLS silencieux
+    var r = await fetch(_su+'/rest/v1/analyses?id=eq.'+id, {
+      method:'DELETE',
+      headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json','Prefer':'return=representation'}
+    });
+    var deleted = [];
+    try { deleted = await r.json(); } catch(e) {}
+    if((r.ok || r.status===204) && Array.isArray(deleted) && deleted.length === 0){
+      // RLS a bloqué sans erreur — essai avec le token utilisateur
+      var r2 = await fetch(_su+'/rest/v1/analyses?id=eq.'+id, {
+        method:'DELETE',
+        headers:{'apikey':_sk,'Authorization':'Bearer '+(localStorage.getItem('sbt')||_sk),'Content-Type':'application/json','Prefer':'return=representation'}
+      });
+      try { deleted = await r2.json(); } catch(e) {}
+    }
+    if(deleted.length > 0 || r.status===204){
+      window._juristesData=null;
+      loadDash();
+    } else {
+      alert('Impossible de supprimer cette analyse (droits insuffisants).');
+      if(card) card.style.opacity='1';
+    }
+  }catch(e){
+    alert('Erreur : '+e.message);
+    if(card) card.style.opacity='1';
+  }
+}
+
+function _escH(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _escHBr(s){return _escH(s).replace(/\n/g,'<br>');}
+
+// Ratio de mots communs entre deux textes (0 = rien en commun, 1 = identique)
+function _wordSim(a,b){
+  if(!a||!b) return 0;
+  var wa=a.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(Boolean);
+  var wb=b.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(Boolean);
+  if(!wa.length||!wb.length) return 0;
+  var setB=new Set(wb);
+  var common=wa.filter(function(w){return setB.has(w);}).length;
+  return common/Math.max(wa.length,wb.length);
+}
+
+async function analyzeAdverse(anaId, contractType, partie){
+  var inp=document.getElementById('adverse-file-inp');
+  var file=inp?inp.files[0]:null;
+  if(!file) return;
+  var res=document.getElementById('adverse-result');
+  if(res)res.innerHTML='<div style="color:#8b5cf6;font-size:13px;padding:10px 0">⏳ Analyse des écarts par rapport à vos positions validées...</div>';
+
+  try{
+    var fd=new FormData();
+    fd.append('file',file);
+    fd.append('type',contractType||'general');
+    fd.append('partie',partie||'');
+    fd.append('lang','auto');
+    var r=await fetch(BACKEND+'/analyze',{method:'POST',body:fd});
+    var data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur serveur');
+    var adverseMods=data.modifications||[];
+
+    var ourMods=window._currentMods||[];
+
+    function findOurClause(adverseClauseName){
+      if(!adverseClauseName||!ourMods.length) return null;
+      var name=adverseClauseName.toLowerCase();
+      return ourMods.find(function(m){
+        var mn=(m.clause_name||'').toLowerCase();
+        return mn&&(mn===name||name.indexOf(mn.split(' ')[0])>=0||mn.indexOf(name.split(' ')[0])>=0);
+      })||null;
+    }
+
+    // Filtrer : ne garder que les clauses où la partie adverse s'écarte de notre position validée
+    var results=adverseMods.map(function(m){
+      var ours=findOurClause(m.clause_name);
+      var ourProposed=ours?(ours.proposed||ours.original):'';
+      // Si le texte adverse est très proche de notre proposition validée (>65%), ils ont accepté → ignorer
+      if(ours&&_wordSim(ourProposed,m.original||'')>0.65) return null;
+      return {
+        clause_name: m.clause_name,
+        original: m.original,       // version de la partie adverse
+        proposed: ours?ourProposed:m.proposed,  // notre contre-proposition
+        risk: m.risk,
+        reason: m.reason,
+        _fromOurs: !!ours
+      };
+    }).filter(Boolean);
+
+    if(!results.length){
+      if(res)res.innerHTML='<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:14px;font-size:13px;color:#10b981">✅ La partie adverse n\'a pas modifié vos positions validées. Aucune contre-proposition nécessaire.</div>';
+      return;
+    }
+
+    var html='<div style="font-size:11px;font-weight:700;color:#8b5cf6;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">'
+      +'⚔ '+results.length+' écart(s) détecté(s) par rapport à vos positions validées</div>';
+
+    results.forEach(function(m,i){
+      var risk=m.risk||'medium';
+      var col=risk==='high'?'#ef4444':risk==='low'?'#10b981':'#f59e0b';
+      var lbl=risk==='high'?'Risque élevé':risk==='low'?'Risque faible':'Risque modéré';
+      var sourceTag=m._fromOurs
+        ?'<span style="font-size:10px;background:#10b98122;color:#10b981;padding:1px 6px;border-radius:10px">✓ vs notre version validée</span>'
+        :'<span style="font-size:10px;background:#f59e0b22;color:#f59e0b;padding:1px 6px;border-radius:10px">clause non couverte</span>';
+      html+='<div class="mod-card" style="margin-bottom:14px">'
+        +'<div class="mod-header">'
+        +'<div class="mod-name">'+_escH(m.clause_name||'Clause')+'&nbsp;'+sourceTag+'</div>'
+        +'<span class="risk-pill" style="background:'+col+'20;color:'+col+'">'+lbl+'</span>'
+        +'</div>'
+        +'<div class="mod-body">'
+        +(m.reason?'<div style="font-size:11px;color:#8892a4;margin-bottom:10px;line-height:1.5">💡 '+_escH(m.reason)+'</div>':'')
+        +'<div class="mod-label" style="color:#ef4444">⚔ Version de la partie adverse</div>'
+        +'<div class="mod-original" style="color:#ef9a9a;line-height:1.6">'+_escHBr(m.original||'—')+'</div>'
+        +'<div class="mod-label" style="color:#8b5cf6"> Notre contre-proposition <span style="color:#6b7280;font-size:10px;font-weight:400">(éditable)</span></div>'
+        +'<textarea id="adv-mod-'+i+'" class="mod-proposed" style="width:100%;background:#181c2a;border:1px solid #2a3040;border-radius:6px;padding:10px;font-size:12px;color:#e2e5f0;min-height:80px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit">'+_escH(m.proposed||'')+'</textarea>'
+        +'</div>'
+        +'</div>';
+    });
+    html+='<button onclick="saveAdverseResponse(\''+anaId+'\','+results.length+')" style="margin-top:4px;padding:10px 22px;background:#8b5cf6;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">Sauvegarder les contre-propositions →</button>';
+    if(res)res.innerHTML=html;
+    window._adverseMods=results;
+  }catch(e){
+    if(res)res.innerHTML='<div style="color:#ef4444;font-size:12px;padding:10px 0">Erreur : '+e.message+'</div>';
+  }
+}
+
+async function saveAdverseResponse(originalAnaId, modCount){
+  var mods=(window._adverseMods||[]).map(function(m,i){
+    var ta=document.getElementById('adv-mod-'+i);
+    return Object.assign({},m,{proposed:ta?ta.value:m.proposed,is_adverse_response:true});
+  });
+  if(!_cu)return;
+  var ana=(window._userAnalyses||[])[window._anaIdx||0]||{};
+  var payload={
+    user_id:_cu.id,user_email:_cu.email,
+    filename:'[ADVERSE] '+( ana.filename||'Contrat'),
+    contract_type:ana.contract_type||'',partie:ana.partie||'',
+    modifications:mods,status:'draft',
+    director_email:_userParentEmail||ana.director_email||''
+  };
+  var r=await fetch(_su+'/rest/v1/analyses',{
+    method:'POST',
+    headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json','Prefer':'return=representation'},
+    body:JSON.stringify(payload)
+  });
+  if(r.ok||r.status===201){
+    var saved=await r.json().catch(function(){return[];});
+    var newId=saved[0]?saved[0].id:null;
+    window._juristesData=null;
+    await loadDash();
+    // Auto-ouvrir la nouvelle analyse pour que le juriste puisse soumettre immédiatement
+    if(newId){
+      var newIdx=(window._userAnalyses||[]).findIndex(function(x){return x.id===newId;});
+      if(newIdx>=0)showAnaDetail(newIdx);
+    }
+  } else { alert('Erreur sauvegarde ('+r.status+')'); }
+}
+
+async function analyzeManualClause(){
+  var nameEl=document.getElementById('add-clause-name');
+  var origEl=document.getElementById('add-clause-orig');
+  var btn=document.getElementById('add-clause-btn');
+  var name=(nameEl||{}).value||'';
+  var orig=(origEl||{}).value||'';
+  name=name.trim(); orig=orig.trim();
+  if(!name){alert('Veuillez saisir ou sélectionner le nom de la clause.');return;}
+  var ana=(window._userAnalyses||[])[window._anaIdx||0]||{};
+  if(btn){btn.textContent='⏳ Analyse en cours...';btn.disabled=true;}
+  try{
+    var textToAnalyze=orig||('Analyser cette clause de contrat et proposer une meilleure rédaction : '+name);
+    var fd=new FormData();
+    fd.append('file',new Blob([textToAnalyze],{type:'text/plain'}),'clause.txt');
+    fd.append('type',ana.contract_type||'general');
+    fd.append('partie',ana.partie||'');
+    fd.append('lang','auto');
+    var r=await fetch(BACKEND+'/analyze',{method:'POST',body:fd});
+    var data=await r.json();
+    var mods=data.modifications||[];
+    // Prendre la première modification IA ou construire une entrée de base
+    var aiMod=mods[0]||{};
+    window._currentMods.push({
+      id:Date.now(),
+      clause_name:name,
+      original:orig||aiMod.original||name,
+      proposed:aiMod.proposed||orig||name,
+      risk:aiMod.risk||'medium',
+      reason:aiMod.reason||'Clause signalée manuellement par le juriste',
+      _manual:true
+    });
+    showAnaDetail(window._anaIdx);
+  }catch(e){
+    alert('Erreur lors de l\'analyse : '+e.message);
+    if(btn){btn.textContent='Analyser avec l\'IA';btn.disabled=false;}
+  }
+}
+
+async function dlUserAnalysis() {
+  var ana = (window._userAnalyses||[])[window._anaIdx||0] || {};
+  var mods = window._currentMods || [];
+  var det = document.getElementById('user-ana-detail');
+  var btn = det ? det.querySelector('button[onclick*="dlUserAnalysis"]') : null;
+  if(btn) { btn.textContent = 'Generation en cours...'; btn.disabled = true; }
+  try {
+    var fd = new FormData();
+    var realMods = mods.filter(function(m){ return !m._isClauseMeta && !m._isFileMeta; });
+    var fileStoragePath = window._fileStoragePath || '';
+    var fileCacheId = window._fileCacheId || '';
+    if (fileStoragePath || fileCacheId) {
+      if (fileStoragePath) fd.append('file_storage_path', fileStoragePath);
+      if (fileCacheId) fd.append('file_cache_id', fileCacheId);
+      fd.append('file', new Blob([''], {type:'text/plain'}), 'placeholder.txt');
+    } else {
+      // Fallback sans fichier stocké : envoyer le texte des modifications nommé .docx
+      var contractText = realMods.map(function(m){
+        return (m.clause_name||'Clause') + ' - ' + (m.original||'');
+      }).join(' | ');
+      if(!contractText.trim()) contractText = 'Contrat - ' + (ana.filename||'document');
+      var docxFilename = (ana.filename||'contrat.docx').replace(/\.[^.]+$/, '.docx');
+      fd.append('file', new Blob([contractText], {type:'text/plain'}), docxFilename);
+    }
+    fd.append('lang', 'auto');
+    fd.append('type', ana.contract_type||'generic');
+    var decs = {};
+    realMods.forEach(function(m){ decs[String(m.id)] = 'accepted'; });
+    fd.append('modifications', JSON.stringify(realMods));
+    fd.append('decisions', JSON.stringify(decs));
+    var resp = await fetch('https://web-production-f96f7.up.railway.app/export', {method:'POST', body:fd});
+    if(resp.ok) {
+      var blob = await resp.blob();
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = (ana.filename||'contrat').replace(/.[^.]+$/, '') + '-modifie.docx';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if(btn) {
+        btn.textContent = 'Telecharge !';
+        btn.style.background = '#10b981';
+        setTimeout(function(){
+          btn.textContent = 'Telecharger avec mes modifications';
+          btn.style.background = '';
+          btn.disabled = false;
+        }, 3000);
+      }
+    } else {
+      var errText = await resp.text();
+      throw new Error('Erreur ' + resp.status + ' : ' + errText);
+    }
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+    if(btn) { btn.disabled = false; btn.textContent = 'Telecharger avec mes modifications'; }
+  }
+}
+
+async function loadJuristes(){
+  var el=document.getElementById('juristes-list');
+  if(!el||!_cu)return;
+  el.innerHTML='<div style="color:#6b7280;font-size:13px">Chargement...</div>';
+  try{
+    // Réutiliser les données déjà chargées par loadDash pour éviter l'incohérence
+    var juristes=window._juristesData;
+    if(!juristes){
+      var r=await fetch(_su+'/rest/v1/user_accounts?parent_email=eq.'+encodeURIComponent(_cu.email)+'&select=id,email,role,created_at',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+      juristes=r.ok?await r.json():[];
+      window._juristesData=juristes;
+    }
+    // Fetch director account data via backend (évite erreur 400 si colonnes manquantes)
+    var rdDir=await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+    var dirAcc=rdDir.ok?await rdDir.json():{};
+    var isAdmin=dirAcc.role==='admin';
+    var nbJuristesMax=isAdmin?9999:(dirAcc.nb_juristes_max||0);
+    var isActive=isAdmin||dirAcc.payment_status==='active';
+    var slotsLeft=isAdmin?9999:Math.max(0,nbJuristesMax-juristes.length);
+
+    var rp=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+encodeURIComponent(_cu.email));
+    var pending=[];
+    if(rp.ok){var pd=await rp.json();pending=pd.suggestions||[];}
+    var allAna=window._userAnalyses||[];
+
+    // Slot status bar
+    var slotLabel=isAdmin?(''+juristes.length+' juriste(s) — accès illimité'):(juristes.length+' / '+nbJuristesMax+' utilisé(s)');
+    var slotBar=isActive
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;background:#0a0c12;border-radius:8px;padding:12px 16px;margin-bottom:12px">'
+        +'<div><div style="font-size:12px;color:#9ca3af">Comptes juristes</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#e2e5f0;margin-top:2px">'+slotLabel+'</div></div>'
+        +(slotsLeft>0
+          ? '<button id="btn-create-juriste" style="padding:8px 16px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">+ Créer un juriste</button>'
+          : '<span style="font-size:12px;color:#f59e0b;padding:6px 12px;border:1px solid #f59e0b33;border-radius:8px">Quota atteint — modifiez votre abonnement</span>')
+        +'</div>'
+      : '<div style="background:#1a1209;border:1px solid #f59e0b33;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:#f59e0b">Souscrivez un abonnement pour créer des comptes juristes.</div>';
+
+    // Create form (hidden by default)
+    var createForm=slotsLeft>0&&isActive
+      ? '<div id="create-juriste-form" style="display:none;background:#0a0c12;border:1px solid #5b7cfa33;border-radius:10px;padding:16px;margin-bottom:12px">'
+        +'<div style="font-size:13px;font-weight:700;color:#e2e5f0;margin-bottom:14px">Nouveau compte juriste</div>'
+        +'<div style="margin-bottom:10px"><label style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px">Email</label>'
+        +'<input id="jur-email" type="email" placeholder="juriste@cabinet.com" style="width:100%;background:#111420;border:1px solid #1f2537;border-radius:8px;padding:9px 12px;color:#e2e5f0;font-size:13px"/></div>'
+        +'<div style="margin-bottom:14px"><label style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px">Mot de passe temporaire</label>'
+        +'<input id="jur-pwd" type="password" placeholder="Min. 8 caractères" style="width:100%;background:#111420;border:1px solid #1f2537;border-radius:8px;padding:9px 12px;color:#e2e5f0;font-size:13px"/></div>'
+        +'<div id="jur-err" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px"></div>'
+        +'<div id="jur-ok" style="display:none;color:#10b981;font-size:12px;margin-bottom:10px"></div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button id="btn-jur-submit" style="flex:1;padding:10px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Créer le compte</button>'
+        +'<button id="btn-jur-cancel" style="padding:10px 16px;background:none;border:1px solid #1f2537;border-radius:8px;color:#6b7280;font-size:13px;cursor:pointer">Annuler</button>'
+        +'</div></div>'
+      : '';
+
+    var html=slotBar+createForm;
+    if(!juristes.length){
+      html+='<div style="text-align:center;padding:30px 0">'
+        +'<div style="font-size:32px;margin-bottom:10px">&#9878;</div>'
+        +'<div style="font-size:14px;font-weight:600;color:#e2e5f0;margin-bottom:6px">Aucun juriste rattaché</div>'
+        +'<div style="font-size:12px;color:#6b7280">'+(slotsLeft>0?'Cliquez sur "Créer un juriste" pour ajouter votre premier juriste.':'Souscrivez un abonnement avec des juristes pour commencer.')+'</div>'
+        +'</div>';
+    } else {
+      html+='<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">'+juristes.length+' juriste(s) dans votre equipe</div>';
+      html+=juristes.map(function(j){
+        var juristeAna=allAna.filter(function(x){return x._juristeEmail===j.email;});
+        var lastAna=juristeAna[0];
+        var lastDate=lastAna?new Date(lastAna.created_at).toLocaleDateString('fr-FR'):'Jamais';
+        return '<div style="background:#111420;border:1px solid #1f2537;border-radius:10px;padding:14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'
+          +'<div>'
+          +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+          +'<span style="font-size:16px">&#9878;</span>'
+          +'<span style="font-size:13px;font-weight:600;color:#e2e5f0">'+j.email+'</span>'
+          +'</div>'
+          +'<div style="font-size:11px;color:#6b7280">Membre depuis '+new Date(j.created_at).toLocaleDateString('fr-FR')+' &bull; Derniere analyse : '+lastDate+'</div>'
+          +'</div>'
+          +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<div style="text-align:center">'
+          +'<div style="font-size:20px;font-weight:800;color:#5b7cfa">'+juristeAna.length+'</div>'
+          +'<div style="font-size:10px;color:#6b7280">analyses</div>'
+          +'</div>'
+          +(juristeAna.length>0?'<button onclick="filterAndShowAnalyses(\''+j.email+'\')" style="background:#5b7cfa22;border:1px solid #5b7cfa44;color:#5b7cfa;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">Voir analyses →</button>':'')
+          +'<button onclick="deleteJuriste(\''+j.email+'\')" style="background:#ef444422;border:1px solid #ef444466;color:#ef4444;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap" title="Supprimer ce juriste">🗑</button>'
+          +'</div>'
+          +'</div>';
+      }).join('')+'<div style="margin-top:4px"></div>';
+    }
+    if(pending.length){
+      html+='<div style="margin-top:20px"><div style="font-size:12px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Modeles en attente de validation ('+pending.length+')</div>';
+      html+=pending.map(function(s){
+        var preview=(s.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return '<div data-sid="'+s.id+'" style="background:#111420;border:1px solid #f59e0b33;border-radius:8px;padding:12px;margin-bottom:8px">'
+          +'<div style="font-size:13px;font-weight:600;color:#e2e5f0;margin-bottom:4px">'+(s.filename||'Modele')+'</div>'
+          +'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">Soumis par: <strong style="color:#f59e0b">'+(s.suggested_by||'')+'</strong></div>'
+          +(preview?'<div class="sugg-preview" style="display:none;background:#0a0c12;border:1px solid #1f2537;border-radius:6px;padding:10px;font-size:11px;color:#9ca3af;white-space:pre-wrap;max-height:500px;overflow-y:auto;margin-bottom:10px;line-height:1.6">'+preview+'</div>':'')
+          +'<div style="display:flex;gap:8px">'
+          +(preview?'<button class="toggle-preview-btn" style="background:#1a2035;border:1px solid #1f2537;color:#a0a8c0;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer">👁 Voir contenu</button>':'')
+          +'<button class="fwd-sugg-btn" style="background:#10b98122;border:1px solid #10b981;color:#10b981;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer">Transmettre admin</button>'
+          +'<button class="rej-sugg-btn" style="background:#ef444422;border:1px solid #ef4444;color:#ef4444;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer">Rejeter</button>'
+          +'</div></div>';
+      }).join('')+'</div>';
+    }
+    el.innerHTML=html;
+
+    // Create juriste button toggle
+    var btnCreate=el.querySelector('#btn-create-juriste');
+    var formDiv=el.querySelector('#create-juriste-form');
+    if(btnCreate&&formDiv){
+      btnCreate.addEventListener('click',function(){
+        formDiv.style.display=formDiv.style.display==='none'?'block':'none';
+      });
+      el.querySelector('#btn-jur-cancel').addEventListener('click',function(){
+        formDiv.style.display='none';
+        el.querySelector('#jur-email').value='';
+        el.querySelector('#jur-pwd').value='';
+        el.querySelector('#jur-err').style.display='none';
+        el.querySelector('#jur-ok').style.display='none';
+      });
+      el.querySelector('#btn-jur-submit').addEventListener('click',async function(){
+        if(window._juristeCreating) return;
+        var emailVal=el.querySelector('#jur-email').value.trim();
+        var pwdVal=el.querySelector('#jur-pwd').value;
+        var errDiv=el.querySelector('#jur-err');
+        var okDiv=el.querySelector('#jur-ok');
+        errDiv.style.display='none';okDiv.style.display='none';
+        if(!emailVal||!pwdVal){errDiv.textContent='Email et mot de passe requis.';errDiv.style.display='block';return;}
+        if(pwdVal.length<8){errDiv.textContent='Mot de passe trop court (min. 8 caractères).';errDiv.style.display='block';return;}
+        window._juristeCreating=true;
+        this.disabled=true;this.textContent='Création...';
+        try{
+          var res=await fetch(BACKEND+'/director/create-juriste',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({director_email:_cu.email,juriste_email:emailVal,juriste_password:pwdVal})
+          });
+          var d=await res.json();
+          if(!res.ok){errDiv.textContent=d.error||'Erreur création';errDiv.style.display='block';}
+          else{
+            okDiv.textContent='Compte créé avec succès pour '+emailVal;okDiv.style.display='block';
+            el.querySelector('#jur-email').value='';el.querySelector('#jur-pwd').value='';
+            window._juristesData=null;
+            setTimeout(function(){window._juristeCreating=false;loadJuristes();},1500);
+            return;
+          }
+        }catch(e2){errDiv.textContent='Erreur réseau : '+e2.message;errDiv.style.display='block';}
+        window._juristeCreating=false;
+        this.disabled=false;this.textContent='Créer le compte';
+      });
+    }
+
+    // Attach event listeners to suggestion buttons
+    el.querySelectorAll('.toggle-preview-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var preview=this.closest('[data-sid]').querySelector('.sugg-preview');
+        if(!preview)return;
+        var shown=preview.style.display!=='none';
+        preview.style.display=shown?'none':'';
+        this.textContent=shown?'👁 Voir contenu':'🔼 Masquer';
+      });
+    });
+    el.querySelectorAll('.fwd-sugg-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var sid=this.closest('[data-sid]').getAttribute('data-sid');
+        forwardSugg(sid);
+      });
+    });
+    el.querySelectorAll('.rej-sugg-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var sid=this.closest('[data-sid]').getAttribute('data-sid');
+        rejectSuggDir(sid);
+      });
+    });
+  }catch(e){el.innerHTML='<p style="color:#ef4444;font-size:12px">Erreur: '+e.message+'</p>';}
+}
+
+// ===== WORKFLOW COLLABORATION =====
+
+async function _patchAnalysis(id, patch){
+  // Try with user JWT first (works for own rows); fallback to anon key for cross-user ops (director patching jurist's row)
+  var _t=localStorage.getItem('sbt')||_sk;
+  var r=await fetch(_su+'/rest/v1/analyses?id=eq.'+id,{
+    method:'PATCH',
+    headers:{'apikey':_sk,'Authorization':'Bearer '+_t,'Content-Type':'application/json','Prefer':'return=representation'}
+    ,body:JSON.stringify(patch)
+  });
+  var rows=[];try{rows=await r.json();}catch(e){}
+  if((r.ok||r.status===204)&&Array.isArray(rows)&&rows.length===0){
+    // RLS blocked silently (cross-user op) — retry with anon key
+    return fetch(_su+'/rest/v1/analyses?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json','Prefer':'return=minimal'}
+      ,body:JSON.stringify(patch)
+    });
+  }
+  return r;
+}
+
+async function submitForReview(id){
+  if(!confirm('Soumettre cette analyse à votre directeur pour validation ?')) return;
+  // Sauvegarder les modifs en cours avant de soumettre
+  var r=await _patchAnalysis(id,{status:'pending_review',modifications:_modsWithMeta(window._currentMods)});
+  if(r.ok||r.status===204){
+    alert('Analyse soumise au directeur. Il sera notifié lors de sa prochaine connexion.');
+    window._juristesData=null; // reset cache
+    loadDash();
+  } else { alert('Erreur lors de la soumission ('+r.status+')'); }
+}
+
+// ===== PAIEMENT CMI =====
+async function loadAbonnement(){
+  var el=document.getElementById('abonnement-content');
+  console.log('[loadAbonnement] called, el=',!!el,'_cu=',_cu?_cu.email:'null');
+  if(!el)return;
+  if(!_cu){
+    el.innerHTML='<div style="background:#1a1f2e;border:1px solid #f59e0b;border-radius:12px;padding:24px;text-align:center">'
+      +'<div style="font-size:28px;margin-bottom:12px">🔐</div>'
+      +'<div style="font-size:14px;color:#e2e5f0;font-weight:600;margin-bottom:8px">Connexion requise</div>'
+      +'<div style="font-size:12px;color:#6b7280;margin-bottom:16px">Connectez-vous pour acceder a votre abonnement.</div>'
+      +'<button onclick="showAuth()" style="padding:10px 24px;background:#5b7cfa;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Se connecter</button>'
+      +'</div>';
+    return;
+  }
+  el.innerHTML='<div style="color:#6b7280;font-size:13px;padding:20px 0">Chargement de votre abonnement...</div>';
+  try{
+    // Utilise select=* pour eviter les erreurs de colonnes manquantes
+    var rj=await fetch(_su+'/rest/v1/user_accounts?parent_email=eq.'+encodeURIComponent(_cu.email)+'&select=*',
+      {headers:{'apikey':_sk,'Authorization':'Bearer '+_sk}});
+    console.log('[loadAbonnement] juristes status:', rj.status);
+    var juristes=rj.ok?await rj.json():[];
+    var rd=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=*',
+      {headers:{'apikey':_sk,'Authorization':'Bearer '+_sk}});
+    console.log('[loadAbonnement] dir status:', rd.status);
+    var dirData=rd.ok?await rd.json():[];
+    var dir=dirData[0]||{};
+    dir.email=dir.email||_cu.email;
+
+    // Cas juriste rattaché à un directeur : vérifier si le directeur a souscrit pour lui
+    if(dir.role==='juriste'&&dir.parent_email){
+      var rdirR=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(dir.parent_email)+'&select=*',
+        {headers:{'apikey':_sk,'Authorization':'Bearer '+_sk}});
+      var rdirData=rdirR.ok?await rdirR.json():[];
+      var directorAcc=rdirData[0]||{};
+      if(directorAcc.payment_status==='active'){
+        var subEndD=directorAcc.subscription_end?new Date(directorAcc.subscription_end).toLocaleDateString('fr-FR'):'—';
+        var remD=dir.analyses_remaining!==null&&dir.analyses_remaining!==undefined?dir.analyses_remaining:20;
+        var pctD=Math.min(100,Math.max(0,remD/20*100));
+        var colD=remD>5?'#10b981':remD>2?'#f59e0b':'#ef4444';
+        el.innerHTML=
+          '<div style="background:#111420;border:1px solid #10b981;border-radius:12px;padding:20px;margin-bottom:20px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+          +'<div><div style="font-size:15px;font-weight:700;color:#e2e5f0">Abonnement Omniscient</div>'
+          +'<div style="font-size:12px;color:#6b7280;margin-top:3px">Actif jusqu\'au : <strong style="color:#e2e5f0">'+subEndD+'</strong></div></div>'
+          +'<span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:#10b98122;color:#10b981">Actif</span>'
+          +'</div>'
+          +'<div style="background:#0a0c12;border-radius:8px;padding:14px;margin-bottom:16px">'
+          +'<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Votre abonnement est géré par votre directeur juridique :</div>'
+          +'<div style="font-size:13px;color:#5b7cfa;font-weight:600;margin-bottom:14px">'+dir.parent_email+'</div>'
+          +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Vos analyses restantes ce mois</div>'
+          +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<div style="flex:1;height:8px;background:#1f2537;border-radius:4px"><div style="width:'+pctD+'%;height:100%;background:'+colD+';border-radius:4px"></div></div>'
+          +'<div style="font-size:14px;font-weight:700;color:'+colD+';width:55px;text-align:right">'+remD+' / 20</div>'
+          +'</div>'
+          +'</div>'
+          +'<div style="font-size:12px;color:#4a5470;text-align:center">Pour renouveler ou modifier l\'abonnement, contactez votre directeur juridique.</div>'
+          +'</div>';
+        return;
+      }
+      // Directeur inactif : proposer plan solo juriste
+      el.innerHTML=
+        '<div style="background:#111420;border:1px solid #f59e0b;border-radius:12px;padding:20px;margin-bottom:20px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<div><div style="font-size:15px;font-weight:700;color:#e2e5f0">Abonnement Omniscient</div>'
+        +'<div style="font-size:12px;color:#6b7280;margin-top:3px">Votre directeur n\'a pas encore souscrit.</div></div>'
+        +'<span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:#f59e0b22;color:#f59e0b">Inactif</span>'
+        +'</div>'
+        +'<div style="background:#0a0c12;border-radius:8px;padding:14px;margin-bottom:16px">'
+        +'<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Votre directeur (<strong style="color:#e2e5f0">'+dir.parent_email+'</strong>) peut souscrire pour toute l\'équipe. Vous pouvez aussi souscrire en solo :</div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;margin-top:12px"><span style="color:#9ca3af">Plan solo juriste</span><span style="color:#e2e5f0">950 DH / mois</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:#9ca3af">Inclus</span><span style="color:#e2e5f0">20 analyses / mois</span></div>'
+        +'</div>'
+        +'<button onclick="initiateCMIPayment(1,950,\'juriste\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#c8a94b,#f0c060);border:none;border-radius:10px;color:#0a0c12;font-size:15px;font-weight:800;cursor:pointer">Souscrire en solo - 950 DH via CMI</button>'
+        +'</div>'
+        +'<div style="font-size:11px;color:#4a5470;text-align:center;margin-top:8px">Paiement sécurisé · 20 analyses / mois · Renouvelable mensuellement</div>';
+      return;
+    }
+
+    var isJuristeSolo=dir.role==='juriste';
+    // Nombre de juristes choisi par le directeur (défaut: nb déjà existants ou quota payé)
+    var _nbJuristesMax=dir.nb_juristes_max||0;
+    var _nbJuristesSuggested=Math.max(juristes.length, _nbJuristesMax, 0);
+    if(window._selectedNbJuristes===null||window._selectedNbJuristes===undefined)window._selectedNbJuristes=_nbJuristesSuggested;
+    var nbJuristes=window._selectedNbJuristes;
+    var nbUsers=isJuristeSolo?1:nbJuristes+1;
+    var pricePerUser=isJuristeSolo?950:850;
+    var total=nbUsers*pricePerUser;
+    var subEnd=dir.subscription_end?new Date(dir.subscription_end).toLocaleDateString('fr-FR'):'—';
+    var isActive=dir.payment_status==='active';
+    var isJuristeRole=dir.role==='juriste';
+    // Toujours utiliser /account/info pour les analyses restantes (source de verite backend)
+    var _backendRem=null;
+    try{
+      var _biR=await fetch(BACKEND+'/account/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_cu.email})});
+      if(_biR.ok){var _bi=await _biR.json();_backendRem=_bi.analyses_remaining;}
+    }catch(e4){}
+    var allUsers=[Object.assign({_isDir:true},dir)].concat(juristes);
+    console.log('[loadAbonnement] rendering, nbUsers=',nbUsers,'allUsers=',allUsers.map(function(u){return u.email;}));
+    el.innerHTML=
+      '<div style="background:#111420;border:1px solid '+(isActive?'#10b981':'#f59e0b')+';border-radius:12px;padding:20px;margin-bottom:20px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      +'<div><div style="font-size:15px;font-weight:700;color:#e2e5f0">Abonnement Omniscient</div>'
+      +'<div style="font-size:12px;color:#6b7280;margin-top:3px">Actif jusqu\'au : <strong style="color:#e2e5f0">'+subEnd+'</strong></div></div>'
+      +'<span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:'+(isActive?'#10b98122':'#f59e0b22')+';color:'+(isActive?'#10b981':'#f59e0b')+'">'+(isActive?'Actif':'Inactif')+'</span>'
+      +'</div>'
+      +'<div style="background:#0a0c12;border-radius:8px;padding:14px;margin-bottom:16px">'
+      +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Analyses restantes par utilisateur</div>'
+      +allUsers.map(function(u){
+        var rem=u._isDir&&_backendRem!==null?_backendRem:(u.analyses_remaining!==null&&u.analyses_remaining!==undefined?u.analyses_remaining:0);
+        var pct=Math.min(100,Math.max(0,rem/20*100));
+        var col=rem>5?'#10b981':rem>2?'#f59e0b':'#ef4444';
+        return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+          +'<div style="font-size:12px;color:#e2e5f0;width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(u._isDir?'[dir] ':'[jur] ')+String(u.email||'?')+'</div>'
+          +'<div style="flex:1;height:6px;background:#1f2537;border-radius:3px"><div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:3px"></div></div>'
+          +'<div style="font-size:12px;color:#e2e5f0;width:50px;text-align:right">'+rem+'/20</div>'
+          +'</div>';
+      }).join('')
+      +'</div>'
+      +(isJuristeRole?'':
+        '<div style="background:#0a0c12;border-radius:8px;padding:16px;margin-bottom:16px">'
+        +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">Nombre de juristes dans votre abonnement</div>'
+        +'<div style="display:flex;align-items:center;justify-content:center;gap:24px">'
+        +'<button onclick="window._selectedNbJuristes=Math.max(0,(window._selectedNbJuristes||1)-1);loadAbonnement();" style="width:40px;height:40px;border-radius:50%;border:1px solid #1f2537;background:#181c2a;color:#e2e5f0;font-size:24px;cursor:pointer;line-height:1;flex-shrink:0">&#8722;</button>'
+        +'<div style="text-align:center">'
+        +'<div style="font-size:40px;font-weight:800;color:#5b7cfa;min-width:60px">'+nbJuristes+'</div>'
+        +'<div style="font-size:11px;color:#6b7280;margin-top:4px">juriste(s)</div>'
+        +'</div>'
+        +'<button onclick="window._selectedNbJuristes=(window._selectedNbJuristes||0)+1;loadAbonnement();" style="width:40px;height:40px;border-radius:50%;border:1px solid #5b7cfa;background:#5b7cfa22;color:#5b7cfa;font-size:24px;cursor:pointer;line-height:1;flex-shrink:0">&#43;</button>'
+        +'</div>'
+        +'<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:12px">'
+        +(nbJuristes===0
+          ? 'Mode directeur seul &bull; <strong style="color:#c8a94b">950 DH / mois</strong>'
+          : 'Directeur + '+nbJuristes+' juriste(s) &bull; <strong style="color:#c8a94b">850 DH / utilisateur / mois</strong>')
+        +'</div>'
+        +'</div>'
+      )
+      +'<div style="background:#0a0c12;border-radius:8px;padding:14px;margin-bottom:16px">'
+      +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Facturation</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:#9ca3af">Utilisateurs</span><span style="color:#e2e5f0">'+nbUsers+' compte(s)</span></div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:#9ca3af">Tarif</span><span style="color:#e2e5f0">'+pricePerUser+' DH / utilisateur</span></div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;border-top:1px solid #1f2537;padding-top:10px;margin-top:6px"><span style="color:#e2e5f0">Total mensuel</span><span style="color:#c8a94b">'+total+' DH</span></div>'
+      +'</div>'
+      +(isJuristeRole
+        ? '<div style="text-align:center;padding:14px;color:#6b7280;font-size:13px">&#128274; Votre accès est géré par votre directeur juridique.</div>'
+        : '<button onclick="initiateCMIPayment('+nbUsers+','+total+',\''+dir.role+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#c8a94b,#f0c060);border:none;border-radius:10px;color:#0a0c12;font-size:15px;font-weight:800;cursor:pointer">&#x1F4B3; Souscrire pour '+nbUsers+' utilisateur(s) — '+total+' DH / mois</button>')
+      +'</div>'
+      +'<div style="font-size:11px;color:#4a5470;text-align:center;margin-top:8px">Paiement securise · Chaque utilisateur recoit 20 analyses · Renouvelable mensuellement</div>';
+  }catch(e){
+    console.error('[loadAbonnement] exception:', e);
+    el.innerHTML='<div style="background:#1a0a0a;border:1px solid #ef4444;border-radius:12px;padding:20px"><p style="color:#ef4444;font-size:13px">Erreur: '+String(e.message)+'</p></div>';
+  }
+}
+
+async function initiateCMIPayment(nbUsers, total, role){
+  if(!_cu){alert('Connectez-vous pour payer.');return;}
+  var btn=event.currentTarget||event.target;
+  btn.disabled=true;btn.textContent='⏳ Redirection vers CMI...';
+  try{
+    var r=await fetch(BACKEND+'/payment/initiate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({director_email:_cu.email,nb_users:nbUsers,role:role||'directeur'})
+    });
+    var d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erreur initiation paiement');
+    // Construire et soumettre le formulaire CMI
+    var form=document.createElement('form');
+    form.method='POST';form.action=d.form_url;form.style.display='none';
+    Object.entries(d.params).forEach(function(kv){
+      var inp=document.createElement('input');inp.type='hidden';inp.name=kv[0];inp.value=kv[1];form.appendChild(inp);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }catch(e){
+    alert('Erreur : '+e.message);
+    btn.disabled=false;btn.textContent='💳 Payer via CMI';
+  }
+}
+
+async function requestRevision(id){
+  var note=document.getElementById('director-note-input');
+  var noteVal=note?note.value.trim():'';
+  if(!confirm('Renvoyer cette analyse au juriste avec une demande de révision ?')) return;
+  // Recapturer les modifications inline (proposed-*) éditées par le directeur
+  (window._currentMods||[]).forEach(function(m){
+    var el=document.getElementById('proposed-'+m.id);
+    if(el){var t=el.innerText.trim();if(t&&t!==m.proposed)m.proposed=t;}
+  });
+  // Appeler le backend (service role key bypasse RLS)
+  var r=await fetch(BACKEND+'/analyses/request-revision/'+id,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({modifications:_modsWithMeta(window._currentMods),director_notes:noteVal,director_email:_cu.email})
+  });
+  var d=r.ok?await r.json().catch(function(){return{};}):{};
+  if(r.ok&&d.status==='ok'){
+    alert('Renvoyé pour révision. Le juriste verra votre note lors de sa prochaine connexion.');
+    window._juristesData=null;
+    var savedIdx=window._anaIdx||0;
+    await loadDash();
+    showAnaDetail(savedIdx);
+  } else { alert('Erreur: '+(d.error||r.status)); }
+}
+
+async function validateByDirector(id){
+  if(!confirm('Valider cette analyse et la transmettre à l\'admin pour intégration dans le RAG ?')) return;
+  // Sauvegarder les modifications du directeur via backend (service role key bypasse RLS)
+  var mods=window._currentMods||[];
+  var r=await fetch(BACKEND+'/analyses/validate-by-director/'+id,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({modifications:_modsWithMeta(mods),director_email:_cu.email})
+  });
+  var d=r.ok?await r.json().catch(function(){return{};}):{};
+  if(r.ok&&d.status==='ok'){
+    // Envoyer à la file admin via queue/add
+    var ana=(window._userAnalyses||[])[window._anaIdx||0]||{};
+    var decisions={};
+    mods.forEach(function(m,i){decisions[String(m.id||i+1)]='accepted';});
+    await fetch(BACKEND+'/queue/add',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:ana.filename||'Contrat',contract_type:ana.contract_type||'',partie:ana.partie||'',accepted_modifications:JSON.stringify(mods),decisions:JSON.stringify(decisions),submitted_by:_cu.email,score:80,analysis_id:id,juriste_email:ana.user_email||''})
+    });
+    alert('Analyse validée et transmise à l\'admin pour intégration dans le RAG.');
+    window._juristesData=null;
+    var savedIdx=window._anaIdx||0;
+    await loadDash();
+    showAnaDetail(savedIdx);
+  } else { alert('Erreur ('+r.status+')'); }
+}
+
+function filterAndShowAnalyses(juristeEmail){
+  // Switch to analyses tab and filter by juriste
+  dtab('analyses');
+  var sel=document.getElementById('juriste-filter');
+  if(sel){sel.value=juristeEmail;if(window.filterAnalysesByJuriste)window.filterAnalysesByJuriste(juristeEmail);}
+}
+
+async function deleteJuriste(juristeEmail){
+  if(!confirm('Supprimer le compte de '+juristeEmail+' ? Cette action est irréversible.')) return;
+  try{
+    var r=await fetch(BACKEND+'/director/delete-juriste',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({director_email:_cu.email, juriste_email:juristeEmail})
+    });
+    var d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erreur serveur');
+    window._juristesData=null;
+    loadJuristes();
+  }catch(e){ alert('Erreur : '+e.message); }
+}
+
+async function forwardSugg(id){
+  if(!confirm('Transmettre cette suggestion a l\'admin ?'))return;
+  var r=await fetch(BACKEND+'/suggestions/forward-to-admin/'+id,{method:'POST'});
+  if(r.ok){alert('Suggestion transmise a l\'admin !');loadJuristes();}
+  else alert('Erreur');
+}
+
+async function rejectSuggDir(id){
+  if(!confirm('Rejeter cette suggestion ?'))return;
+  var r=await fetch(BACKEND+'/suggestions/reject-director/'+id,{method:'POST'});
+  if(r.ok){alert('Suggestion rejetee.');loadJuristes();}
+  else alert('Erreur');
+}
+</script>
+</body>
+</html>
