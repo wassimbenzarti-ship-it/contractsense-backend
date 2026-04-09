@@ -232,6 +232,7 @@ def normalize_party_label(partie, contract_type=None):
 SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+ADMIN_PASS = os.environ.get("ADMIN_PASS", "westfield2026")
 
 # ── Email (SMTP) ──────────────────────────────────────────────────────────────
 SMTP_HOST     = os.environ.get("SMTP_HOST", "")
@@ -1733,15 +1734,24 @@ def validate_analysis_by_director(analysis_id):
 
 # ===== ADMIN USER CREATION =====
 
+def _is_admin_request(data=None):
+    """Check admin via X-Admin-Pass header, body admin_pass, or is_admin DB flag on caller_email."""
+    if request.headers.get("X-Admin-Pass") == ADMIN_PASS:
+        return True
+    if data and data.get("admin_pass") == ADMIN_PASS:
+        return True
+    caller_email = (request.args.get("caller_email") or (data or {}).get("caller_email", "")).strip()
+    if caller_email:
+        caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if caller and caller[0].get("is_admin"):
+            return True
+    return False
+
 @app.route("/admin/users", methods=["GET", "OPTIONS"])
 def admin_list_users():
     """Return all user_accounts rows (admin only)."""
     if request.method == "OPTIONS": return "", 204
-    caller_email = request.args.get("caller_email", "").strip()
-    if not caller_email:
-        return jsonify({"error": "caller_email requis"}), 400
-    caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
-    if not caller or not caller[0].get("is_admin"):
+    if not _is_admin_request():
         return jsonify({"error": "Accès refusé"}), 403
     key = SUPA_SERVICE_KEY or SUPA_KEY
     url = SUPA_URL + "/rest/v1/user_accounts"
@@ -1763,11 +1773,7 @@ def admin_sync_payments():
     if request.method == "OPTIONS": return "", 204
     try:
         data = request.get_json() or {}
-        caller_email = data.get("caller_email", "").strip()
-        if not caller_email:
-            return jsonify({"error": "caller_email requis"}), 400
-        caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
-        if not caller or not caller[0].get("is_admin"):
+        if not _is_admin_request(data):
             return jsonify({"error": "Accès refusé"}), 403
 
         # Get all successful payments
@@ -1811,16 +1817,14 @@ def admin_activate_user():
     if request.method == "OPTIONS": return "", 204
     try:
         data = request.get_json() or {}
-        caller_email = data.get("caller_email", "").strip()
+        if not _is_admin_request(data):
+            return jsonify({"error": "Accès refusé"}), 403
         target_email = data.get("target_email", "").strip()
         role = data.get("role", "directeur")
         nb_juristes_max = int(data.get("nb_juristes_max", 0))
         analyses = int(data.get("analyses_remaining", 20))
-        if not caller_email or not target_email:
-            return jsonify({"error": "caller_email et target_email requis"}), 400
-        caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
-        if not caller or not caller[0].get("is_admin"):
-            return jsonify({"error": "Accès refusé"}), 403
+        if not target_email:
+            return jsonify({"error": "target_email requis"}), 400
         sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
         upd = {
             "email": target_email, "role": role,
