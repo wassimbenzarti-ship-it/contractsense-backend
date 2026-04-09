@@ -39,42 +39,149 @@ CORS(app, origins=[
     "null"
 ], supports_credentials=True)
 
-def get_legal_framework(contract_type):
-    """Return mandatory legal constraints per contract type"""
-    frameworks = {
-        "employment": (
-            "DROIT DU TRAVAIL MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGLES IMPÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂRATIVES:\n"
-            "- CDD (contrat de projet/durÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©terminÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
-            "- Renouvellement abusif = requalification automatique en CDI\n"
-            "- PrÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©avis lÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
-            "- PrÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©avis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
-            "- IndemnitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© de licenciement: 96h/an pour les 3 premiÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨res annÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es, 144h/an aprÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¨s\n"
-            "- Licenciement abusif interdit ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ cause rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©elle et sÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rieuse obligatoire\n"
-            "- Heures supplÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©mentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
-            "- CongÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© annuel: 1,5 jour/mois travaillÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© (min 18 jours/an)\n"
-            "- Toute clause moins favorable que la loi est NULLE de plein droit"
-        ),
-        "nda": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ CONFIDENTIALITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ:\n"
-            "- DurÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e maximale raisonnable: 3-5 ans post-contrat\n"
-            "- Clause doit dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©finir prÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cisÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ment les informations confidentielles\n"
-            "- PÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s doivent ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªtre proportionnÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es (Art. 264 DOC)"
-        ),
-        "service": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ PRESTATION DE SERVICES:\n"
-            "- DÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©lai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
-            "- PÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s de retard lÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gales: taux directeur BAM + 3 points\n"
-            "- Clauses limitatives de responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© admises si non abusives\n"
-            "- Clause de non-concurrence: limitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e dans le temps et l'espace"
-        ),
-        "purchase": (
-            "DROIT MAROCAIN ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ VENTE:\n"
-            "- Garantie des vices cachÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s: 1 an (Art. 573 DOC)\n"
-            "- Transfert de propriÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©: ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  la livraison sauf clause contraire\n"
-            "- RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©serve de propriÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© possible jusqu'au paiement complet"
-        ),
-    }
-    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes gÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©raux du DOC.")
+def get_legal_framework(contract_type, jurisdiction="auto"):
+    """Return mandatory legal constraints per contract type and jurisdiction."""
+    ct = (contract_type or "").lower()
+    jur = (jurisdiction or "auto").lower()
+
+    is_employment = ct in ("employment", "cdi", "cdd") or any(k in ct for k in ["travail", "emploi", "salari"])
+    is_service = ct in ("service", "services", "saas", "nda") or any(k in ct for k in ["prestation", "conseil", "maintenance", "logiciel", "informatique", "mission"])
+    is_purchase = ct in ("purchase",) or any(k in ct for k in ["achat", "vente", "distribution"])
+
+    if is_employment:
+        if jur in ("droit_marocain", "auto", "universel"):
+            return (
+                "DROIT DU TRAVAIL MAROCAIN - REGLES IMPERATIVES:\n"
+                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+                "- Renouvellement abusif = requalification automatique en CDI\n"
+                "- Preavis: 8j (<1an), 1 mois (1-5ans), 2 mois (>5ans) ouvriers; 1/2/3 mois cadres\n"
+                "- Indemnite licenciement: 96h/an (3 premieres annees), 144h/an apres\n"
+                "- Licenciement: cause reelle et serieuse obligatoire\n"
+                "- Heures sup: +25% jour, +50% nuit/vendredi, +100% dimanche\n"
+                "- Conge: 1.5 jour/mois (min 18 jours/an)\n"
+                "- Toute clause moins favorable que la loi est NULLE"
+            )
+        elif jur == "droit_francais":
+            return (
+                "DROIT DU TRAVAIL FRANCAIS - REGLES IMPERATIVES:\n"
+                "- CDD: cas limitatifs, max 18 mois renouvelable une fois\n"
+                "- Periode essai CDI: 2 mois ouvriers, 3 mois maitrise, 4 mois cadres (renouvelable)\n"
+                "- Preavis: selon convention collective (min 1 mois usage)\n"
+                "- Heures sup: +25% (8 premieres h/sem), +50% au-dela\n"
+                "- Conges: 2.5 jours ouvrables/mois (30j/an)\n"
+                "- Licenciement: cause reelle et serieuse, procedure contradictoire obligatoire"
+            )
+        elif jur == "droit_anglais":
+            return (
+                "ENGLISH EMPLOYMENT LAW - MANDATORY RULES:\n"
+                "- Unfair dismissal: 2 years continuous employment required\n"
+                "- Statutory notice: 1 week per year of service (max 12 weeks)\n"
+                "- National Living Wage applies\n"
+                "- Statutory annual leave: 28 days (incl. bank holidays)\n"
+                "- Working Time Regulations: max 48h/week average (opt-out possible)\n"
+                "- Written employment statement required from day 1"
+            )
+        else:
+            return (
+                "DROIT DU TRAVAIL APPLICABLE - A VERIFIER:\n"
+                "- Identifier le droit du travail applicable (clause de droit applicable)\n"
+                "- Verifier duree maximale legale de la periode d'essai\n"
+                "- Verifier preavis minimum et indemnites de licenciement selon loi locale\n"
+                "- Verifier conformite aux minima legaux de remuneration et de conges\n"
+                "- Toute clause moins favorable que la loi locale est nulle"
+            )
+    elif is_service:
+        if jur in ("droit_marocain", "auto", "universel"):
+            return (
+                "DROIT MAROCAIN - PRESTATION DE SERVICES:\n"
+                "- Delai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
+                "- Penalites de retard legales: taux directeur BAM + 3 points\n"
+                "- Clauses limitatives de responsabilite admises si non abusives (Art. 263 DOC)\n"
+                "- Clause NDA: confidentialite Art. 231 DOC\n"
+                "- Clause non-concurrence: limitee dans le temps et l'espace"
+            )
+        elif jur == "droit_francais":
+            return (
+                "DROIT FRANCAIS - PRESTATION DE SERVICES:\n"
+                "- Delai de paiement: max 30j (art. L441-10 C.com.) ou 60j date de facture\n"
+                "- Clauses abusives entre professionnels prohibees (art. L442-1 C.com.)\n"
+                "- Responsabilite: droit commun art. 1231 C.civ.\n"
+                "- RGPD obligatoire si traitement de donnees personnelles\n"
+                "- Cession droits PI: doit etre explicite (CPI)"
+            )
+        elif jur == "droit_anglais":
+            return (
+                "ENGLISH CONTRACT LAW - SERVICES:\n"
+                "- Implied terms under Supply of Goods and Services Act 1982\n"
+                "- Unfair Contract Terms Act 1977: exclusion clauses subject to reasonableness\n"
+                "- Late Payment of Commercial Debts Act: statutory interest applies\n"
+                "- GDPR: data processing agreements required if personal data involved\n"
+                "- IP assignment: must be in writing (Copyright, Designs and Patents Act 1988)"
+            )
+        else:
+            return (
+                "DROIT APPLICABLE - PRESTATION DE SERVICES:\n"
+                "- Identifier le droit applicable et verifier les delais de paiement legaux\n"
+                "- Verifier les clauses de responsabilite et d'exclusion selon le droit local\n"
+                "- Verifier conformite aux regles de protection des donnees applicables\n"
+                "- Verifier cession des droits de propriete intellectuelle"
+            )
+    elif is_purchase:
+        if jur in ("droit_marocain", "auto", "universel"):
+            return (
+                "DROIT MAROCAIN - VENTE:\n"
+                "- Garantie des vices caches: 1 an (Art. 573 DOC)\n"
+                "- Transfert de propriete: a la livraison sauf clause contraire\n"
+                "- Reserve de propriete possible jusqu'au paiement complet"
+            )
+        elif jur == "droit_francais":
+            return (
+                "DROIT FRANCAIS - VENTE:\n"
+                "- Garantie des vices caches: 2 ans (art. 1648 C.civ.)\n"
+                "- Garantie de conformite: 2 ans (consommateur)\n"
+                "- Transfert propriete: accord des parties (sauf reserve)\n"
+                "- Reserve de propriete possible jusqu'au paiement complet"
+            )
+        else:
+            return (
+                "DROIT APPLICABLE - VENTE:\n"
+                "- Verifier regime de garantie legale selon le droit applicable\n"
+                "- Verifier moment du transfert de propriete et des risques\n"
+                "- Reserve de propriete a prevoir si paiement differe"
+            )
+    else:
+        if jur == "droit_marocain":
+            return "Respecte le droit marocain applicable et les principes generaux du DOC."
+        elif jur == "droit_francais":
+            return "Respecte le droit francais applicable (Code civil, Code de commerce)."
+        elif jur == "droit_anglais":
+            return "Apply English law and common law principles applicable to this contract."
+        else:
+            return "Identifie le droit applicable dans ce contrat et applique ses regles imperatives."
+
+def detect_jurisdiction(text, title=""):
+    """Detect legal jurisdiction from document/contract text using keyword matching."""
+    combined = ((title or "") + " " + (text or "")[:3000]).lower()
+    # Moroccan
+    if any(k in combined for k in ["dahir", "doc (dahir", "code du travail marocain", "loi 09-08", "bank al-maghrib", "banque al-maghrib", "cnss", "cimr", "maroc", "marocain", "marocaine", "rabat", "casablanca", "agadir", "fes", "cour supreme du maroc", "tribunal de commerce de casa"]):
+        return "droit_marocain"
+    # Tunisian
+    if any(k in combined for k in ["tunisie", "tunisien", "tunisienne", "code du travail tunisien", "banque centrale de tunisie", "tunis", "sfax"]):
+        return "droit_tunisien"
+    # Algerian
+    if any(k in combined for k in ["algerie", "algerien", "algerienne", "code du travail algerien", "banque d'algerie", "alger", "oran"]):
+        return "droit_algerien"
+    # Belgian
+    if any(k in combined for k in ["belgique", "belge", "droit belge", "code civil belge", "bruxelles", "liege", "gand"]):
+        return "droit_belge"
+    # French
+    if any(k in combined for k in ["code civil francais", "code du travail francais", "cnil", "rgpd", "tribunal de grande instance", "cour de cassation", "code de commerce francais", "droit francais", "loi francaise", "paris", "france", "francais", "francaise"]):
+        return "droit_francais"
+    # English/UK/Common law
+    if any(k in combined for k in ["english law", "uk law", "companies act", "employment rights act", "common law", "court of appeal", "high court", "gdpr", "united kingdom", "england", "wales", "scotland", "london", "british"]):
+        return "droit_anglais"
+    return "universel"
+
 
 # ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Party label normalization ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
 CONTRACT_CATEGORIES = {
@@ -527,6 +634,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         raise ValueError("ClÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© API manquante")
     client = anthropic.Anthropic(api_key=api_key)
 
+    # Detect legal jurisdiction of the contract
+    _jurisdiction = detect_jurisdiction(contract_text)
+    print(f"Detected jurisdiction: {_jurisdiction}")
+
     # Build numbered paragraphs for precise matching
     paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
     
@@ -563,7 +674,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 key = SUPA_SERVICE_KEY or SUPA_KEY
                 raw_url = SUPA_URL + "/rest/v1/rag_documents"
                 raw_headers = {"apikey": key, "Authorization": "Bearer " + key}
-                raw_params = {"select": "id,title,content,source,category,party_label,embedding", "limit": "150"}
+                raw_params = {"select": "id,title,content,source,category,party_label,jurisdiction,embedding", "limit": "150"}
                 raw_r = requests.get(raw_url, headers=raw_headers, params=raw_params, timeout=20)
                 if raw_r.ok:
                     raw_docs = raw_r.json() or []
@@ -584,6 +695,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             except Exception as fe:
                 print("Fallback RAG error: " + str(fe))
 
+        # Jurisdiction boost: docs matching contract jurisdiction rank higher
+        def _jur_score(doc):
+            doc_jur = (doc.get("jurisdiction") or "universel").lower()
+            if doc_jur == _jurisdiction or doc_jur in ("universel", "auto"):
+                return 1.0
+            return 0.5  # penalize mismatched jurisdiction but don't exclude
+        all_docs.sort(key=lambda d: _jur_score(d), reverse=True)
+        print(f"Jurisdiction filter: {_jurisdiction} | matching={sum(1 for d in all_docs if (d.get('jurisdiction') or 'universel') in (_jurisdiction, 'universel', 'auto'))}/{len(all_docs)}")
+
         contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
@@ -594,7 +714,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         _cat_hdrs = {"apikey": _cat_key, "Authorization": "Bearer " + _cat_key}
         for cat in ["contract", "law", "doctrine", "jurisprudence"]:
             try:
-                _cat_params = {"select": "id,title,content,source,category,party_label,embedding",
+                _cat_params = {"select": "id,title,content,source,category,party_label,jurisdiction,embedding",
                                "category": "eq." + cat, "limit": "50"}
                 _cat_r = requests.get(_cat_url, headers=_cat_hdrs, params=_cat_params, timeout=15)
                 if _cat_r.ok:
@@ -694,6 +814,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "OBLIGATION D'EXHAUSTIVITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
         "FAVORISER: " + partie + "\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
+        "JURIDICTION DETECTEE: " + _jurisdiction + "\n"
         "RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGLE ABSOLUE: Tu DOIS rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©pondre dans LA MÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂME LANGUE QUE LE CONTRAT.\n"
         "- Contrat en ANGLAIS ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
         "- Contrat en FRANÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂAIS ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ tous les champs en FRANÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂAIS UNIQUEMENT\n"
@@ -716,7 +837,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 3: Pour chaque clause dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorable ou neutre amÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©liorable ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ propose une modification\n"
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 4: VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie les protections manquantes ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ propose des clauses additionnelles\n"
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 5: VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie chaque modification contre le RAG pour citer les sources\n\n"
-        + get_legal_framework(contract_type) +
+        + get_legal_framework(contract_type, _jurisdiction) +
         "\n\n"
         + model_context +
         (("\n\nATTENTION MODELES RAG:\n" "- Si [PARTIE PROTEGEE PAR CE MODELE] correspond a " + partie + ": inspire-toi directement de cette clause.\n" "- Si ce modele protege l'autre partie: le contrat a analyser risque de contenir une telle clause - identifie-la et propose de la modifier pour avantager " + partie + ".\n" "- INTERDICTION: ne jamais proposer une clause qui avantage l'autre partie.\n") if model_context else "") +
@@ -737,7 +858,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
         '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
-        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - MEME SANS SOURCES RAG:\n"        "Pour CONTRAT DE TRAVAIL (CDI/CDD): Art.13-14 essai, Art.43-44 preavis, Art.196-202 heures sup, Art.231-249 conges, Art.63-65 licenciement.\n"        "Pour CONTRAT DE PRESTATION DE SERVICES: (A) Art.263 DOC - verifier plafond/exclusions de responsabilite; (B) Art.754 DOC - verifier conditions de resiliation et preavis; (C) Loi 09-08 CNDP - verifier clause de protection des donnees si applicable; (D) Droit d'auteur marocain - verifier cession de droits de propriete intellectuelle; (E) Art.231 DOC - verifier obligation de confidentialite.\n"        "Pour CONTRAT COMMERCIAL: Art.1 et s. Code Commerce, Art.549 DOC garanties, risques au transport.\n"        "REGLES COMPLIANCE: Dans source mets le titre exact du document RAG OU la reference legale depuis tes connaissances. Dans issue cite l'article exact. compliance=[] est INTERDIT pour tout contrat - genere au minimum 3 elements depuis tes connaissances si le RAG ne couvre pas le type de contrat.\n"
+        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - JURIDICTION: " + _jurisdiction + "\\n"
+        "Pour CONTRAT DE TRAVAIL (CDI/CDD): verifier periode d'essai, preavis, heures sup, conges, protection contre licenciement abusif selon le droit " + _jurisdiction + ".\\n"
+        "Pour CONTRAT DE PRESTATION DE SERVICES: (A) plafond/exclusions de responsabilite; (B) resiliation et preavis; (C) protection des donnees personnelles (RGPD/loi 09-08/applicable); (D) cession droits de propriete intellectuelle sur livrables; (E) confidentialite.\\n"
+        "Pour CONTRAT COMMERCIAL: garanties, transfert de risques, conditions de paiement, reserve de propriete selon le droit applicable.\\n"
+        "REGLES COMPLIANCE: Dans source mets le titre exact du document RAG OU la reference legale depuis tes connaissances (article + loi + juridiction). Dans issue cite l'article exact. compliance=[] est INTERDIT - genere au minimum 3 elements depuis tes connaissances si le RAG ne couvre pas le type de contrat.\\n"
         "R\u00e8gles:\n"
         "- MINIMUM 6 modifications (type=modification) dans le tableau modifications\n"
         "- MINIMUM 3 nouvelles_clauses (type=nouvelle_clause, original=null) dans nouvelles_clauses: non-concurrence, clause penale, non-sollicitation ou autres protections absentes\n"
@@ -887,41 +1012,108 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             mods.append(_nc)
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " sur RAG"
+    result["_jurisdiction"] = _jurisdiction
     result["_paragraphs"] = paragraphs
     # Extract compliance if present
     compliance = result.get("compliance", [])
     if not isinstance(compliance, list):
         compliance = []
-    # Fallback: inject compliance items if empty, based on contract type
+    # Fallback: inject compliance items if empty, based on contract type + jurisdiction
     if not compliance:
         _ct = (contract_type or "").lower()
+        _jur = result.get("_jurisdiction", _jurisdiction)
         if any(kw in _ct for kw in ["service", "presta", "conseil", "maintenance", "logiciel", "informatique", "mission"]):
-            compliance = [
-                {"id": 1, "type": "loi", "source": "Dahir des Obligations et Contrats (DOC) - Art.263",
-                 "issue": "Art.263 DOC - Plafond de responsabilite contractuelle absent ou insuffisant pour le prestataire",
-                 "severity": "high", "recommendation": "Definir un plafond de responsabilite (ex: montant du contrat) et lister les exclusions.", "para_idx": None},
-                {"id": 2, "type": "loi", "source": "Loi 09-08 relative a la protection des donnees personnelles (CNDP)",
-                 "issue": "Loi 09-08 CNDP - Absence de clause sur le traitement des donnees personnelles",
-                 "severity": "high", "recommendation": "Ajouter une clause designant le responsable de traitement et les obligations de securite et confidentialite des donnees.", "para_idx": None},
-                {"id": 3, "type": "loi", "source": "Dahir des Obligations et Contrats (DOC) - Art.754",
-                 "issue": "Art.754 DOC - Conditions de resiliation et preavis a verifier selon le droit marocain",
-                 "severity": "medium", "recommendation": "Preciser le preavis minimum, les cas de resiliation pour faute et les consequences financieres.", "para_idx": None},
-                {"id": 4, "type": "loi", "source": "Loi marocaine sur la propriete intellectuelle",
-                 "issue": "Droit d'auteur - Cession des droits de propriete intellectuelle sur les livrables non precisee",
-                 "severity": "high", "recommendation": "Specifier explicitement la cession ou la licence des droits PI sur tous les livrables produits dans le cadre du contrat.", "para_idx": None},
-            ]
+            if _jur in ("droit_marocain", "universel", "auto"):
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Dahir des Obligations et Contrats (DOC) - Art.263",
+                     "issue": "Plafond de responsabilite contractuelle absent ou insuffisant",
+                     "severity": "high", "recommendation": "Definir un plafond de responsabilite (ex: montant du contrat) et lister les exclusions.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "Loi 09-08 - Protection des donnees personnelles (CNDP)",
+                     "issue": "Absence de clause sur le traitement des donnees personnelles",
+                     "severity": "high", "recommendation": "Ajouter une clause designant le responsable de traitement et les obligations de securite.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "DOC Art.754 - Resiliation",
+                     "issue": "Conditions de resiliation et preavis insuffisamment precises",
+                     "severity": "medium", "recommendation": "Preciser le preavis minimum, les cas de resiliation pour faute et les consequences financieres.", "para_idx": None},
+                    {"id": 4, "type": "loi", "source": "Droit de la propriete intellectuelle applicable",
+                     "issue": "Cession des droits PI sur les livrables non precisee",
+                     "severity": "high", "recommendation": "Specifier la cession ou la licence des droits PI sur tous les livrables.", "para_idx": None},
+                ]
+            elif _jur == "droit_francais":
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Code civil - Art. 1231",
+                     "issue": "Regime de responsabilite du prestataire insuffisamment encadre",
+                     "severity": "high", "recommendation": "Preciser les plafonds de responsabilite conformes au droit francais.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "RGPD - Reglement UE 2016/679",
+                     "issue": "Absence de clause de traitement des donnees a caractere personnel",
+                     "severity": "high", "recommendation": "Ajouter DPA ou clause RGPD avec roles responsable/sous-traitant.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Code de commerce - Art. L441-10",
+                     "issue": "Delai de paiement a verifier (max 30 ou 60 jours selon accord)",
+                     "severity": "medium", "recommendation": "Preciser le delai de paiement et les penalites de retard conformes.", "para_idx": None},
+                    {"id": 4, "type": "loi", "source": "CPI - Code de la propriete intellectuelle",
+                     "issue": "Cession des droits PI sur les livrables non precisee",
+                     "severity": "high", "recommendation": "Specifier la cession ou la licence des droits PI (art. L131-3 CPI).", "para_idx": None},
+                ]
+            elif _jur == "droit_anglais":
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Unfair Contract Terms Act 1977",
+                     "issue": "Limitation of liability clause requires reasonableness test",
+                     "severity": "high", "recommendation": "Ensure liability cap passes the reasonableness test under UCTA 1977.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "UK GDPR / Data Protection Act 2018",
+                     "issue": "No data processing agreement or privacy clause",
+                     "severity": "high", "recommendation": "Add DPA with controller/processor roles if personal data is processed.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Copyright, Designs and Patents Act 1988",
+                     "issue": "IP ownership of deliverables not specified",
+                     "severity": "high", "recommendation": "Expressly assign IP rights in deliverables to the client in writing.", "para_idx": None},
+                ]
+            else:
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Droit applicable - Responsabilite contractuelle",
+                     "issue": "Plafond de responsabilite absent ou insuffisant",
+                     "severity": "high", "recommendation": "Definir un plafond de responsabilite et lister les exclusions selon le droit applicable.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "Reglementation donnees personnelles applicable",
+                     "issue": "Absence de clause sur le traitement des donnees personnelles",
+                     "severity": "high", "recommendation": "Ajouter une clause de protection des donnees conforme au droit local.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Droit PI applicable",
+                     "issue": "Cession des droits PI sur les livrables non precisee",
+                     "severity": "high", "recommendation": "Specifier explicitement la cession ou la licence des droits PI.", "para_idx": None},
+                ]
         elif any(kw in _ct for kw in ["cdi", "cdd", "travail", "emploi", "salari"]):
-            compliance = [
-                {"id": 1, "type": "loi", "source": "Code du Travail marocain - Art.13-14",
-                 "issue": "Art.13-14 CT - Periode d'essai a verifier", "severity": "medium",
-                 "recommendation": "CDI: 3 mois ouvriers/employes, 6 mois cadres, renouvelable une fois.", "para_idx": None},
-                {"id": 2, "type": "loi", "source": "Code du Travail marocain - Art.43-44",
-                 "issue": "Art.43-44 CT - Delai de preavis legal a verifier", "severity": "high",
-                 "recommendation": "Preavis minimum selon anciennete et categorie du salarie.", "para_idx": None},
-                {"id": 3, "type": "loi", "source": "Code du Travail marocain - Art.63-65",
-                 "issue": "Art.63-65 CT - Protection contre le licenciement abusif", "severity": "high",
-                 "recommendation": "Tout licenciement doit etre justifie et respecter la procedure legale sous peine d'etre abusif.", "para_idx": None},
-            ]
+            if _jur in ("droit_marocain", "universel", "auto"):
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Code du Travail - Periode d'essai (Art.13-14 CT maroc / equivalent)",
+                     "issue": "Periode d'essai a verifier selon le droit applicable", "severity": "medium",
+                     "recommendation": "Verifier la duree maximale legale et le nombre de renouvellements autorises.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "Code du Travail - Preavis (Art.43-44 CT maroc / equivalent)",
+                     "issue": "Delai de preavis legal a verifier", "severity": "high",
+                     "recommendation": "Preavis minimum selon anciennete et categorie du salarie.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Code du Travail - Licenciement (Art.63-65 CT maroc / equivalent)",
+                     "issue": "Protection contre le licenciement abusif", "severity": "high",
+                     "recommendation": "Tout licenciement doit etre justifie et respecter la procedure legale sous peine d'etre abusif.", "para_idx": None},
+                ]
+            elif _jur == "droit_francais":
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Code du travail francais - Periode d'essai",
+                     "issue": "Duree de periode d'essai a verifier (max 4 mois cadres)", "severity": "medium",
+                     "recommendation": "CDI: 2 mois ouvriers, 3 mois maitrise, 4 mois cadres, renouvelable une fois.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "Code du travail francais - Licenciement",
+                     "issue": "Clause de licenciement a verifier", "severity": "high",
+                     "recommendation": "Le licenciement doit etre justifie par une cause reelle et serieuse avec procedure contradictoire.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Code du travail francais - Convention collective",
+                     "issue": "Convention collective applicable non mentionnee", "severity": "medium",
+                     "recommendation": "Identifier et mentionner la convention collective applicable et ses dispositions plus favorables.", "para_idx": None},
+                ]
+            else:
+                compliance = [
+                    {"id": 1, "type": "loi", "source": "Code du Travail applicable - Periode d'essai",
+                     "issue": "Duree de periode d'essai a verifier selon le droit applicable", "severity": "medium",
+                     "recommendation": "Verifier la duree maximale legale de la periode d'essai.", "para_idx": None},
+                    {"id": 2, "type": "loi", "source": "Code du Travail applicable - Preavis",
+                     "issue": "Delai de preavis legal a verifier", "severity": "high",
+                     "recommendation": "Verifier le preavis minimum selon anciennete et categorie.", "para_idx": None},
+                    {"id": 3, "type": "loi", "source": "Code du Travail applicable - Licenciement",
+                     "issue": "Protection contre le licenciement abusif", "severity": "high",
+                     "recommendation": "Verifier la procedure de licenciement et les motifs autorises selon le droit local.", "para_idx": None},
+                ]
     result["compliance"] = compliance
     result["_has_legal_context"] = bool(legal_context)
     result["_rag_debug"] = {
@@ -2086,6 +2278,7 @@ def rag_upload():
         file = request.files.get("file")
         title = request.form.get("source_name") or request.form.get("title") or (file.filename.rsplit(".",1)[0] if file else "Document")
         category = request.form.get("doc_type") or request.form.get("category", "general")
+        jurisdiction_override = request.form.get("jurisdiction", "")
         title_base = title  # Use as source key
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         if not file:
@@ -2114,6 +2307,10 @@ def rag_upload():
             chunk = " ".join(words[i:i+chunk_size])
             chunks.append(chunk)
 
+        # Auto-detect jurisdiction from document content (can be overridden by form field)
+        doc_jurisdiction = jurisdiction_override or detect_jurisdiction(content, title)
+        print(f"RAG upload: jurisdiction={doc_jurisdiction} (override={bool(jurisdiction_override)})")
+
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
         for i, chunk in enumerate(chunks):
@@ -2126,6 +2323,7 @@ def rag_upload():
                 "content": chunk,
                 "embedding": json.dumps(embedding),
                 "source": title,
+                "jurisdiction": doc_jurisdiction,
                 "validated_at": datetime.datetime.now().isoformat()
             })
 

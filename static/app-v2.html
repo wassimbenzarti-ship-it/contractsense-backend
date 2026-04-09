@@ -655,6 +655,7 @@ async function analyzeWithPartie(partieName) {
 
     modifications = data.modifications || [];
     window._compliance = data.compliance || [];
+    window._jurisdiction = data._jurisdiction || 'universel';
     decisions = {};
     modifications.forEach(function(m) { decisions[m.id] = 'pending'; });
     if (data.file_storage_path) window._fileStoragePath = data.file_storage_path;
@@ -776,8 +777,13 @@ function renderCompliance() {
   var sevColor = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
   var sevLabel = { high: 'Critique', medium: 'Modéré', low: 'Faible' };
   var typeLabel = { loi: 'LOI', doctrine: 'DOCTRINE', jurisprudence: 'JURISPRUDENCE' };
+  var _jurLabels={'droit_marocain':'🇲🇦 Droit marocain','droit_francais':'🇫🇷 Droit français','droit_anglais':'🇬🇧 English law','droit_tunisien':'🇹🇳 Droit tunisien','droit_algerien':'🇩🇿 Droit algérien','droit_belge':'🇧🇪 Droit belge','universel':'🌐 Droit universel'};
+  var _jurLabel=_jurLabels[window._jurisdiction||'universel']||('🌐 '+(window._jurisdiction||'universel'));
   var html = '<div style="margin-top:24px;margin-bottom:8px;font-size:17px;font-weight:800;color:#e2e8f0;letter-spacing:0.01em;">⚖ Analyse de conformité juridique</div>';
-  html += '<div style="font-size:12px;color:#6b7280;margin-bottom:14px;">Basée sur les lois, doctrine et jurisprudences de la base documentaire RAG</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">'
+    +'<div style="font-size:12px;color:#6b7280;">Basée sur les lois, doctrine et jurisprudences de la base documentaire RAG</div>'
+    +'<span style="background:#1e293b;color:#a0a8c0;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;border:1px solid #2a3040">'+_jurLabel+'</span>'
+    +'</div>';
   items.forEach(function(c) {
     var color = sevColor[c.severity] || '#6b7280';
     var sLabel = sevLabel[c.severity] || c.severity;
@@ -1302,6 +1308,7 @@ async function dAnaAnalyze(partie) {
     if (!resp.ok) { var ed={}; try{ed=await resp.json();}catch(x){} throw new Error(ed.error||'Erreur '+resp.status); }
     var data = await resp.json();
     modifications = data.modifications || []; window._compliance = data.compliance || [];
+    window._jurisdiction = data._jurisdiction || 'universel';
     decisions = {}; modifications.forEach(function(m){ decisions[m.id]='pending'; });
     if (data.file_cache_id) window._fileCacheId = data.file_cache_id;
     if (data.file_storage_path) window._fileStoragePath = data.file_storage_path;
