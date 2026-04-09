@@ -338,6 +338,21 @@ def supa_patch(table, updates, filter_str):
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r
 
+def supa_upsert(table, data, on_conflict="email"):
+    """UPSERT: insert or update on conflict. Uses service key. data must be a dict."""
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    url = SUPA_URL + f"/rest/v1/{table}?on_conflict={on_conflict}"
+    headers = {
+        "apikey": key,
+        "Authorization": "Bearer " + key,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+    }
+    r = requests.post(url, headers=headers, json=data, timeout=10)
+    if not r.ok:
+        print(f"supa_upsert ERROR {r.status_code}: {r.text[:500]}")
+    return r
+
 def _storage_headers():
     key = SUPA_SERVICE_KEY or SUPA_KEY
     return {
@@ -1718,6 +1733,59 @@ def validate_analysis_by_director(analysis_id):
 
 # ===== ADMIN USER CREATION =====
 
+@app.route("/admin/users", methods=["GET", "OPTIONS"])
+def admin_list_users():
+    """Return all user_accounts rows (admin only)."""
+    if request.method == "OPTIONS": return "", 204
+    caller_email = request.args.get("caller_email", "").strip()
+    if not caller_email:
+        return jsonify({"error": "caller_email requis"}), 400
+    caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+    if not caller or not caller[0].get("is_admin"):
+        return jsonify({"error": "Accès refusé"}), 403
+    key = SUPA_SERVICE_KEY or SUPA_KEY
+    url = SUPA_URL + "/rest/v1/user_accounts"
+    headers = {
+        "apikey": key,
+        "Authorization": "Bearer " + key,
+        "Accept": "application/json",
+        "Prefer": "count=exact"
+    }
+    r = requests.get(url, headers=headers, params={"select": "*", "order": "created_at.desc"}, timeout=15)
+    if not r.ok:
+        return jsonify({"error": f"Supabase error {r.status_code}"}), 500
+    users = r.json() if r.content else []
+    return jsonify({"users": users, "count": len(users)})
+
+@app.route("/admin/activate-user", methods=["POST", "OPTIONS"])
+def admin_activate_user():
+    """Manually activate or update a user's subscription (admin only)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        target_email = data.get("target_email", "").strip()
+        role = data.get("role", "directeur")
+        nb_juristes_max = int(data.get("nb_juristes_max", 0))
+        analyses = int(data.get("analyses_remaining", 20))
+        if not caller_email or not target_email:
+            return jsonify({"error": "caller_email et target_email requis"}), 400
+        caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not caller or not caller[0].get("is_admin"):
+            return jsonify({"error": "Accès refusé"}), 403
+        sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
+        upd = {
+            "email": target_email, "role": role,
+            "payment_status": "active", "analyses_remaining": analyses,
+            "subscription_end": sub_end, "nb_juristes_max": nb_juristes_max
+        }
+        r = supa_upsert("user_accounts", upd, on_conflict="email")
+        if not r.ok:
+            return jsonify({"error": f"Supabase {r.status_code}: {r.text[:200]}"}), 500
+        return jsonify({"status": "ok", "message": f"{target_email} activé avec succès"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/admin/create-user", methods=["POST", "OPTIONS"])
 def admin_create_user():
     if request.method == "OPTIONS": return "", 204
@@ -2582,11 +2650,14 @@ def payment_callback():
             nb_users = p.get("nb_users", 1)
             nb_juristes_max = max(0, nb_users - 1)  # nb_users includes director
             upd_dir = {
+                "email": p["director_email"],
+                "role": "directeur",
                 "payment_status": "active", "analyses_remaining": 20,
                 "subscription_end": sub_end, "nb_juristes_max": nb_juristes_max
             }
             upd_jur = {"payment_status": "active", "analyses_remaining": 20, "subscription_end": sub_end}
-            supa_patch("user_accounts", upd_dir, f"email=eq.{p['director_email']}")
+            # Use upsert so the row is created even if the director never used /analyze before
+            supa_upsert("user_accounts", upd_dir, on_conflict="email")
             juristes = supa_get("user_accounts", {"parent_email": f"eq.{p['director_email']}", "select": "email"}) or []
             for j in juristes:
                 supa_patch("user_accounts", upd_jur, f"email=eq.{j['email']}")
