@@ -810,7 +810,7 @@ footer {
   <div class="demo-wrap reveal">
     <div class="demo-topbar">
       <div class="win-dots"><span></span><span></span><span></span></div>
-      <div class="demo-url-bar">omniscient.westfieldavocats.com · <span id="demo-role-label" style="color:var(--accent)">juriste</span></div>
+      <div class="demo-url-bar">omniscient.westfieldavocats.com · <span id="demo-role-label" style="color:var(--accent)" data-fr="juriste" data-en="lawyer">juriste</span></div>
     </div>
     <div class="demo-content">
 
@@ -828,7 +828,7 @@ footer {
       <div class="demo-step" id="ds2">
         <div class="step-tag" data-fr="Étape 2 — Juriste · Markups juridiques proposés par l'IA" data-en="Step 2 — Lawyer · AI-proposed legal markups">Étape 2 — Juriste · Markups juridiques proposés par l'IA</div>
         <div class="mods-header">
-          <div class="mods-count" id="demo-mods-count" data-fr-tpl="{n} clause{s} analysée{s}" data-en-tpl="{n} clause{s} analysed">0 clause analysée</div>
+          <div class="mods-count" id="demo-mods-count" data-fr="0 clause analysée" data-en="0 clause analysed">0 clause analysée</div>
           <div class="mods-rag-badge" data-fr="🧠 Base juridique Westfield" data-en="🧠 Westfield Legal Base">🧠 Base juridique Westfield</div>
         </div>
         <div id="mlist2">
@@ -1045,7 +1045,7 @@ footer {
           <div class="original-text" data-fr="Le Client s'engage à payer les factures dans un délai raisonnable." data-en="The Client undertakes to pay invoices within a reasonable time.">Le Client s'engage à payer les factures dans un délai raisonnable.</div>
           <div class="label-small" style="color:var(--green)" data-fr="Markup proposé — cliquez pour éditer" data-en="Proposed markup — click to edit">Markup proposé — cliquez pour éditer</div>
           <div class="mod-proposed-wrap">
-            <div class="editable-proposed" id="editable-demo">
+            <div class="editable-proposed" id="editable-demo" data-fr="Le Client s'engage à régler les factures dans un délai de trente (30) jours calendaires à compter de leur date d'émission. Tout retard de paiement entraînera de plein droit l'application d'intérêts de retard au taux de 1,5% par mois" data-en="The Client undertakes to settle invoices within thirty (30) calendar days from their date of issue. Any payment delay shall automatically give rise to late payment interest at the rate of 1.5% per month">
               Le Client s'engage à régler les factures dans un délai de trente (30) jours calendaires à compter de leur date d'émission. Tout retard de paiement entraînera de plein droit l'application d'intérêts de retard au taux de 1,5% par mois<span class="cursor-blink" id="typed-cursor"></span>
             </div>
             <div class="edit-label-float" data-fr="✏ Éditable" data-en="✏ Editable">✏ Éditable</div>
@@ -1228,6 +1228,11 @@ function setLang(l) {
   document.getElementById('lang-en').style.color = l === 'en' ? 'var(--amber)' : 'var(--muted)';
   document.documentElement.lang = l;
   localStorage.setItem('omniscient_lang', l);
+  // Reset typing animation text to correct language
+  if (typeof _typeBase !== 'undefined' && typeof el !== 'undefined' && el) {
+    typed = ''; ci = 0;
+    el.innerHTML = (_typeBase[l] || _typeBase.fr) + '<span class="cursor-blink"></span>';
+  }
 }
 (function() { var saved = localStorage.getItem('omniscient_lang'); if (saved === 'en') setLang('en'); })();
 
@@ -1392,17 +1397,28 @@ var demoObs = new IntersectionObserver(function(entries) {
 demoObs.observe(document.getElementById('demo'));
 
 // Typing animation on edit showcase
-var phrases = [
-  ', sans mise en demeure préalable. Passé ce délai, le Prestataire pourra suspendre ses services.',
-  ', calculés sur le montant TTC de la facture impayée.',
-];
+var _typePhrases = {
+  fr: [
+    ', sans mise en demeure préalable. Passé ce délai, le Prestataire pourra suspendre ses services.',
+    ', calculés sur le montant TTC de la facture impayée.',
+  ],
+  en: [
+    ', without prior formal notice. After this period, the Service Provider may suspend its services.',
+    ', calculated on the VAT-inclusive amount of the unpaid invoice.',
+  ]
+};
+var _typeBase = {
+  fr: "Le Client s'engage à régler les factures dans un délai de trente (30) jours calendaires à compter de leur date d'émission. Tout retard de paiement entraînera de plein droit l'application d'intérêts de retard au taux de 1,5% par mois",
+  en: "The Client undertakes to settle invoices within thirty (30) calendar days from their date of issue. Any payment delay shall automatically give rise to late payment interest at the rate of 1.5% per month"
+};
 var pi = 0;
 var ci = 0;
 var el = document.getElementById('editable-demo');
-var baseText = "Le Client s'engage à régler les factures dans un délai de trente (30) jours calendaires à compter de leur date d'émission. Tout retard de paiement entraînera de plein droit l'application d'intérêts de retard au taux de 1,5% par mois";
 var typed = '';
 
 function typeNext() {
+  var phrases = _typePhrases[_lang] || _typePhrases.fr;
+  var baseText = _typeBase[_lang] || _typeBase.fr;
   var phrase = phrases[pi % phrases.length];
   if (ci < phrase.length) {
     typed += phrase[ci];
@@ -1414,7 +1430,7 @@ function typeNext() {
       typed = '';
       ci = 0;
       pi++;
-      el.innerHTML = baseText + '<span class="cursor-blink"></span>';
+      el.innerHTML = (_typeBase[_lang] || _typeBase.fr) + '<span class="cursor-blink"></span>';
       setTimeout(typeNext, 1200);
     }, 2000);
   }
