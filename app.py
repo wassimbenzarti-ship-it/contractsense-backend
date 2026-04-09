@@ -1921,6 +1921,21 @@ def identify_parties_route():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/detect-jurisdiction", methods=["POST", "OPTIONS"])
+def detect_jurisdiction_route():
+    """Quick endpoint: extract text from file and detect jurisdiction. No AI call."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"jurisdiction": "universel"})
+        contract_text, _, _ = read_file(file)
+        title = request.form.get("title", file.filename or "")
+        jur = detect_jurisdiction(contract_text or "", title)
+        return jsonify({"jurisdiction": jur})
+    except Exception as e:
+        return jsonify({"jurisdiction": "universel"})
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
