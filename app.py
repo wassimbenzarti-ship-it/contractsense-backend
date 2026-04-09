@@ -1900,8 +1900,16 @@ def health():
     return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
 @app.route("/app-v2.html", methods=["GET"])
-@app.route("/", methods=["GET"])
+@app.route("/app-v2", methods=["GET"])
 def serve_frontend():
+    return send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
+
+@app.route("/", methods=["GET"])
+@app.route("/index.html", methods=["GET"])
+def serve_landing():
+    landing = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(landing):
+        return send_file(landing)
     return send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
 
 @app.route("/identify-parties", methods=["POST", "OPTIONS"])
