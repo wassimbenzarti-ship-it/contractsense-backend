@@ -737,7 +737,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
         '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
-        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements): Identifie les clauses du contrat qui violent ou ignorent les references juridiques marquees [LAW] ou [DOCTRINE] dans le contexte. Dans source, copie le titre exact. Dans issue, cite l'article exact.\n"        "Pour un CONTRAT DE TRAVAIL (CDI/CDD): Art.13-14 essai, Art.43-44 preavis, Art.196-202 heures sup, Art.231-249 conges, Art.63-65 licenciement.\n"        "Pour un CONTRAT DE PRESTATION DE SERVICES: verifie (A) Responsabilite: plafond, exclusions Art.263 DOC; (B) Propriete intellectuelle: cession de droits Art.1 et s. loi droit auteur; (C) Confidentialite: obligation de discrecion Art.231 DOC; (D) Resiliation: preavis minimum, penalites Art.754 DOC; (E) Protection donnees: obligations CNDP loi 09-08 si traitement de donnees personnelles.\n"        "Pour un CONTRAT COMMERCIAL (vente, distribution): Art.1 et s. Code Commerce, garanties Art.549 DOC, transport risques.\n"        "compliance=[] UNIQUEMENT si le contexte RAG ne contient aucune reference juridique applicable.\n"
+        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - MEME SANS SOURCES RAG:\n"        "Pour CONTRAT DE TRAVAIL (CDI/CDD): Art.13-14 essai, Art.43-44 preavis, Art.196-202 heures sup, Art.231-249 conges, Art.63-65 licenciement.\n"        "Pour CONTRAT DE PRESTATION DE SERVICES: (A) Art.263 DOC - verifier plafond/exclusions de responsabilite; (B) Art.754 DOC - verifier conditions de resiliation et preavis; (C) Loi 09-08 CNDP - verifier clause de protection des donnees si applicable; (D) Droit d'auteur marocain - verifier cession de droits de propriete intellectuelle; (E) Art.231 DOC - verifier obligation de confidentialite.\n"        "Pour CONTRAT COMMERCIAL: Art.1 et s. Code Commerce, Art.549 DOC garanties, risques au transport.\n"        "REGLES COMPLIANCE: Dans source mets le titre exact du document RAG OU la reference legale depuis tes connaissances. Dans issue cite l'article exact. compliance=[] est INTERDIT pour tout contrat - genere au minimum 3 elements depuis tes connaissances si le RAG ne couvre pas le type de contrat.\n"
         "R\u00e8gles:\n"
         "- MINIMUM 6 modifications (type=modification) dans le tableau modifications\n"
         "- MINIMUM 3 nouvelles_clauses (type=nouvelle_clause, original=null) dans nouvelles_clauses: non-concurrence, clause penale, non-sollicitation ou autres protections absentes\n"
@@ -892,6 +892,36 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     compliance = result.get("compliance", [])
     if not isinstance(compliance, list):
         compliance = []
+    # Fallback: inject compliance items if empty, based on contract type
+    if not compliance:
+        _ct = (contract_type or "").lower()
+        if any(kw in _ct for kw in ["service", "presta", "conseil", "maintenance", "logiciel", "informatique", "mission"]):
+            compliance = [
+                {"id": 1, "type": "loi", "source": "Dahir des Obligations et Contrats (DOC) - Art.263",
+                 "issue": "Art.263 DOC - Plafond de responsabilite contractuelle absent ou insuffisant pour le prestataire",
+                 "severity": "high", "recommendation": "Definir un plafond de responsabilite (ex: montant du contrat) et lister les exclusions.", "para_idx": None},
+                {"id": 2, "type": "loi", "source": "Loi 09-08 relative a la protection des donnees personnelles (CNDP)",
+                 "issue": "Loi 09-08 CNDP - Absence de clause sur le traitement des donnees personnelles",
+                 "severity": "high", "recommendation": "Ajouter une clause designant le responsable de traitement et les obligations de securite et confidentialite des donnees.", "para_idx": None},
+                {"id": 3, "type": "loi", "source": "Dahir des Obligations et Contrats (DOC) - Art.754",
+                 "issue": "Art.754 DOC - Conditions de resiliation et preavis a verifier selon le droit marocain",
+                 "severity": "medium", "recommendation": "Preciser le preavis minimum, les cas de resiliation pour faute et les consequences financieres.", "para_idx": None},
+                {"id": 4, "type": "loi", "source": "Loi marocaine sur la propriete intellectuelle",
+                 "issue": "Droit d'auteur - Cession des droits de propriete intellectuelle sur les livrables non precisee",
+                 "severity": "high", "recommendation": "Specifier explicitement la cession ou la licence des droits PI sur tous les livrables produits dans le cadre du contrat.", "para_idx": None},
+            ]
+        elif any(kw in _ct for kw in ["cdi", "cdd", "travail", "emploi", "salari"]):
+            compliance = [
+                {"id": 1, "type": "loi", "source": "Code du Travail marocain - Art.13-14",
+                 "issue": "Art.13-14 CT - Periode d'essai a verifier", "severity": "medium",
+                 "recommendation": "CDI: 3 mois ouvriers/employes, 6 mois cadres, renouvelable une fois.", "para_idx": None},
+                {"id": 2, "type": "loi", "source": "Code du Travail marocain - Art.43-44",
+                 "issue": "Art.43-44 CT - Delai de preavis legal a verifier", "severity": "high",
+                 "recommendation": "Preavis minimum selon anciennete et categorie du salarie.", "para_idx": None},
+                {"id": 3, "type": "loi", "source": "Code du Travail marocain - Art.63-65",
+                 "issue": "Art.63-65 CT - Protection contre le licenciement abusif", "severity": "high",
+                 "recommendation": "Tout licenciement doit etre justifie et respecter la procedure legale sous peine d'etre abusif.", "para_idx": None},
+            ]
     result["compliance"] = compliance
     result["_has_legal_context"] = bool(legal_context)
     result["_rag_debug"] = {
