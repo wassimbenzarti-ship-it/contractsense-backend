@@ -637,6 +637,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 is_prot = any(p in (title + doc.get("source","")).lower() for p in protected_kw)
                 model_context += "\n=== " + str(title) + " ===\n" + str(doc.get("content",""))[:600] + "\n"
                 model_context += "\u2192 rag_source: " + ("null (protege)" if is_prot else str(title)) + "\n"
+                if doc.get("party_label"): model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label","")) + "]\n"
 
         # Context 2: legal docs -> conformite
         if legal_docs:
@@ -718,12 +719,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         + get_legal_framework(contract_type) +
         "\n\n"
         + model_context +
-        (("\n\nATTENTION: Utilise les MODELES ci-dessus UNIQUEMENT pour les modifications favorisant " + partie + ". Ignore les clauses qui avantagent l'autre partie.\n") if model_context else "") +
+        (("\n\nATTENTION MODELES RAG:\n" "- Si [PARTIE PROTEGEE PAR CE MODELE] correspond a " + partie + ": inspire-toi directement de cette clause.\n" "- Si ce modele protege l'autre partie: le contrat a analyser risque de contenir une telle clause - identifie-la et propose de la modifier pour avantager " + partie + ".\n" "- INTERDICTION: ne jamais proposer une clause qui avantage l'autre partie.\n") if model_context else "") +
         legal_context +
         "\n\nATTENTION sur les clauses valid\u00e9es du RAG:\n"
-        "- Utilise-les UNIQUEMENT si elles sont favorables ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ  " + partie + "\n"
-        "- Si une clause validÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©e favorise l'autre partie, IGNORE-LA\n"
-        "- VÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rifie toujours que ta proposition avantage bien " + partie + "\n\n"
+        "- VERIFICATION OBLIGATOIRE avant chaque proposed: est-ce que cette clause protege " + partie + " ? Si non, reformule-la pour l'avantager.\n"
+        "- ERREUR GRAVE: proposer une clause de limitation de responsabilite, exclusion de garantie ou peine pour " + partie + " - ces clauses protegent l'autre partie.\n"
+        "- CONTROLE FINAL: lis chaque proposed et confirme que " + partie + " obtient un AVANTAGE net par rapport au contrat original.\n\n"
         "IMPORTANT: Le contrat est numÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rotÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
