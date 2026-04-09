@@ -2888,6 +2888,120 @@ def director_delete_juriste():
     return jsonify({"status": "ok", "message": f"Juriste {juriste_email} supprimé"})
 
 
+@app.route("/chat", methods=["POST", "OPTIONS"])
+def chat():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        message = (data.get("message") or "").strip()
+        history = data.get("history", [])
+        contract_text = (data.get("contract_text") or "").strip()
+        modifications_list = data.get("modifications", [])
+        decisions_map = data.get("decisions", {})
+        partie = data.get("partie", "la partie bénéficiaire")
+        jurisdiction = data.get("jurisdiction", "universel")
+        file_cache_id = (data.get("file_cache_id") or "").strip()
+
+        if not message:
+            return jsonify({"error": "Message requis"}), 400
+
+        # Try to recover contract text from in-memory file cache
+        if not contract_text and file_cache_id:
+            cached_bytes = _cache_get(file_cache_id)
+            if cached_bytes:
+                try:
+                    contract_text = cached_bytes.decode("utf-8")
+                except Exception:
+                    try:
+                        contract_text, _, _ = extract_text_from_docx(cached_bytes)
+                    except Exception:
+                        pass
+
+        jur_labels = {
+            "droit_marocain": "Droit marocain",
+            "droit_francais": "Droit français",
+            "droit_anglais": "English law",
+            "droit_tunisien": "Droit tunisien",
+            "droit_algerien": "Droit algérien",
+            "universel": "Droit universel",
+        }
+        jur_label = jur_labels.get(jurisdiction, jurisdiction)
+
+        # Build modifications summary for system prompt
+        mods_summary = ""
+        if modifications_list:
+            mods_summary = "\n\nMODIFICATIONS PROPOSÉES PAR L'IA:\n"
+            for i, mod in enumerate(modifications_list):
+                dec = decisions_map.get(str(mod.get("id", "")), "pending")
+                dec_label = {"accepted": "Acceptée", "rejected": "Refusée", "pending": "En attente"}.get(dec, dec)
+                orig = (mod.get("original") or "")
+                prop = (mod.get("proposed") or "")
+                mods_summary += (
+                    f"\n[{i+1}] {mod.get('clause_name', 'Clause')} — {dec_label} — risque: {mod.get('risk', 'medium')}\n"
+                    f"   Raison: {mod.get('reason', '')}\n"
+                    f"   Original: {orig[:300]}{'...' if len(orig)>300 else ''}\n"
+                    f"   Proposé: {prop[:300]}{'...' if len(prop)>300 else ''}\n"
+                )
+
+        # Truncate contract text to avoid token overflow
+        contract_block = ""
+        if contract_text:
+            max_chars = 7000
+            excerpt = contract_text[:max_chars] + ("\n\n[...contrat tronqué...]" if len(contract_text) > max_chars else "")
+            contract_block = f"\n\nTEXTE DU CONTRAT:\n{excerpt}"
+
+        system_prompt = (
+            f"Tu es un assistant juridique expert, intégré dans une plateforme d'analyse de contrats. "
+            f"Tu aides l'utilisateur à comprendre son contrat, à poser des questions dessus, "
+            f"et à lui proposer ou appliquer des modifications.\n\n"
+            f"CONTEXTE:\n"
+            f"- Droit applicable: {jur_label}\n"
+            f"- Partie protégée: {partie}\n"
+            f"- Nombre de modifications IA déjà proposées: {len(modifications_list)}\n"
+            f"{contract_block}"
+            f"{mods_summary}\n\n"
+            f"INSTRUCTIONS:\n"
+            f"1. Réponds de façon concise et professionnelle. Utilise la même langue que l'utilisateur.\n"
+            f"2. Si l'utilisateur demande à modifier ou ajouter une clause, fournis la modification "
+            f"en insérant à la fin de ta réponse un bloc JSON encadré par <modification>...</modification> "
+            f"(sans markdown autour du JSON) avec les champs: clause_name, original, proposed, risk (high/medium/low), reason.\n"
+            f"3. Si tu fais référence à une modification déjà proposée, utilise son numéro [1], [2], etc.\n"
+            f"4. Ne fournis le bloc <modification> QUE si l'utilisateur demande explicitement un changement."
+        )
+
+        messages_for_claude = []
+        for h in history[-10:]:
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages_for_claude.append({"role": role, "content": content})
+        messages_for_claude.append({"role": "user", "content": message})
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1500,
+            system=system_prompt,
+            messages=messages_for_claude,
+        )
+        reply = resp.content[0].text.strip()
+
+        # Extract optional modification block from reply
+        modification = None
+        mod_match = re.search(r"<modification>(.*?)</modification>", reply, re.DOTALL)
+        if mod_match:
+            try:
+                modification = json.loads(mod_match.group(1).strip())
+                reply = re.sub(r"\s*<modification>.*?</modification>", "", reply, flags=re.DOTALL).strip()
+            except Exception:
+                pass
+
+        return jsonify({"reply": reply, "modification": modification})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def _init_storage():
     """Crée le bucket Supabase Storage au démarrage si inexistant."""
     if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
