@@ -1757,6 +1757,54 @@ def admin_list_users():
     users = r.json() if r.content else []
     return jsonify({"users": users, "count": len(users)})
 
+@app.route("/admin/sync-payments", methods=["POST", "OPTIONS"])
+def admin_sync_payments():
+    """Create user_accounts rows for any successful payment that has no account yet (admin only)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        if not caller_email:
+            return jsonify({"error": "caller_email requis"}), 400
+        caller = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not caller or not caller[0].get("is_admin"):
+            return jsonify({"error": "Accès refusé"}), 403
+
+        # Get all successful payments
+        payments = supa_get("payments", {"status": "eq.success", "select": "director_email,nb_users,paid_at"}) or []
+        created = []
+        skipped = []
+        for p in payments:
+            email = (p.get("director_email") or "").strip()
+            if not email:
+                continue
+            # Check if account already exists
+            existing = supa_get("user_accounts", {"email": f"eq.{email}", "limit": "1"})
+            if existing and existing[0].get("payment_status") == "active":
+                skipped.append(email)
+                continue
+            nb_users = p.get("nb_users", 1) or 1
+            nb_juristes_max = max(0, nb_users - 1)
+            paid_at = p.get("paid_at") or datetime.datetime.now().isoformat()
+            try:
+                sub_end = (datetime.datetime.fromisoformat(paid_at[:19]) + datetime.timedelta(days=30)).isoformat()
+            except Exception:
+                sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
+            upd = {
+                "email": email, "role": "directeur",
+                "payment_status": "active", "analyses_remaining": 20,
+                "subscription_end": sub_end, "nb_juristes_max": nb_juristes_max
+            }
+            r = supa_upsert("user_accounts", upd, on_conflict="email")
+            if r.ok:
+                created.append(email)
+            else:
+                print(f"sync_payments upsert failed for {email}: {r.status_code} {r.text[:200]}")
+
+        return jsonify({"status": "ok", "created_or_updated": created, "already_active": skipped})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/admin/activate-user", methods=["POST", "OPTIONS"])
 def admin_activate_user():
     """Manually activate or update a user's subscription (admin only)."""
