@@ -1442,11 +1442,12 @@ def request_revision_by_director(analysis_id):
             "modifications": modifications,
             "director_email": data.get("director_email", "")
         }
-        # Use return=representation to detect silent RLS failures (empty array = 0 rows updated)
+        # Use service role key to bypass RLS for cross-user operations
+        _skey = SUPA_SERVICE_KEY or SUPA_KEY
         patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
         patch_headers = {
-            "apikey": SUPA_KEY,
-            "Authorization": "Bearer " + SUPA_KEY,
+            "apikey": _skey,
+            "Authorization": "Bearer " + _skey,
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
@@ -1473,9 +1474,10 @@ def validate_analysis_by_director(analysis_id):
             "modifications": data.get("modifications", [])
         }
         patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        _skey = SUPA_SERVICE_KEY or SUPA_KEY
         patch_headers = {
-            "apikey": SUPA_KEY,
-            "Authorization": "Bearer " + SUPA_KEY,
+            "apikey": _skey,
+            "Authorization": "Bearer " + _skey,
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
