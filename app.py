@@ -340,19 +340,19 @@ def supa_patch(table, updates, filter_str):
     return r
 
 def supa_upsert(table, data, on_conflict="email"):
-    """UPSERT: insert or update on conflict. Uses service key. data must be a dict."""
-    key = SUPA_SERVICE_KEY or SUPA_KEY
-    url = SUPA_URL + f"/rest/v1/{table}?on_conflict={on_conflict}"
-    headers = {
-        "apikey": key,
-        "Authorization": "Bearer " + key,
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal"
-    }
-    r = requests.post(url, headers=headers, json=data, timeout=10)
-    if not r.ok:
-        print(f"supa_upsert ERROR {r.status_code}: {r.text[:500]}")
-    return r
+    """UPSERT: check if row exists by on_conflict field, then insert or patch."""
+    key_field = on_conflict
+    key_val = data.get(key_field)
+    if not key_val:
+        raise Exception(f"supa_upsert: champ '{key_field}' manquant dans data")
+    # Check if row exists
+    existing = supa_get(table, {key_field: f"eq.{key_val}", "limit": "1"})
+    if existing:
+        # Row exists → PATCH
+        return supa_patch(table, data, f"{key_field}=eq.{key_val}")
+    else:
+        # Row missing → INSERT
+        return supa_insert(table, data)
 
 def _storage_headers():
     key = SUPA_SERVICE_KEY or SUPA_KEY
