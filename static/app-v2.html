@@ -2925,6 +2925,9 @@ if (_appLang === 'en') appSetLang('en');
 </div>
 
 <script>
+// Ensure selectedPartie is always declared (implicit global only created after first analysis)
+if (typeof selectedPartie === 'undefined') var selectedPartie = '';
+
 // ── Chatbot state ─────────────────────────────────────────────────
 var _cbHistory       = [];
 var _cbOpen          = false;
