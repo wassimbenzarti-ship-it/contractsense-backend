@@ -737,7 +737,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
         '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
-        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements): Pour chaque reference juridique marquee [LAW] ou [DOCTRINE] dans le contexte, identifie les clauses du contrat qui s'y opposent ou qui l'ignorent. Dans le champ source, copie EXACTEMENT le titre du document (ligne rag_source). Dans le champ issue, cite l'article exact (ex: Art. 43 CT, Art. 239 CT). Pour un CDI marocain, verifie OBLIGATOIREMENT: periode essai (Art.13-14), preavis (Art.43-44), heures sup (Art.196-202), conges (Art.231-249), licenciement abusif (Art.63-65). compliance=[] seulement si contrat non-travail.\n"
+        "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements): Identifie les clauses du contrat qui violent ou ignorent les references juridiques marquees [LAW] ou [DOCTRINE] dans le contexte. Dans source, copie le titre exact. Dans issue, cite l'article exact.\n"        "Pour un CONTRAT DE TRAVAIL (CDI/CDD): Art.13-14 essai, Art.43-44 preavis, Art.196-202 heures sup, Art.231-249 conges, Art.63-65 licenciement.\n"        "Pour un CONTRAT DE PRESTATION DE SERVICES: verifie (A) Responsabilite: plafond, exclusions Art.263 DOC; (B) Propriete intellectuelle: cession de droits Art.1 et s. loi droit auteur; (C) Confidentialite: obligation de discrecion Art.231 DOC; (D) Resiliation: preavis minimum, penalites Art.754 DOC; (E) Protection donnees: obligations CNDP loi 09-08 si traitement de donnees personnelles.\n"        "Pour un CONTRAT COMMERCIAL (vente, distribution): Art.1 et s. Code Commerce, garanties Art.549 DOC, transport risques.\n"        "compliance=[] UNIQUEMENT si le contexte RAG ne contient aucune reference juridique applicable.\n"
         "R\u00e8gles:\n"
         "- MINIMUM 6 modifications (type=modification) dans le tableau modifications\n"
         "- MINIMUM 3 nouvelles_clauses (type=nouvelle_clause, original=null) dans nouvelles_clauses: non-concurrence, clause penale, non-sollicitation ou autres protections absentes\n"
@@ -886,7 +886,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             _nc["id"] = len(mods) + 1
             mods.append(_nc)
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
-    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es sur le RAG"
+    result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " sur RAG"
     result["_paragraphs"] = paragraphs
     # Extract compliance if present
     compliance = result.get("compliance", [])
