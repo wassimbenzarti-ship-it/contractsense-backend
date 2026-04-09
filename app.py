@@ -2901,12 +2901,13 @@ def chat():
         partie = data.get("partie", "la partie bénéficiaire")
         jurisdiction = data.get("jurisdiction", "universel")
         file_cache_id = (data.get("file_cache_id") or "").strip()
+        file_storage_path = (data.get("file_storage_path") or "").strip()
 
         if not message:
             return jsonify({"error": "Message requis"}), 400
 
-        # ── 1. Recover contract text from file cache if not sent ──────────────
-        if not contract_text and file_cache_id:
+        # ── 1a. Recover contract text from in-memory file cache ───────────────
+        if not contract_text and file_cache_id and not file_cache_id.startswith("past__"):
             cached_bytes = _cache_get(file_cache_id)
             if cached_bytes:
                 try:
@@ -2916,6 +2917,23 @@ def chat():
                         contract_text = extract_text_from_docx(cached_bytes)
                     except Exception:
                         pass
+
+        # ── 1b. Fallback: recover from Supabase Storage (past analyses) ───────
+        if not contract_text and file_storage_path:
+            try:
+                sr = supa_storage_download("contracts", file_storage_path)
+                if sr and sr.ok:
+                    try:
+                        contract_text = extract_text_from_docx(sr.content)
+                    except Exception:
+                        try:
+                            contract_text = sr.content.decode("utf-8", errors="ignore")
+                        except Exception:
+                            pass
+                    if contract_text:
+                        print(f"chat: contract text recovered from storage ({len(contract_text)} chars)")
+            except Exception as _se:
+                print(f"chat storage fallback error: {_se}")
 
         # ── 2. RAG search — use user message + jurisdiction as query ──────────
         rag_block = ""
