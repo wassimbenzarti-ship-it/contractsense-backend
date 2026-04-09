@@ -237,12 +237,18 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"><div class="dot"></div>Omniscient</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0">
+    <div class="logo"><div class="dot"></div>Omniscient</div>
+    <div style="display:flex;border:1px solid rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;font-size:11px;font-weight:700">
+      <button id="app-lang-fr" onclick="appSetLang('fr')" style="padding:4px 10px;background:rgba(200,169,75,0.15);color:#c8a94b;border:none;cursor:pointer">FR</button>
+      <button id="app-lang-en" onclick="appSetLang('en')" style="padding:4px 10px;background:transparent;color:#6b7280;border:none;cursor:pointer">EN</button>
+    </div>
+  </div>
 
   <!-- STEP 2: Upload form -->
   <div id="step-form">
-    <h1 class="fadein">Révisez vos contrats<br/><span class="accent">avec l'IA.</span></h1>
-    <p class="desc">Uploadez votre contrat. L'IA identifie les parties, vous choisissez laquelle protéger, puis propose des modifications avec Track Changes.</p>
+    <h1 class="fadein" id="app-hero-h1">Révisez vos contrats<br/><span class="accent">avec l'IA.</span></h1>
+    <p class="desc" id="app-hero-sub">Uploadez votre contrat. L'IA identifie les parties, vous choisissez laquelle protéger, puis propose des modifications avec Track Changes.</p>
 
     <div class="tabs">
       <button class="tab active" id="tab-upload">📤 Uploader</button>
@@ -252,8 +258,8 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
     <div id="upload-zone">
       <div class="drop" id="drop-area">
         <div style="font-size:30px;margin-bottom:10px">📤</div>
-        <div style="font-weight:700;font-size:15px;margin-bottom:5px">Déposez votre contrat ici</div>
-        <div style="color:#6b7280;font-size:13px">ou cliquez pour sélectionner</div>
+        <div id="drop-title" style="font-weight:700;font-size:15px;margin-bottom:5px">Déposez votre contrat ici</div>
+        <div id="drop-sub" style="color:#6b7280;font-size:13px">ou cliquez pour sélectionner</div>
         <div class="tags"><span class="tag">PDF</span><span class="tag">DOCX</span><span class="tag">TXT</span></div>
       </div>
       <input type="file" id="file-input" accept=".pdf,.docx,.txt,.doc" style="display:none"/>
@@ -2581,6 +2587,57 @@ async function rejectSuggDir(id){
   if(r.ok){alert('Suggestion rejetee.');loadJuristes();}
   else alert('Erreur');
 }
+
+// ── App language switcher ─────────────────────────────────────────
+var _appLang = localStorage.getItem('omniscient_lang') || 'fr';
+var _appStrings = {
+  fr: {
+    heroH1: 'Révisez vos contrats<br/><span class="accent">avec l\'IA.</span>',
+    heroSub: 'Uploadez votre contrat. L\'IA identifie les parties, vous choisissez laquelle protéger, puis propose des modifications avec Track Changes.',
+    uploadTitle: 'Déposez votre contrat ici',
+    uploadSub: 'ou cliquez pour sélectionner',
+    btnAnalyse: '⚡ Analyser',
+    btnDownload: 'Télécharger DOCX',
+    tabUpload: '📤 Uploader',
+    tabText: ' Coller du texte',
+    complianceTitle: '⚖ Analyse de conformité juridique',
+    complianceSub: 'Basée sur les lois, doctrine et jurisprudences de la base documentaire RAG',
+    dashTitle: 'Mon espace',
+    riskHigh: 'Risque élevé', riskMed: 'Risque modéré', riskLow: 'Risque faible',
+  },
+  en: {
+    heroH1: 'Review your contracts<br/><span class="accent">with AI.</span>',
+    heroSub: 'Upload your contract. The AI identifies the parties, you choose which one to protect, then it suggests edits with Track Changes.',
+    uploadTitle: 'Drop your contract here',
+    uploadSub: 'or click to select',
+    btnAnalyse: '⚡ Analyze',
+    btnDownload: 'Download DOCX',
+    tabUpload: '📤 Upload',
+    tabText: ' Paste text',
+    complianceTitle: '⚖ Legal compliance analysis',
+    complianceSub: 'Based on laws, doctrine and case law from the RAG knowledge base',
+    dashTitle: 'My workspace',
+    riskHigh: 'High risk', riskMed: 'Moderate risk', riskLow: 'Low risk',
+  }
+};
+function appSetLang(l) {
+  _appLang = l;
+  localStorage.setItem('omniscient_lang', l);
+  var s = _appStrings[l] || _appStrings.fr;
+  var h1 = document.getElementById('app-hero-h1'); if (h1) h1.innerHTML = s.heroH1;
+  var sub = document.getElementById('app-hero-sub'); if (sub) sub.textContent = s.heroSub;
+  var dt = document.getElementById('drop-title'); if (dt) dt.textContent = s.uploadTitle;
+  var ds = document.getElementById('drop-sub'); if (ds) ds.textContent = s.uploadSub;
+  var dt2 = document.getElementById('dash-title'); if (dt2) dt2.textContent = s.dashTitle;
+  var tu = document.getElementById('tab-upload'); if (tu) tu.textContent = s.tabUpload;
+  var tt = document.getElementById('tab-text'); if (tt) tt.textContent = s.tabText;
+  // Toggle button styles
+  var bf = document.getElementById('app-lang-fr'), be = document.getElementById('app-lang-en');
+  if (bf) { bf.style.background = l==='fr'?'rgba(200,169,75,0.15)':'transparent'; bf.style.color = l==='fr'?'#c8a94b':'#6b7280'; }
+  if (be) { be.style.background = l==='en'?'rgba(200,169,75,0.15)':'transparent'; be.style.color = l==='en'?'#c8a94b':'#6b7280'; }
+  document.documentElement.lang = l;
+}
+if (_appLang === 'en') appSetLang('en');
 </script>
 </body>
 </html>
