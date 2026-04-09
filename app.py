@@ -2905,7 +2905,7 @@ def chat():
         if not message:
             return jsonify({"error": "Message requis"}), 400
 
-        # Try to recover contract text from in-memory file cache
+        # ── 1. Recover contract text from file cache if not sent ──────────────
         if not contract_text and file_cache_id:
             cached_bytes = _cache_get(file_cache_id)
             if cached_bytes:
@@ -2913,10 +2913,73 @@ def chat():
                     contract_text = cached_bytes.decode("utf-8")
                 except Exception:
                     try:
-                        contract_text, _, _ = extract_text_from_docx(cached_bytes)
+                        contract_text = extract_text_from_docx(cached_bytes)
                     except Exception:
                         pass
 
+        # ── 2. RAG search — use user message + jurisdiction as query ──────────
+        rag_block = ""
+        try:
+            voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+            # Build a rich query: combine the user message with jurisdiction context
+            rag_query = f"{message} {jurisdiction} {partie}"
+            query_vec = get_embedding(rag_query, voyage_key, input_type="query")
+            is_voyage = bool(voyage_key) and len(query_vec) == 1024
+
+            rag_docs = []
+
+            # Primary: pgvector semantic search
+            if is_voyage:
+                rag_docs = search_rag_pgvector(query_vec, top_k=8)
+
+            # Fallback: direct fetch + cosine similarity
+            if not rag_docs:
+                supa_key = SUPA_SERVICE_KEY or SUPA_KEY
+                raw_r = requests.get(
+                    SUPA_URL + "/rest/v1/rag_documents",
+                    headers={"apikey": supa_key, "Authorization": "Bearer " + supa_key},
+                    params={
+                        "select": "id,title,content,source,category,party_label,jurisdiction,embedding",
+                        "limit": "150"
+                    },
+                    timeout=20
+                )
+                if raw_r.ok:
+                    scored = []
+                    for doc in (raw_r.json() or []):
+                        emb = doc.get("embedding")
+                        if isinstance(emb, str):
+                            try: emb = json.loads(emb)
+                            except: emb = None
+                        if emb and isinstance(emb, list):
+                            score = cosine_similarity(query_vec, emb)
+                            # Boost docs matching the detected jurisdiction
+                            doc_jur = (doc.get("jurisdiction") or "universel").lower()
+                            if doc_jur in (jurisdiction, "universel", "auto"):
+                                score *= 1.2
+                            scored.append((score, doc))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    rag_docs = [d for _, d in scored[:8]]
+
+            if rag_docs:
+                rag_lines = []
+                for i, doc in enumerate(rag_docs, 1):
+                    title   = doc.get("title") or doc.get("source") or "Document"
+                    content = (doc.get("content") or "").strip()
+                    cat     = doc.get("category") or ""
+                    src     = doc.get("source") or ""
+                    # Truncate long docs but keep more content for legal references
+                    max_content = 1200
+                    excerpt = content[:max_content] + ("…" if len(content) > max_content else "")
+                    rag_lines.append(
+                        f"[DOC {i}] {title} (catégorie: {cat}, source: {src})\n{excerpt}"
+                    )
+                rag_block = "\n\n━━ BASE DE CONNAISSANCES RAG ━━\n" + "\n\n".join(rag_lines) + "\n━━ FIN RAG ━━"
+                print(f"chat RAG: {len(rag_docs)} docs injectés pour la requête: {message[:80]}")
+        except Exception as rag_err:
+            print(f"chat RAG error: {rag_err}")
+
+        # ── 3. Build prompt context ───────────────────────────────────────────
         jur_labels = {
             "droit_marocain": "Droit marocain",
             "droit_francais": "Droit français",
@@ -2927,48 +2990,54 @@ def chat():
         }
         jur_label = jur_labels.get(jurisdiction, jurisdiction)
 
-        # Build modifications summary for system prompt
         mods_summary = ""
         if modifications_list:
-            mods_summary = "\n\nMODIFICATIONS PROPOSÉES PAR L'IA:\n"
+            mods_summary = "\n\nMODIFICATIONS IA EN COURS:\n"
             for i, mod in enumerate(modifications_list):
                 dec = decisions_map.get(str(mod.get("id", "")), "pending")
                 dec_label = {"accepted": "Acceptée", "rejected": "Refusée", "pending": "En attente"}.get(dec, dec)
                 orig = (mod.get("original") or "")
                 prop = (mod.get("proposed") or "")
                 mods_summary += (
-                    f"\n[{i+1}] {mod.get('clause_name', 'Clause')} — {dec_label} — risque: {mod.get('risk', 'medium')}\n"
-                    f"   Raison: {mod.get('reason', '')}\n"
-                    f"   Original: {orig[:300]}{'...' if len(orig)>300 else ''}\n"
-                    f"   Proposé: {prop[:300]}{'...' if len(prop)>300 else ''}\n"
+                    f"\n[{i+1}] {mod.get('clause_name', 'Clause')} — {dec_label} — risque: {mod.get('risk','medium')}\n"
+                    f"   Raison: {mod.get('reason','')}\n"
+                    f"   Original: {orig[:250]}{'…' if len(orig)>250 else ''}\n"
+                    f"   Proposé: {prop[:250]}{'…' if len(prop)>250 else ''}\n"
                 )
 
-        # Truncate contract text to avoid token overflow
         contract_block = ""
         if contract_text:
-            max_chars = 7000
-            excerpt = contract_text[:max_chars] + ("\n\n[...contrat tronqué...]" if len(contract_text) > max_chars else "")
+            max_chars = 6000
+            excerpt = contract_text[:max_chars] + ("\n\n[…contrat tronqué…]" if len(contract_text) > max_chars else "")
             contract_block = f"\n\nTEXTE DU CONTRAT:\n{excerpt}"
 
         system_prompt = (
-            f"Tu es un assistant juridique expert, intégré dans une plateforme d'analyse de contrats. "
-            f"Tu aides l'utilisateur à comprendre son contrat, à poser des questions dessus, "
-            f"et à lui proposer ou appliquer des modifications.\n\n"
+            f"Tu es Omniscient, un assistant juridique expert intégré dans une plateforme d'analyse de contrats. "
+            f"Tu aides l'utilisateur à comprendre son contrat et la législation applicable, "
+            f"et à proposer ou appliquer des modifications.\n\n"
             f"CONTEXTE:\n"
             f"- Droit applicable: {jur_label}\n"
             f"- Partie protégée: {partie}\n"
-            f"- Nombre de modifications IA déjà proposées: {len(modifications_list)}\n"
+            f"- Modifications IA déjà proposées: {len(modifications_list)}\n"
             f"{contract_block}"
-            f"{mods_summary}\n\n"
-            f"INSTRUCTIONS:\n"
-            f"1. Réponds de façon concise et professionnelle. Utilise la même langue que l'utilisateur.\n"
-            f"2. Si l'utilisateur demande à modifier ou ajouter une clause, fournis la modification "
-            f"en insérant à la fin de ta réponse un bloc JSON encadré par <modification>...</modification> "
-            f"(sans markdown autour du JSON) avec les champs: clause_name, original, proposed, risk (high/medium/low), reason.\n"
-            f"3. Si tu fais référence à une modification déjà proposée, utilise son numéro [1], [2], etc.\n"
-            f"4. Ne fournis le bloc <modification> QUE si l'utilisateur demande explicitement un changement."
+            f"{mods_summary}"
+            f"{rag_block}\n\n"
+            f"RÈGLES ABSOLUES:\n"
+            f"1. Pour toute question sur un article de loi, un texte législatif ou réglementaire, "
+            f"cite UNIQUEMENT ce qui figure dans la BASE DE CONNAISSANCES RAG ci-dessus. "
+            f"Si l'article demandé n'y est pas, réponds explicitement: "
+            f"\"Cet article n'est pas disponible dans notre base documentaire. "
+            f"Je ne peux pas vous en citer le contenu exact sans risquer de l'inventer.\"\n"
+            f"2. Ne jamais inventer, paraphraser ni compléter un article de loi de mémoire.\n"
+            f"3. Réponds de façon concise et professionnelle. Utilise la même langue que l'utilisateur.\n"
+            f"4. Si l'utilisateur demande à modifier ou ajouter une clause, insère à la fin de ta réponse "
+            f"un bloc JSON encadré par <modification>...</modification> (sans markdown) avec les champs: "
+            f"clause_name, original, proposed, risk (high/medium/low), reason. "
+            f"Ne fournis ce bloc QUE si l'utilisateur demande explicitement un changement.\n"
+            f"5. Pour les modifications déjà proposées, référence-les par leur numéro [1], [2], etc."
         )
 
+        # ── 4. Call Claude ────────────────────────────────────────────────────
         messages_for_claude = []
         for h in history[-10:]:
             role = h.get("role", "user")
@@ -2987,7 +3056,7 @@ def chat():
         )
         reply = resp.content[0].text.strip()
 
-        # Extract optional modification block from reply
+        # ── 5. Extract optional modification block ────────────────────────────
         modification = None
         mod_match = re.search(r"<modification>(.*?)</modification>", reply, re.DOTALL)
         if mod_match:
