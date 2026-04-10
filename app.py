@@ -1062,8 +1062,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             _nc["id"] = len(mods) + 1
             mods.append(_nc)
     # Post-process: auto-assign rag_source for null entries by keyword matching
+    # Only cites legal references and validated model clauses (not client company names)
+    _protected_kw_pproc = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
     if contract_docs or legal_docs:
-        _all_rag = list(contract_docs or []) + list(legal_docs or [])
+        # Legal docs always citable; contract docs only if validated_clause source
+        _citable_legal = list(legal_docs or [])
+        _citable_contract = [d for d in (contract_docs or []) if "validated_clause" in (d.get("source","") or "")]
+        _all_citable = _citable_legal + _citable_contract
+        # Remove protected proprietary sources
+        _all_citable = [d for d in _all_citable if not any(p in (d.get("title","") + d.get("source","")).lower() for p in _protected_kw_pproc)]
         _kw_map = [
             (["non-concurrence","non-competition","concurrence"], ["non-concurrence","concurrence"]),
             (["non-sollicitation","sollicitation"], ["sollicitation","non-sollicitation"]),
@@ -1087,14 +1094,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             cn = norm(clause_name + " " + (reason or ""))
             for triggers, searches in _kw_map:
                 if any(t in cn for t in triggers):
-                    for doc in _all_rag:
+                    for doc in _all_citable:
                         dtitle = norm(doc.get("title","") or doc.get("source",""))
                         if any(s in dtitle for s in searches):
                             return doc.get("title") or doc.get("source")
-            # fallback: word overlap
+            # fallback: word overlap on legal docs only
             words = set(norm(clause_name).split())
             best, bscore = None, 0
-            for doc in _all_rag:
+            for doc in _citable_legal:
                 dtitle = set(norm(doc.get("title","") or doc.get("source","")).split())
                 sc = len(words & dtitle)
                 if sc > bscore:
