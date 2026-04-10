@@ -2030,7 +2030,6 @@ def admin_create_user():
             "subscription_end": free_reset
         })
         # Envoyer email de bienvenue avec les credentials
-        app_url = os.environ.get("APP_URL", "https://contractsense.fr")
         role_label = "Juriste" if role == "juriste" else "Directeur"
         email_sent = send_email(
             to=email,
@@ -2044,7 +2043,7 @@ def admin_create_user():
     <p style="margin:4px 0;"><strong>Mot de passe :</strong> {password}</p>
   </div>
   <p>Connectez-vous ici :</p>
-  <a href="{app_url}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Accéder à Omniscient</a>
+  <a href="{APP_URL}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Accéder à Omniscient</a>
   <p style="margin-top:24px;color:#888;font-size:12px;">Nous vous recommandons de changer votre mot de passe après votre première connexion.</p>
 </div>
 """
@@ -2982,7 +2981,6 @@ def director_create_juriste():
         })
 
     # Envoyer email de bienvenue avec identifiants
-    app_url = os.environ.get("APP_URL", "https://contractsense.fr")
     send_email(
         to=juriste_email,
         subject="Votre accès Omniscient",
@@ -2994,7 +2992,7 @@ def director_create_juriste():
     <p style="margin:0 0 8px 0"><strong>Email :</strong> {juriste_email}</p>
     <p style="margin:0"><strong>Mot de passe :</strong> {juriste_password}</p>
   </div>
-  <a href="{app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+  <a href="{APP_URL}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
     Accéder à Omniscient
   </a>
   <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
