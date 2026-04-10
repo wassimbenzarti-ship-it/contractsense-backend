@@ -1967,11 +1967,38 @@ def admin_create_user():
             "email_confirm": True
         }, timeout=15)
         if not auth_resp.ok:
-            err = auth_resp.json()
-            return jsonify({"error": "Auth creation failed: " + err.get("message", str(err))}), 400
-        auth_user = auth_resp.json()
-        # Insert metadata into user_accounts
-        supa_insert("user_accounts", {
+            err_body = auth_resp.json()
+            err_msg = err_body.get("message", str(err_body)).lower()
+            # Si l'utilisateur Auth existe deja : le recuperer et mettre a jour son mot de passe
+            if any(x in err_msg for x in ["already registered", "already exists", "email_exists", "user already"]):
+                # Chercher l'utilisateur existant par email
+                list_r = requests.get(
+                    SUPA_URL + "/auth/v1/admin/users",
+                    headers=auth_headers,
+                    params={"per_page": "1000", "page": "1"},
+                    timeout=15
+                )
+                auth_user = None
+                if list_r.ok:
+                    for u in (list_r.json().get("users") or []):
+                        if u.get("email") == email:
+                            auth_user = u
+                            break
+                if not auth_user:
+                    return jsonify({"error": "Utilisateur Auth existant mais introuvable dans la liste"}), 400
+                # Mettre a jour le mot de passe
+                requests.put(
+                    SUPA_URL + f"/auth/v1/admin/users/{auth_user['id']}",
+                    headers=auth_headers,
+                    json={"password": password, "email_confirm": True},
+                    timeout=15
+                )
+            else:
+                return jsonify({"error": "Auth creation failed: " + err_body.get("message", str(err_body))}), 400
+        else:
+            auth_user = auth_resp.json()
+        # Upsert metadata into user_accounts (gere le cas ou la ligne existe deja)
+        supa_upsert("user_accounts", {
             "email": email, "role": role,
             "parent_email": parent_email if parent_email else None,
             "temp_password": password,
