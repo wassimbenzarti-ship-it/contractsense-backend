@@ -252,16 +252,37 @@ SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "westfield2026")
 
-# ── Email (SMTP) ──────────────────────────────────────────────────────────────
-SMTP_HOST     = os.environ.get("SMTP_HOST", "")
-SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER     = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-SMTP_FROM     = os.environ.get("SMTP_FROM", SMTP_USER)
+# ── Email (Resend prioritaire, fallback SMTP) ─────────────────────────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+RESEND_FROM    = os.environ.get("RESEND_FROM", "ContractSense <noreply@contractsense.fr>")
+SMTP_HOST      = os.environ.get("SMTP_HOST", "")
+SMTP_PORT      = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER      = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM      = os.environ.get("SMTP_FROM", SMTP_USER)
 
 def send_email(to: str, subject: str, html: str) -> bool:
+    # Resend (prioritaire)
+    if RESEND_API_KEY:
+        try:
+            r = requests.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={"from": RESEND_FROM, "to": [to], "subject": subject, "html": html},
+                timeout=15
+            )
+            if r.ok:
+                print(f"[EMAIL/Resend] Envoyé à {to} — {subject}", flush=True)
+                return True
+            else:
+                print(f"[EMAIL/Resend] Erreur {r.status_code}: {r.text[:200]}", flush=True)
+                return False
+        except Exception as e:
+            print(f"[EMAIL/Resend] Exception: {e}", flush=True)
+            return False
+    # Fallback SMTP
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL] SMTP non configuré — email non envoyé à {to}", flush=True)
+        print(f"[EMAIL] Aucun provider configuré (RESEND_API_KEY ou SMTP) — email non envoyé à {to}", flush=True)
         return False
     try:
         msg = MIMEMultipart("alternative")
@@ -278,10 +299,10 @@ def send_email(to: str, subject: str, html: str) -> bool:
                 s.starttls()
                 s.login(SMTP_USER, SMTP_PASSWORD)
                 s.sendmail(SMTP_FROM, [to], msg.as_string())
-        print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+        print(f"[EMAIL/SMTP] Envoyé à {to} — {subject}", flush=True)
         return True
     except Exception as e:
-        print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
+        print(f"[EMAIL/SMTP] Erreur envoi à {to}: {e}", flush=True)
         return False
 
 # ── In-memory file cache ──────────────────────────────────────────────────────
