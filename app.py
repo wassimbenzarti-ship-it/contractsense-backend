@@ -254,7 +254,7 @@ ADMIN_PASS = os.environ.get("ADMIN_PASS", "westfield2026")
 
 # ── Email (Resend prioritaire, fallback SMTP) ─────────────────────────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-RESEND_FROM    = os.environ.get("RESEND_FROM", "ContractSense <noreply@contractsense.fr>")
+RESEND_FROM    = os.environ.get("EMAIL_FROM") or os.environ.get("RESEND_FROM") or os.environ.get("SMTP_FROM", "")
 SMTP_HOST      = os.environ.get("SMTP_HOST", "")
 SMTP_PORT      = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER      = os.environ.get("SMTP_USER", "")
