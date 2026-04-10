@@ -259,10 +259,10 @@ SMTP_USER     = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM     = os.environ.get("SMTP_FROM", SMTP_USER)
 
-def send_email(to: str, subject: str, html: str):
+def send_email(to: str, subject: str, html: str) -> bool:
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
         print(f"[EMAIL] SMTP non configuré — email non envoyé à {to}", flush=True)
-        return
+        return False
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -279,8 +279,10 @@ def send_email(to: str, subject: str, html: str):
                 s.login(SMTP_USER, SMTP_PASSWORD)
                 s.sendmail(SMTP_FROM, [to], msg.as_string())
         print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+        return True
     except Exception as e:
         print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
+        return False
 
 # ── In-memory file cache ──────────────────────────────────────────────────────
 # Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
@@ -2006,7 +2008,28 @@ def admin_create_user():
             "payment_status": "free",
             "subscription_end": free_reset
         })
-        return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
+        # Envoyer email de bienvenue avec les credentials
+        app_url = os.environ.get("APP_URL", "https://contractsense.fr")
+        role_label = "Juriste" if role == "juriste" else "Directeur"
+        email_sent = send_email(
+            to=email,
+            subject="Votre compte ContractSense a été créé",
+            html=f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;background:#f9f9f9;border-radius:8px;">
+  <h2 style="color:#1a1a2e;">Bienvenue sur ContractSense</h2>
+  <p>Votre compte <strong>{role_label}</strong> a été créé. Voici vos identifiants de connexion :</p>
+  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:20px;margin:20px 0;">
+    <p style="margin:4px 0;"><strong>Email :</strong> {email}</p>
+    <p style="margin:4px 0;"><strong>Mot de passe :</strong> {password}</p>
+  </div>
+  <p>Connectez-vous ici :</p>
+  <a href="{app_url}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Accéder à ContractSense</a>
+  <p style="margin-top:24px;color:#888;font-size:12px;">Nous vous recommandons de changer votre mot de passe après votre première connexion.</p>
+</div>
+"""
+        )
+        print(f"[CREATE-USER] Email bienvenue {'envoyé' if email_sent else 'non envoyé (SMTP non configuré)'} -> {email}")
+        return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id"), "email_sent": email_sent})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
