@@ -3212,13 +3212,12 @@ def chat():
             f"Si l'information n'y est pas, utilise tes propres connaissances juridiques en le signalant clairement "
             f"(ex: 'D'après mes connaissances générales...' ou 'Cette information ne figure pas dans notre base, mais selon le droit applicable...').\n"
             f"2. Réponds de façon concise et professionnelle. Utilise la même langue que l'utilisateur.\n"
-            f"3. Si l'utilisateur demande à modifier, améliorer, corriger, renforcer ou ajouter une clause, "
-            f"ou si tu proposes une modification protectrice, insère OBLIGATOIREMENT à la fin de ta réponse "
-            f"un bloc JSON encadré par <modification>...</modification> (sans markdown ni balises code) avec les champs: "
-            f"clause_name (string), original (texte original de la clause ou vide si nouvelle clause), "
-            f"proposed (nouvelle rédaction complète), risk (high/medium/low), reason (explication courte). "
-            f"Le JSON doit être valide et directement parseable. "
-            f"N'inclus ce bloc QUE lorsqu'une modification concrète est proposée.\n"
+            f"3. INSTRUCTION CRITIQUE — BLOC MODIFICATION: Chaque fois que ta réponse propose "
+            f"une nouvelle rédaction d'une clause (demandée ou de ta propre initiative), tu DOIS "
+            f"terminer ta réponse par ce bloc EXACTEMENT (sur une seule ligne, guillemets doubles uniquement):\n"
+            f"<modification>{{\"clause_name\":\"Nom\",\"original\":\"Texte actuel ou vide\",\"proposed\":\"Nouvelle rédaction complète\",\"risk\":\"medium\",\"reason\":\"Explication\"}}</modification>\n"
+            f"Règles strictes: JSON sur UNE SEULE LIGNE, guillemets doubles, pas de backticks ni de blocs code. "
+            f"N'inclus ce bloc QUE si tu proposes une rédaction alternative concrète.\n"
             f"4. Pour les modifications déjà proposées, référence-les par leur numéro [1], [2], etc."
         )
 
@@ -3250,11 +3249,24 @@ def chat():
                 # Strip markdown code fences if Claude wrapped the JSON
                 raw_json = re.sub(r"^```(?:json)?\s*", "", raw_json)
                 raw_json = re.sub(r"\s*```$", "", raw_json).strip()
-                modification = json.loads(raw_json)
+                # Collapse internal newlines in JSON (common when Claude formats multiline)
+                # Only collapse newlines that are NOT inside string values
+                try:
+                    modification = json.loads(raw_json)
+                except json.JSONDecodeError:
+                    # Fallback: collapse all newlines and try again
+                    raw_json_flat = " ".join(raw_json.splitlines())
+                    modification = json.loads(raw_json_flat)
                 reply = re.sub(r"\s*<modification>.*?</modification>", "", reply, flags=re.DOTALL).strip()
+                # Ensure required fields exist
+                for field in ("clause_name", "proposed"):
+                    if not modification.get(field):
+                        modification[field] = modification.get(field) or "Clause"
                 print(f"chat: modification extracted — {modification.get('clause_name','?')}")
             except Exception as me:
-                print(f"chat: modification parse error: {me} | raw: {mod_match.group(1)[:200]}")
+                print(f"chat: modification parse error: {me} | raw: {mod_match.group(1)[:300]}")
+        else:
+            print(f"chat: no <modification> block found in reply (len={len(reply)})")
 
         return jsonify({"reply": reply, "modification": modification})
     except Exception as e:
