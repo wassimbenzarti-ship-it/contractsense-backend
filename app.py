@@ -1284,7 +1284,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
         section.left_margin   = Cm(2.5)
         section.right_margin  = Cm(2.5)
 
-    title = doc.add_heading("Rapport de modifications — ContractSense", 0)
+    title = doc.add_heading("Rapport de modifications — Omniscient", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     dp = doc.add_paragraph()
     dp.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1360,7 +1360,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
 
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
-    author = "ContractSense"
+    author = "Omniscient"
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 1
 
@@ -2034,17 +2034,17 @@ def admin_create_user():
         role_label = "Juriste" if role == "juriste" else "Directeur"
         email_sent = send_email(
             to=email,
-            subject="Votre compte ContractSense a été créé",
+            subject="Votre compte Omniscient a été créé",
             html=f"""
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;background:#f9f9f9;border-radius:8px;">
-  <h2 style="color:#1a1a2e;">Bienvenue sur ContractSense</h2>
+  <h2 style="color:#1a1a2e;">Bienvenue sur Omniscient</h2>
   <p>Votre compte <strong>{role_label}</strong> a été créé. Voici vos identifiants de connexion :</p>
   <div style="background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:20px;margin:20px 0;">
     <p style="margin:4px 0;"><strong>Email :</strong> {email}</p>
     <p style="margin:4px 0;"><strong>Mot de passe :</strong> {password}</p>
   </div>
   <p>Connectez-vous ici :</p>
-  <a href="{app_url}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Accéder à ContractSense</a>
+  <a href="{app_url}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Accéder à Omniscient</a>
   <p style="margin-top:24px;color:#888;font-size:12px;">Nous vous recommandons de changer votre mot de passe après votre première connexion.</p>
 </div>
 """
@@ -2279,7 +2279,7 @@ def export():
             output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
+            doc.add_heading('Omniscient - Modifications acceptÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©es', 0)
             accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
             for i, m in enumerate(accepted):
                 doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
@@ -2985,17 +2985,17 @@ def director_create_juriste():
     app_url = os.environ.get("APP_URL", "https://contractsense.fr")
     send_email(
         to=juriste_email,
-        subject="Votre accès ContractSense",
+        subject="Votre accès Omniscient",
         html=f"""
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;background:#f9fafb;border-radius:12px">
-  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur ContractSense</h2>
+  <h2 style="color:#1e293b;margin-bottom:8px">Bienvenue sur Omniscient</h2>
   <p style="color:#475569">Votre directeur vous a ajouté à son équipe. Voici vos identifiants de connexion :</p>
   <div style="background:#fff;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e2e8f0">
     <p style="margin:0 0 8px 0"><strong>Email :</strong> {juriste_email}</p>
     <p style="margin:0"><strong>Mot de passe :</strong> {juriste_password}</p>
   </div>
   <a href="{app_url}" style="display:inline-block;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
-    Accéder à ContractSense
+    Accéder à Omniscient
   </a>
   <p style="color:#94a3b8;font-size:12px;margin-top:24px">Pensez à changer votre mot de passe après votre première connexion.</p>
 </div>
