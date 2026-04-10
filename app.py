@@ -161,24 +161,42 @@ def get_legal_framework(contract_type, jurisdiction="auto"):
 
 def detect_jurisdiction(text, title=""):
     """Detect legal jurisdiction from document/contract text using keyword matching."""
-    combined = ((title or "") + " " + (text or "")[:3000]).lower()
-    # Moroccan
-    if any(k in combined for k in ["dahir", "doc (dahir", "code du travail marocain", "loi 09-08", "bank al-maghrib", "banque al-maghrib", "cnss", "cimr", "maroc", "marocain", "marocaine", "rabat", "casablanca", "agadir", "fes", "cour supreme du maroc", "tribunal de commerce de casa"]):
+    # Search full text (not just first 3000 chars) for better detection
+    combined = ((title or "") + " " + (text or "")).lower()
+    # Moroccan — checked first as primary market
+    if any(k in combined for k in ["dahir", "doc (dahir", "code du travail marocain", "loi 09-08",
+            "bank al-maghrib", "banque al-maghrib", "cnss", "cimr",
+            "maroc", "marocain", "marocaine", "marocains", "marocaines",
+            "royaume du maroc", "droit marocain", "loi marocaine",
+            "dahir des obligations", "dahir n", "b.o. n",
+            "tribunal de commerce de casablanca", "tribunal de commerce de rabat",
+            "cour d'appel de casablanca", "cour d'appel de rabat",
+            "rabat", "casablanca", "agadir", "fes", "marrakech", "tanger", "oujda", "meknes",
+            "cour supreme du maroc", "tribunal de commerce de casa",
+            "dirham", "mad", "centre regional d'investissement"]):
         return "droit_marocain"
     # Tunisian
-    if any(k in combined for k in ["tunisie", "tunisien", "tunisienne", "code du travail tunisien", "banque centrale de tunisie", "tunis", "sfax"]):
+    if any(k in combined for k in ["tunisie", "tunisien", "tunisienne", "code du travail tunisien",
+            "banque centrale de tunisie", "tunis", "sfax", "droit tunisien", "dinar tunisien"]):
         return "droit_tunisien"
     # Algerian
-    if any(k in combined for k in ["algerie", "algerien", "algerienne", "code du travail algerien", "banque d'algerie", "alger", "oran"]):
+    if any(k in combined for k in ["algerie", "algerien", "algerienne", "code du travail algerien",
+            "banque d'algerie", "alger", "oran", "droit algerien", "dinar algerien"]):
         return "droit_algerien"
     # Belgian
-    if any(k in combined for k in ["belgique", "belge", "droit belge", "code civil belge", "bruxelles", "liege", "gand"]):
+    if any(k in combined for k in ["belgique", "belge", "droit belge", "code civil belge",
+            "bruxelles", "liege", "gand", "tribunal de bruxelles"]):
         return "droit_belge"
     # French
-    if any(k in combined for k in ["code civil francais", "code du travail francais", "cnil", "rgpd", "tribunal de grande instance", "cour de cassation", "code de commerce francais", "droit francais", "loi francaise", "paris", "france", "francais", "francaise"]):
+    if any(k in combined for k in ["code civil francais", "code du travail francais", "cnil", "rgpd",
+            "tribunal de grande instance", "cour de cassation", "code de commerce francais",
+            "droit francais", "loi francaise", "paris", "france", "francais", "francaise",
+            "conseil de prudhommes", "tribunal judiciaire", "euro", "€"]):
         return "droit_francais"
     # English/UK/Common law
-    if any(k in combined for k in ["english law", "uk law", "companies act", "employment rights act", "common law", "court of appeal", "high court", "gdpr", "united kingdom", "england", "wales", "scotland", "london", "british"]):
+    if any(k in combined for k in ["english law", "uk law", "companies act", "employment rights act",
+            "common law", "court of appeal", "high court", "gdpr",
+            "united kingdom", "england", "wales", "scotland", "london", "british"]):
         return "droit_anglais"
     return "universel"
 
@@ -690,22 +708,39 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 key = SUPA_SERVICE_KEY or SUPA_KEY
                 raw_url = SUPA_URL + "/rest/v1/rag_documents"
                 raw_headers = {"apikey": key, "Authorization": "Bearer " + key}
-                raw_params = {"select": "id,title,content,source,category,party_label,jurisdiction,embedding", "limit": "150"}
-                raw_r = requests.get(raw_url, headers=raw_headers, params=raw_params, timeout=20)
+                # Fetch up to 500 docs, include embedding_vector too for Python-added docs
+                raw_params = {"select": "id,title,content,source,category,party_label,jurisdiction,embedding,embedding_vector", "limit": "500"}
+                raw_r = requests.get(raw_url, headers=raw_headers, params=raw_params, timeout=30)
                 if raw_r.ok:
                     raw_docs = raw_r.json() or []
                     scored = []
                     for doc in raw_docs:
-                        emb = doc.get("embedding")
-                        if isinstance(emb, str):
-                            try: emb = json.loads(emb)
+                        emb = None
+                        # Try embedding column first (JSON string or list)
+                        raw_emb = doc.get("embedding")
+                        if isinstance(raw_emb, str) and raw_emb.strip():
+                            try: emb = json.loads(raw_emb)
                             except: emb = None
-                        if emb and isinstance(emb, list):
-                            score = cosine_similarity(query_vec, emb)
-                            scored.append((score, doc))
+                        elif isinstance(raw_emb, list):
+                            emb = raw_emb
+                        # Fallback: try embedding_vector column (pgvector string "[x,y,...]")
+                        if not emb:
+                            raw_vec = doc.get("embedding_vector")
+                            if isinstance(raw_vec, str) and raw_vec.strip().startswith("["):
+                                try: emb = json.loads(raw_vec)
+                                except: emb = None
+                            elif isinstance(raw_vec, list):
+                                emb = raw_vec
+                        if emb and isinstance(emb, list) and len(emb) > 0:
+                            # Only compare same-dimension embeddings
+                            if len(emb) == len(query_vec):
+                                score = cosine_similarity(query_vec, emb)
+                                scored.append((score, doc))
+                            else:
+                                print(f"RAG dim mismatch: doc {doc.get('id')} has {len(emb)}-dim, query is {len(query_vec)}-dim")
                     scored.sort(key=lambda x: x[0], reverse=True)
                     all_docs = [d for _, d in scored[:20]]
-                    print(f"Fallback RAG: {len(all_docs)} docs ranked from {len(raw_docs)} total")
+                    print(f"Fallback RAG: {len(all_docs)} docs ranked from {len(raw_docs)} total (with embeddings: {len(scored)})")
                 else:
                     print(f"Fallback RAG fetch error {raw_r.status_code}: {raw_r.text[:200]}")
             except Exception as fe:
