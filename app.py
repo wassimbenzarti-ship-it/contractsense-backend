@@ -1061,7 +1061,54 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         for _nc in _defaults:
             _nc["id"] = len(mods) + 1
             mods.append(_nc)
-    rag_backed = sum(1 for m in mods if m.get("rag_source"))
+    # Post-process: auto-assign rag_source for null entries by keyword matching
+    if contract_docs or legal_docs:
+        _all_rag = list(contract_docs or []) + list(legal_docs or [])
+        _kw_map = [
+            (["non-concurrence","non-competition","concurrence"], ["non-concurrence","concurrence"]),
+            (["non-sollicitation","sollicitation"], ["sollicitation","non-sollicitation"]),
+            (["confidential","secret"], ["confidential","secret"]),
+            (["resiliation","rupture","licenciement","congedier"], ["rupture","resiliation","licenciement"]),
+            (["mobilite","mutation","deplacement"], ["mobilite","mutation"]),
+            (["conges","vacances","absence"], ["conges","conge","absence"]),
+            (["essai","probatoire"], ["essai"]),
+            (["heures supplementaires","remuneration","salaire","forfait"], ["salaire","remuneration","heures"]),
+            (["preavis","delai"], ["preavis","delai"]),
+            (["discipline","faute","sanction"], ["discipline","faute"]),
+            (["penale","indemnite","penalite"], ["penale","indemnite"]),
+            (["juridiction","competence","tribunal"], ["juridiction","tribunal"]),
+            (["teletravail","travail a distance"], ["teletravail"]),
+            (["propriete intellectuelle","droits pi","livrables"], ["propriete intellectuelle","droits"]),
+        ]
+        def _find_rag(clause_name, reason=""):
+            import unicodedata
+            def norm(s):
+                return unicodedata.normalize("NFD", s.lower()).encode("ascii","ignore").decode()
+            cn = norm(clause_name + " " + (reason or ""))
+            for triggers, searches in _kw_map:
+                if any(t in cn for t in triggers):
+                    for doc in _all_rag:
+                        dtitle = norm(doc.get("title","") or doc.get("source",""))
+                        if any(s in dtitle for s in searches):
+                            return doc.get("title") or doc.get("source")
+            # fallback: word overlap
+            words = set(norm(clause_name).split())
+            best, bscore = None, 0
+            for doc in _all_rag:
+                dtitle = set(norm(doc.get("title","") or doc.get("source","")).split())
+                sc = len(words & dtitle)
+                if sc > bscore:
+                    bscore, best = sc, doc
+            if bscore >= 1 and best:
+                return best.get("title") or best.get("source")
+            return None
+        for _m in mods:
+            if not _m.get("rag_source"):
+                _assigned = _find_rag(_m.get("clause_name",""), _m.get("reason",""))
+                if _assigned:
+                    _m["rag_source"] = _assigned
+                    print(f"RAG post-assign: '{_m.get('clause_name','')}' -> '{_assigned}'")
+        rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " sur RAG"
     result["_jurisdiction"] = _jurisdiction
     result["_paragraphs"] = paragraphs
