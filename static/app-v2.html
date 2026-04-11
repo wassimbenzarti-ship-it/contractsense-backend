@@ -2772,8 +2772,9 @@ if (_appLang === 'en') appSetLang('en');
 
 <!-- ════════════════ CHATBOT SIDEBAR ════════════════ -->
 <style>
-/* ── Shrink dashboard when sidebar opens ── */
-body.cb-sidebar-open #dash-ov{padding-right:340px;}
+/* ── Shrink content when sidebar opens ── */
+#dash-ov{transition:padding-right .3s ease;}
+.wrap{transition:padding-right .3s ease;}
 
 /* ── Sidebar container ── */
 #cb-sidebar{
@@ -2939,18 +2940,23 @@ var _cbLastCacheId   = null; // tracks the current analysis session
 
 function cbToggle() {
   _cbOpen = !_cbOpen;
-  var sb = document.getElementById('cb-sidebar');
-  var sh = document.getElementById('cb-shrink');
+  var sb  = document.getElementById('cb-sidebar');
+  var sh  = document.getElementById('cb-shrink');
+  var dov = document.getElementById('dash-ov');
+  var wrp = document.querySelector('.wrap');
+  var pad = (window.innerWidth > 860) ? '350px' : '0px';
   if (_cbOpen) {
     sb.classList.add('cb-open');
-    document.body.classList.add('cb-sidebar-open');
+    if (dov) dov.style.paddingRight = pad;
+    if (wrp) wrp.style.paddingRight = pad;
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
-    document.body.classList.remove('cb-sidebar-open');
+    if (dov) dov.style.paddingRight = '';
+    if (wrp) wrp.style.paddingRight = '';
     if (sh) sh.innerHTML = '&#8249;';
   }
 }
