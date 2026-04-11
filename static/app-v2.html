@@ -109,7 +109,7 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
 .ac p{font-size:12px;color:#6b7280}
 .mz{border:2px dashed #1f2537;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:14px;color:#6b7280;display:block;font-size:13px}
 .mz:hover{border-color:#5b7cfa;color:#5b7cfa}
-.dclose{position:fixed;top:18px;right:18px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;padding:8px 16px;color:#e2e5f0;cursor:pointer;font-size:13px}
+
 
 .ana-detail{background:#0f1320;border:1px solid #1f2537;border-radius:12px;padding:20px;margin-top:16px;display:none}
 .ana-detail.show{display:block}
@@ -2777,6 +2777,16 @@ if (_appLang === 'en') appSetLang('en');
 body{transition:padding-right .32s cubic-bezier(.4,0,.2,1);}
 body.cb-sidebar-open{padding-right:340px;}
 @media(max-width:860px){body.cb-sidebar-open{padding-right:0;}}
+
+/* Dashboard overlay and main wrap also shift */
+#dash-ov{transition:right .32s cubic-bezier(.4,0,.2,1);}
+body.cb-sidebar-open #dash-ov{right:340px;}
+.dclose{position:fixed;top:18px;right:18px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;padding:8px 16px;color:#e2e5f0;cursor:pointer;font-size:13px;transition:right .32s cubic-bezier(.4,0,.2,1);}
+body.cb-sidebar-open .dclose{right:calc(340px + 18px);}
+@media(max-width:860px){
+  body.cb-sidebar-open #dash-ov{right:0;}
+  body.cb-sidebar-open .dclose{right:18px;}
+}
 
 /* ── Sidebar container ── */
 #cb-sidebar{
