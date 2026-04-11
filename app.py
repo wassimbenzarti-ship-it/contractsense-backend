@@ -460,6 +460,54 @@ def clean_text(text):
         return text
     return text.replace("\x00", "").replace("\u0000", "")
 
+def extract_article_refs(content, title=""):
+    """
+    Extract specific article references from RAG document content.
+    Returns a list of strings like ['Art. 16 CT', 'Art. 63 CT', 'Art. 263 DOC'].
+    Detects the legal code abbreviation from the document title.
+    """
+    if not content:
+        return []
+    # Detect legal code abbreviation from title
+    title_low = (title or "").lower()
+    if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain"]):
+        code = "CT"
+    elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats"]):
+        code = "DOC"
+    elif any(k in title_low for k in ["code commerce", "code de commerce"]):
+        code = "C.Com"
+    elif any(k in title_low for k in ["code penal", "code pénal"]):
+        code = "CP"
+    elif any(k in title_low for k in ["loi 09-08", "protection des donnees", "cndp"]):
+        code = "Loi 09-08"
+    elif any(k in title_low for k in ["loi 15-95", "commerce"]):
+        code = "Loi 15-95"
+    elif any(k in title_low for k in ["rgpd", "gdpr"]):
+        code = "RGPD"
+    elif any(k in title_low for k in ["code civil", "civil français", "code civil français"]):
+        code = "C.Civ"
+    elif any(k in title_low for k in ["code du travail français", "travail français"]):
+        code = "C.Trav"
+    else:
+        code = None
+
+    seen = set()
+    results = []
+    # Match: "Article 16", "Art. 16", "art 16", "§ 16", "section 16", "alinéa 3 de l'article 16"
+    for m in re.finditer(
+        r'\b(?:articles?|art\.?|§)\s*(\d+(?:[.\-]\d+)?(?:\s+(?:bis|ter|quater))?)',
+        content, re.IGNORECASE
+    ):
+        num = m.group(1).strip()
+        label = f"Art. {num}" + (f" {code}" if code else "")
+        key = label.lower()
+        if key not in seen:
+            seen.add(key)
+            results.append(label)
+        if len(results) >= 6:
+            break
+    return results
+
 def save_rag_doc(doc):
     try:
         doc_copy = dict(doc)
@@ -828,9 +876,17 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             model_context = "\n\n=== MODELES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
             for doc in (validated + reference)[:12]:
                 title = doc.get("title","") or doc.get("source","modele")
+                content = str(doc.get("content",""))[:1400]
                 is_prot = any(p in (title + doc.get("source","")).lower() for p in protected_kw)
-                model_context += "\n=== " + str(title) + " ===\n" + str(doc.get("content",""))[:1200] + "\n"
-                model_context += "\u2192 rag_source: " + ("null (protege)" if is_prot else str(title)) + "\n"
+                arts = extract_article_refs(content, title)
+                model_context += "\n=== " + str(title) + " ===\n"
+                if arts:
+                    model_context += "→ Articles cités dans ce document: " + ", ".join(arts) + "\n"
+                model_context += content + "\n"
+                cite_label = "null (protege)" if is_prot else str(title)
+                model_context += "→ rag_source: " + cite_label + "\n"
+                if arts and not is_prot:
+                    model_context += "→ article_ref suggéré: " + arts[0] + "\n"
                 if doc.get("party_label"): model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label","")) + "]\n"
 
         # Context 2: legal docs -> conformite
@@ -839,8 +895,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             for doc in legal_docs[:12]:
                 cat = doc.get("category","reference").upper()
                 title = doc.get("title","") or doc.get("source","reference")
-                legal_context += "\n[" + cat + "] " + str(title) + "\n" + str(doc.get("content",""))[:1200] + "\n"
-                legal_context += "\u2192 rag_source: " + str(title) + "\n"
+                content = str(doc.get("content",""))[:1400]
+                arts = extract_article_refs(content, title)
+                legal_context += "\n[" + cat + "] " + str(title) + "\n"
+                if arts:
+                    legal_context += "→ Articles disponibles: " + ", ".join(arts) + "\n"
+                legal_context += content + "\n"
+                legal_context += "→ rag_source: " + str(title) + "\n"
+                if arts:
+                    legal_context += "→ article_ref à citer: " + arts[0] + " (utilise l'article exact le plus pertinent pour ta clause)\n"
 
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
@@ -901,9 +964,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGLES D'ANALYSE PROFESSIONNELLE:\n"
         "1. EXHAUSTIVITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ TOTALE: Identifie TOUTES les clauses dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©savantageuses pour " + partie + " ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ mÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªme les clauses en apparence neutres\n"
         "2. CLAUSES ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ RISQUE: Cherche spÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cifiquement: limitation de responsabilitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©, rÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©siliation unilatÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©rale, pÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nalitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©s asymÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©triques, clauses d'exclusivitÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© abusives, dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©lais de paiement dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction dÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©favorable\n"
-        "3. METHODE REDACTIONNELLE pour chaque proposed (modification ET nouvelle clause): ETAPE A - Cherche dans === MODELES DE CONTRATS === un doc dont le titre contient un mot-cle de la clause (rupture, preavis, mobilite, non-concurrence, confidentialite, conges, absence, rem un eration). Si trouve: COPIE ce texte et adapte-le, mets son titre dans rag_source. ETAPE B - Enrichis avec les articles de loi des === REFERENCES JURIDIQUES ===, cite aussi cette reference si elle fut la source principale. ETAPE C - Seulement si ZERO doc RAG ne correspond: redige depuis tes connaissances, rag_source=null. CLAUSES A CREER si absentes (type=nouvelle_clause): non-concurrence, clause penale, non-sollicitation, performance/KPI, remboursement formation. ERREUR GRAVE si aucun type=nouvelle_clause dans le JSON.\n"
-        "4. NIVEAU RÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂDACTIONNEL: Style avocat d'affaires senior ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ prÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©cis, technique, sans ambiguÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¯tÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©\n"
-        "5. SOURCES RAG: REGLE ABSOLUE - tu DOIS remplir rag_source pour CHAQUE modification/nouvelle clause. METHODE: (1) Parcours TOUS les docs disponibles dans === MODELES DE CONTRATS === et === REFERENCES JURIDIQUES ===. (2) Pour chaque clause, cherche un doc dont le titre contient un mot-cle de la clause (ex: rupture, preavis, mobilite, non-concurrence, confidentialite, conges, remuneration, discipline). (3) Si trouve: mets son titre EXACT dans rag_source. (4) Si plusieurs docs correspondent: cite le plus specifique. (5) rag_source=null SEULEMENT si AUCUN des docs du contexte ne correspond apres verification exhaustive. INTERDICTION de mettre null par defaut sans verifier tous les docs.\n"
+        "3. METHODE REDACTIONNELLE pour chaque proposed (modification ET nouvelle clause): ETAPE A - Cherche dans === MODELES DE CONTRATS === un doc dont le titre contient un mot-cle de la clause (rupture, preavis, mobilite, non-concurrence, confidentialite, conges, absence, remuneration). Si trouve: COPIE ce texte et adapte-le, mets son titre dans rag_source ET l'article pertinent dans article_ref. ETAPE B - Enrichis avec les articles de loi des === REFERENCES JURIDIQUES ===: mets l'article EXACT (ex: 'Art. 16 CT') dans article_ref et dans le texte proposed ('...conformement a l'Art. 16 CT...'). ETAPE C - Si ZERO doc RAG ne correspond: redige depuis tes connaissances en citant quand meme l'article de loi dans article_ref et dans proposed. CLAUSES A CREER si absentes: non-concurrence, clause penale, non-sollicitation, performance/KPI, remboursement formation. ERREUR GRAVE si aucun type=nouvelle_clause dans le JSON.\n"
+        "4. NIVEAU REDACTIONNEL: Style avocat d'affaires senior - precis, technique, sans ambiguite. OBLIGATION: chaque proposed doit contenir au moins une reference legale explicite ('conformement a l'Art. XX [code]', 'en application de l'Art. XX [code]').\n"
+        "5. CITATIONS EXACTES - REGLE ABSOLUE: Pour CHAQUE modification/nouvelle clause tu DOIS remplir DEUX champs: (a) rag_source = titre EXACT du document RAG si un doc correspond, sinon null; (b) article_ref = reference d'article EXACTE (ex: 'Art. 16 CT', 'Art. 63 CT', 'Art. 263 DOC', 'Art. 78 Loi 15-95') - utilise les articles listes dans '-> Articles disponibles:' ou '-> article_ref suggere:' du contexte RAG - si aucun article RAG: cite quand meme l'article de loi applicable. INTERDICTION de laisser article_ref=null si un article de loi est applicable. Dans reason: commence par la reference legale ('Conformement a l'Art. 16 CT...'). Dans proposed: inclure la reference legale inline ('...conformement a l'Art. 16 CT...').\n"
         "6. LÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂGALITÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: Toutes les modifications doivent respecter le droit applicable ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ jamais de clauses illÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©gales\n\n"
         "PROCESSUS D'ANALYSE:\n"
         "ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂtape 1: Lis tout le contrat\n"
@@ -925,12 +988,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
         '"reason":"explication","type":"modification","original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulee favorisant ' + partie + '","insertion_after":null,'
-        '"rag_source":"titre EXACT du contexte ou null"}],'
+        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 CT ou null"}],'
         '"nouvelles_clauses":[{"id":11,"para_idx":null,"clause_name":"non-concurrence",'
         '"risk":"high","reason":"Protection absente - inspire du modele RAG en priorite",'
         '"type":"nouvelle_clause","original":null,'
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
-        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null"}],'
+        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 CT ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
         "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - JURIDICTION: " + _jurisdiction + "\\n"
         "Pour CONTRAT DE TRAVAIL (CDI/CDD): verifier periode d'essai, preavis, heures sup, conges, protection contre licenciement abusif selon le droit " + _jurisdiction + ".\\n"
@@ -1029,6 +1092,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             rag_sources = re.findall(r'"rag_source"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
+            article_refs_raw = re.findall(r'"article_ref"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
             types = re.findall(r'"type"\s*:\s*"([^"]+)"', raw)
             insertions = re.findall(r'"insertion_after"\s*:\s*(\d+|null)', raw)
             for i in range(min(len(ids), len(proposeds))):
@@ -1041,7 +1105,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "original": originals[i] if i < len(originals) else "",
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
-                    "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None
+                    "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None,
+                    "article_ref": article_refs_raw[i] if i < len(article_refs_raw) and article_refs_raw[i] else None,
                 })
 
         if mods:
@@ -1071,10 +1136,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
              "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
              "rag_source": None},
             {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
-             "reason": "Dissuasion contre rupture fautive et protection contre licenciement abusif",
+             "reason": "Conformement a l'Art. 63 CT - protection contre licenciement abusif",
              "original": None, "para_idx": None, "insertion_after": _last_para,
              "proposed": "En cas de licenciement abusif au sens de l'Art. 63 du Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
-             "rag_source": None},
+             "rag_source": None, "article_ref": "Art. 63 CT"},
             {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
              "reason": "Protection des equipes et clients de l'employeur",
              "original": None, "para_idx": None, "insertion_after": _last_para,
@@ -1111,6 +1176,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             (["propriete intellectuelle","droits pi","livrables"], ["propriete intellectuelle","droits"]),
         ]
         def _find_rag(clause_name, reason=""):
+            """Returns (rag_title, article_ref) or (None, None)."""
             import unicodedata
             def norm(s):
                 return unicodedata.normalize("NFD", s.lower()).encode("ascii","ignore").decode()
@@ -1120,7 +1186,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     for doc in _all_citable:
                         dtitle = norm(doc.get("title","") or doc.get("source",""))
                         if any(s in dtitle for s in searches):
-                            return doc.get("title") or doc.get("source")
+                            arts = extract_article_refs(doc.get("content",""), doc.get("title",""))
+                            return doc.get("title") or doc.get("source"), (arts[0] if arts else None)
             # fallback: word overlap on legal docs only
             words = set(norm(clause_name).split())
             best, bscore = None, 0
@@ -1130,16 +1197,30 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 if sc > bscore:
                     bscore, best = sc, doc
             if bscore >= 1 and best:
-                return best.get("title") or best.get("source")
-            return None
+                arts = extract_article_refs(best.get("content",""), best.get("title",""))
+                return best.get("title") or best.get("source"), (arts[0] if arts else None)
+            return None, None
         for _m in mods:
             if not _m.get("rag_source"):
-                _assigned = _find_rag(_m.get("clause_name",""), _m.get("reason",""))
+                _assigned, _art_ref = _find_rag(_m.get("clause_name",""), _m.get("reason",""))
                 if _assigned:
                     _m["rag_source"] = _assigned
-                    print(f"RAG post-assign: '{_m.get('clause_name','')}' -> '{_assigned}'")
+                    print(f"RAG post-assign: '{_m.get('clause_name','')}' -> '{_assigned}' / {_art_ref}")
+                if _art_ref and not _m.get("article_ref"):
+                    _m["article_ref"] = _art_ref
+            elif not _m.get("article_ref"):
+                # rag_source already set by AI but article_ref missing: extract from matched doc
+                _src_title = _m.get("rag_source","")
+                for _doc in _all_citable:
+                    if (_doc.get("title","") or _doc.get("source","")) == _src_title:
+                        _arts = extract_article_refs(_doc.get("content",""), _doc.get("title",""))
+                        if _arts:
+                            _m["article_ref"] = _arts[0]
+                        break
         rag_backed = sum(1 for m in mods if m.get("rag_source"))
+        art_backed = sum(1 for m in mods if m.get("article_ref"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " sur RAG"
+    result["_article_coverage"] = str(art_backed) + "/" + str(len(mods)) + " avec article_ref"
     result["_jurisdiction"] = _jurisdiction
     result["_paragraphs"] = paragraphs
     # Extract compliance if present
