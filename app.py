@@ -1582,7 +1582,7 @@ def rag_suggest():
 @app.route("/suggestions/list", methods=["GET"])
 def suggestions_list():
     try:
-        url = SUPA_URL + "/rest/v1/pending_suggestions?order=submitted_at.desc&limit=100&select=id,filename,category,suggested_by,status,submitted_at"
+        url = SUPA_URL + "/rest/v1/pending_suggestions?status=eq.pending&order=submitted_at.desc&limit=100&select=id,filename,category,suggested_by,status,submitted_at"
         headers = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
         r = requests.get(url, headers=headers, timeout=10)
         return jsonify({"suggestions": r.json() if r.ok else []})
