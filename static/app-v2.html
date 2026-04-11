@@ -2773,6 +2773,11 @@ if (_appLang === 'en') appSetLang('en');
 
 <!-- ════════════════ CHATBOT SIDEBAR ════════════════ -->
 <style>
+/* ── Page shrink when sidebar opens (no overflow-x:hidden!) ── */
+body{transition:padding-right .32s cubic-bezier(.4,0,.2,1);}
+body.cb-sidebar-open{padding-right:340px;}
+@media(max-width:860px){body.cb-sidebar-open{padding-right:0;}}
+
 /* ── Sidebar container ── */
 #cb-sidebar{
   position:fixed;top:0;right:-310px;width:340px;height:100vh;
@@ -2941,12 +2946,14 @@ function cbToggle() {
   var sh = document.getElementById('cb-shrink');
   if (_cbOpen) {
     sb.classList.add('cb-open');
+    document.body.classList.add('cb-sidebar-open');
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
+    document.body.classList.remove('cb-sidebar-open');
     if (sh) sh.innerHTML = '&#8249;';
   }
 }
