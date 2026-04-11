@@ -2554,7 +2554,7 @@ def queue_validate():
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
-        delete_queue_item(contract_id)
+        supa_delete("analyses_queue", {"id": "eq." + str(contract_id)})
 
         return jsonify({"success": True, "chunks_indexed": len(chunks)})
 
@@ -2568,7 +2568,7 @@ def queue_reject():
     try:
         body = request.get_json()
         contract_id = body.get("id")
-        delete_queue_item(contract_id)
+        supa_delete("analyses_queue", {"id": "eq." + str(contract_id)})
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
