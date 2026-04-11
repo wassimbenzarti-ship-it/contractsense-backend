@@ -2773,13 +2773,6 @@ if (_appLang === 'en') appSetLang('en');
 
 <!-- ════════════════ CHATBOT SIDEBAR ════════════════ -->
 <style>
-/* ── Page push when sidebar opens ── */
-body{
-  transition:padding-right .32s cubic-bezier(.4,0,.2,1);
-  overflow-x:hidden;
-}
-body.cb-sidebar-open{padding-right:340px;}
-
 /* ── Sidebar container ── */
 #cb-sidebar{
   position:fixed;top:0;right:-310px;width:340px;height:100vh;
@@ -2866,10 +2859,6 @@ body.cb-sidebar-open{padding-right:340px;}
 #cb-send:hover{background:#4a6be8;}
 #cb-send svg{width:15px;height:15px;fill:#fff;}
 
-@media(max-width:860px){
-  /* On smaller screens, sidebar overlays rather than pushes */
-  body.cb-sidebar-open{padding-right:0;}
-}
 @media(max-width:640px){
   #cb-sidebar{width:100vw;right:-100vw;}
   #cb-sidebar.cb-open{right:0;}
@@ -2952,14 +2941,12 @@ function cbToggle() {
   var sh = document.getElementById('cb-shrink');
   if (_cbOpen) {
     sb.classList.add('cb-open');
-    document.body.classList.add('cb-sidebar-open');
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
-    document.body.classList.remove('cb-sidebar-open');
     if (sh) sh.innerHTML = '&#8249;';
   }
 }
