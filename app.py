@@ -37,7 +37,7 @@ CORS(app, origins=[
     "http://localhost:3000",
     "http://localhost:5173",
     "null"
-], supports_credentials=True)
+], supports_credentials=True, allow_headers=["Content-Type", "Authorization", "X-Admin-Pass"])
 
 def get_legal_framework(contract_type, jurisdiction="auto"):
     """Return mandatory legal constraints per contract type and jurisdiction."""
@@ -2255,6 +2255,8 @@ def admin_create_user():
     if request.method == "OPTIONS": return "", 204
     try:
         data = request.get_json() or {}
+        if not _is_admin_request(data):
+            return jsonify({"error": "Accès refusé"}), 403
         email = data.get("email", "").strip()
         password = data.get("password", "").strip()
         role = data.get("role", "directeur")
