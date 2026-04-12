@@ -31,10 +31,13 @@ CREATE INDEX IF NOT EXISTS rag_document_id_idx    ON rag_documents (document_id)
 CREATE INDEX IF NOT EXISTS rag_law_name_idx       ON rag_documents (law_name)       WHERE law_name IS NOT NULL;
 
 -- 4. Fonction de recherche hybride BM25 + vecteur
--- Remplace search_rag existante (drop + recreate)
+-- Drop toutes les surcharges existantes
 DROP FUNCTION IF EXISTS search_rag(vector, int, text, uuid);
 DROP FUNCTION IF EXISTS search_rag(vector, int, text, text);
+DROP FUNCTION IF EXISTS search_rag(vector, int);
+DROP FUNCTION IF EXISTS search_rag(vector);
 DROP FUNCTION IF EXISTS search_rag_hybrid(text, vector, int, text);
+DROP FUNCTION IF EXISTS search_rag_hybrid(text, vector, int);
 
 CREATE OR REPLACE FUNCTION search_rag(
   query_embedding   vector,
@@ -43,7 +46,7 @@ CREATE OR REPLACE FUNCTION search_rag(
   filter_user       text     DEFAULT NULL
 )
 RETURNS TABLE (
-  id            uuid,
+  id            text,
   title         text,
   content       text,
   source        text,
@@ -81,7 +84,7 @@ CREATE OR REPLACE FUNCTION search_rag_hybrid(
   p_jurisdiction    text    DEFAULT NULL
 )
 RETURNS TABLE (
-  id            uuid,
+  id            text,
   title         text,
   content       text,
   source        text,
