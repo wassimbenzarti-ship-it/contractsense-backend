@@ -1414,6 +1414,24 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         if _arts:
                             _m["article_ref"] = _arts[0]
                         break
+        # Auto-assign rag_source from legal code when article_ref contains a known code suffix
+        _code_source_map = {
+            " CT": "codeTravail_pdf",
+            " DOC": "codeObligationsContrats_pdf",
+            " C.Com": "codeCommerce_pdf",
+            " CGI": "Code général des impôts",
+            " C.Ass": "codeAssurances_pdf",
+            " C.Fam": "codeFamille_pdf (1)",
+            " CDR": "code des droits réels",
+            " C.Douanes": "Code des douanes et impôts indirects",
+        }
+        for _m in mods:
+            if not _m.get("rag_source") and _m.get("article_ref"):
+                for _suffix, _src in _code_source_map.items():
+                    if _suffix in (_m.get("article_ref") or ""):
+                        _m["rag_source"] = _src
+                        print(f"RAG code-assign: '{_m.get('clause_name','')}' -> '{_src}' via {_m.get('article_ref')}")
+                        break
         rag_backed = sum(1 for m in mods if m.get("rag_source"))
         art_backed = sum(1 for m in mods if m.get("article_ref"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " sur RAG"
