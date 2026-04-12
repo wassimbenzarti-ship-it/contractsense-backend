@@ -52,7 +52,7 @@ def get_legal_framework(contract_type, jurisdiction="auto"):
         if jur in ("droit_marocain", "auto", "universel"):
             return (
                 "DROIT DU TRAVAIL MAROCAIN - REGLES IMPERATIVES:\n"
-                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 du Code du Travail)\n"
+                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 - Loi n°65-99)\n"
                 "- Renouvellement abusif = requalification automatique en CDI\n"
                 "- Preavis: 8j (<1an), 1 mois (1-5ans), 2 mois (>5ans) ouvriers; 1/2/3 mois cadres\n"
                 "- Indemnite licenciement: 96h/an (3 premieres annees), 144h/an apres\n"
@@ -483,41 +483,39 @@ def clean_text(text):
 def extract_article_refs(content, title=""):
     """
     Extract specific article references from RAG document content.
-    Returns a list of strings like ['Art. 16 du Code du Travail', 'Art. 263 du DOC'].
-    Detects the legal code full name from the document title.
+    Returns a list like ['Art. 16 - Loi n°65-99 (Code du Travail)', 'Art. 263 - Dahir des Obligations et Contrats (1913)'].
+    Cites the official law number alongside the code name.
     """
     if not content:
         return []
-    # Detect legal code full name from title
+    # Map document title to official law citation
     title_low = (title or "").lower()
     if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain", "codetravail"]):
-        code = "du Code du Travail"
+        code = "- Loi n°65-99 (Code du Travail)"
     elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats", "codeobligations", "obligationscontrats"]):
-        code = "du DOC"
-    elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce"]):
-        code = "du Code de Commerce"
+        code = "- Dahir des Obligations et Contrats (9 août 1913)"
+    elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce", "loi 15-95"]):
+        code = "- Loi n°15-95 (Code de Commerce)"
     elif any(k in title_low for k in ["code penal", "code pénal", "codepenal"]):
-        code = "du Code Pénal"
+        code = "- Dahir n°1-59-413 (Code Pénal)"
     elif any(k in title_low for k in ["loi 09-08", "protection des donnees", "cndp"]):
-        code = "de la Loi 09-08"
-    elif any(k in title_low for k in ["loi 15-95"]):
-        code = "de la Loi 15-95"
+        code = "- Loi n°09-08 (Protection des données personnelles)"
     elif any(k in title_low for k in ["code assurances", "codeassurances"]):
-        code = "du Code des Assurances"
+        code = "- Loi n°17-99 (Code des Assurances)"
     elif any(k in title_low for k in ["code famille", "codefamille", "moudawana"]):
-        code = "du Code de la Famille"
+        code = "- Loi n°70-03 (Code de la Famille)"
     elif any(k in title_low for k in ["droits reels", "droitsreels"]):
-        code = "du Code des Droits Réels"
+        code = "- Loi n°39-08 (Code des Droits Réels)"
     elif any(k in title_low for k in ["cgi", "impots", "fiscal", "code general"]):
-        code = "du CGI"
+        code = "- Code Général des Impôts"
     elif any(k in title_low for k in ["douanes", "impots indirects"]):
-        code = "du Code des Douanes"
+        code = "- Dahir n°1-77-339 (Code des Douanes et Impôts Indirects)"
     elif any(k in title_low for k in ["rgpd", "gdpr"]):
-        code = "du RGPD"
+        code = "- Règlement UE n°2016/679 (RGPD)"
     elif any(k in title_low for k in ["code civil", "civil français", "code civil français"]):
-        code = "du Code Civil"
+        code = "- Code Civil français"
     elif any(k in title_low for k in ["code du travail français", "travail français"]):
-        code = "du Code du Travail français"
+        code = "- Code du Travail français (L. n°2016-1088)"
     else:
         code = None
 
@@ -1164,12 +1162,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
         '"reason":"explication","type":"modification","original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulee favorisant ' + partie + '","insertion_after":null,'
-        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 du Code du Travail ou null"}],'
+        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 - Loi n°65-99 (Code du Travail) ou null"}],'
         '"nouvelles_clauses":[{"id":11,"para_idx":null,"clause_name":"non-concurrence",'
         '"risk":"high","reason":"Protection absente - inspire du modele RAG en priorite",'
         '"type":"nouvelle_clause","original":null,'
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
-        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 du Code du Travail ou null"}],'
+        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 - Loi n°65-99 (Code du Travail) ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
         "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - JURIDICTION: " + _jurisdiction + "\\n"
         "Pour CONTRAT DE TRAVAIL (CDI/CDD): verifier periode d'essai, preavis, heures sup, conges, protection contre licenciement abusif selon le droit " + _jurisdiction + ".\\n"
@@ -1333,10 +1331,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
              "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
              "rag_source": None},
             {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
-             "reason": "Conformement a l'Art. 63 du Code du Travail - protection contre licenciement abusif",
+             "reason": "Conformement a l'Art. 63 - Loi n°65-99 (Code du Travail) - protection contre licenciement abusif",
              "original": None, "para_idx": None, "insertion_after": _last_para,
-             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 du Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
-             "rag_source": None, "article_ref": "Art. 63 du Code du Travail"},
+             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 de la Loi n°65-99 relative au Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
+             "rag_source": None, "article_ref": "Art. 63 - Loi n°65-99 (Code du Travail)"},
             {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
              "reason": "Protection des equipes et clients de l'employeur",
              "original": None, "para_idx": None, "insertion_after": _last_para,
@@ -1414,16 +1412,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         if _arts:
                             _m["article_ref"] = _arts[0]
                         break
-        # Auto-assign rag_source from legal code when article_ref contains a known code name
+        # Auto-assign rag_source from legal code when article_ref contains a known law citation
         _code_source_map = {
-            "du Code du Travail": "codeTravail_pdf",
-            "du DOC": "codeObligationsContrats_pdf",
-            "du Code de Commerce": "codeCommerce_pdf",
-            "du CGI": "Code général des impôts",
-            "du Code des Assurances": "codeAssurances_pdf",
-            "du Code de la Famille": "codeFamille_pdf (1)",
-            "du Code des Droits Réels": "code des droits réels",
-            "du Code des Douanes": "Code des douanes et impôts indirects",
+            "Loi n°65-99": "codeTravail_pdf",
+            "Obligations et Contrats": "codeObligationsContrats_pdf",
+            "Loi n°15-95": "codeCommerce_pdf",
+            "Code Général des Impôts": "Code général des impôts",
+            "Loi n°17-99": "codeAssurances_pdf",
+            "Loi n°70-03": "codeFamille_pdf (1)",
+            "Loi n°39-08": "code des droits réels",
+            "Dahir n°1-77-339": "Code des douanes et impôts indirects",
         }
         for _m in mods:
             if not _m.get("rag_source") and _m.get("article_ref"):
