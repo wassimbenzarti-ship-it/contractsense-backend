@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION search_rag(
   filter_user       text     DEFAULT NULL
 )
 RETURNS TABLE (
-  id            uuid,
+  id            text,
   title         text,
   content       text,
   source        text,
@@ -57,7 +57,7 @@ RETURNS TABLE (
   contract_types text[],
   document_id    text,
   chunk_index    int,
-  similarity    float
+  similarity    double precision
 )
 LANGUAGE sql STABLE
 AS $$
@@ -81,7 +81,7 @@ CREATE OR REPLACE FUNCTION search_rag_hybrid(
   p_jurisdiction    text    DEFAULT NULL
 )
 RETURNS TABLE (
-  id            uuid,
+  id            text,
   title         text,
   content       text,
   source        text,
@@ -95,7 +95,7 @@ RETURNS TABLE (
   contract_types text[],
   document_id    text,
   chunk_index    int,
-  score         float
+  score         double precision
 )
 LANGUAGE sql STABLE
 AS $$
