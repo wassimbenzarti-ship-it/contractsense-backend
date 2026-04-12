@@ -343,7 +343,7 @@ def upload_doc(row):
 
 
 # ── Traitement d'un fichier ───────────────────────────────────────────────────
-def process_file(filepath, jurisdiction_hint, category_hint, dry_run):
+def process_file(filepath, jurisdiction_hint, category_hint, dry_run, overwrite=False):
     if filepath.suffix.lower() not in SUPPORTED_EXT:
         print(f"  Ignore (format non supporte): {filepath.name}")
         return 0, 0
@@ -397,7 +397,7 @@ def process_file(filepath, jurisdiction_hint, category_hint, dry_run):
         else:
             title = f"{base_title} (partie {i+1}/{len(articles)})"
 
-        if doc_exists(title, jur, art_num):
+        if not overwrite and doc_exists(title, jur, art_num):
             print(f"    [SKIP] {title[:70]}")
             skip += 1
             continue
@@ -444,7 +444,7 @@ def main():
         print(__doc__)
         return
 
-    jurisdiction, category, folder, file_path, dry_run = None, None, None, None, False
+    jurisdiction, category, folder, file_path, dry_run, overwrite = None, None, None, None, False, False
     i = 0
     while i < len(args):
         if   args[i] == "--jurisdiction" and i+1 < len(args): jurisdiction = args[i+1]; i += 2
@@ -452,6 +452,7 @@ def main():
         elif args[i] == "--folder"       and i+1 < len(args): folder       = args[i+1]; i += 2
         elif args[i] == "--file"         and i+1 < len(args): file_path    = args[i+1]; i += 2
         elif args[i] == "--dry-run":   dry_run = True; i += 1
+        elif args[i] == "--overwrite": overwrite = True; i += 1
         else: i += 1
 
     if jurisdiction and jurisdiction not in VALID_JURISDICTIONS:
@@ -467,7 +468,7 @@ def main():
     print(f"Juridiction : {jurisdiction or 'auto-detection'}")
     print(f"Categorie   : {category or 'auto-detection'}")
     print(f"Embeddings  : {'Voyage AI (voyage-law-2)' if VOYAGE_KEY else 'OpenAI' if OPENAI_KEY else 'AUCUN'}")
-    print(f"Mode        : {'DRY RUN' if dry_run else 'UPLOAD REEL'}")
+    print(f"Mode        : {'DRY RUN' if dry_run else 'UPLOAD REEL'} {'(overwrite ON)' if overwrite else ''}")
 
     files = []
     if file_path:
@@ -482,7 +483,7 @@ def main():
 
     total_ok, total_skip = 0, 0
     for f in files:
-        ok, skip = process_file(f, jurisdiction, category, dry_run)
+        ok, skip = process_file(f, jurisdiction, category, dry_run, overwrite)
         total_ok   += ok
         total_skip += skip
 
