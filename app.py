@@ -52,7 +52,7 @@ def get_legal_framework(contract_type, jurisdiction="auto"):
         if jur in ("droit_marocain", "auto", "universel"):
             return (
                 "DROIT DU TRAVAIL MAROCAIN - REGLES IMPERATIVES:\n"
-                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 du Code du Travail)\n"
                 "- Renouvellement abusif = requalification automatique en CDI\n"
                 "- Preavis: 8j (<1an), 1 mois (1-5ans), 2 mois (>5ans) ouvriers; 1/2/3 mois cadres\n"
                 "- Indemnite licenciement: 96h/an (3 premieres annees), 144h/an apres\n"
@@ -483,41 +483,41 @@ def clean_text(text):
 def extract_article_refs(content, title=""):
     """
     Extract specific article references from RAG document content.
-    Returns a list of strings like ['Art. 16 CT', 'Art. 63 CT', 'Art. 263 DOC'].
-    Detects the legal code abbreviation from the document title.
+    Returns a list of strings like ['Art. 16 du Code du Travail', 'Art. 263 du DOC'].
+    Detects the legal code full name from the document title.
     """
     if not content:
         return []
-    # Detect legal code abbreviation from title
+    # Detect legal code full name from title
     title_low = (title or "").lower()
     if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain", "codetravail"]):
-        code = "CT"
+        code = "du Code du Travail"
     elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats", "codeobligations", "obligationscontrats"]):
-        code = "DOC"
+        code = "du DOC"
     elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce"]):
-        code = "C.Com"
+        code = "du Code de Commerce"
     elif any(k in title_low for k in ["code penal", "code pénal", "codepenal"]):
-        code = "CP"
+        code = "du Code Pénal"
     elif any(k in title_low for k in ["loi 09-08", "protection des donnees", "cndp"]):
-        code = "Loi 09-08"
+        code = "de la Loi 09-08"
     elif any(k in title_low for k in ["loi 15-95"]):
-        code = "Loi 15-95"
+        code = "de la Loi 15-95"
     elif any(k in title_low for k in ["code assurances", "codeassurances"]):
-        code = "C.Ass"
+        code = "du Code des Assurances"
     elif any(k in title_low for k in ["code famille", "codefamille", "moudawana"]):
-        code = "C.Fam"
+        code = "du Code de la Famille"
     elif any(k in title_low for k in ["droits reels", "droitsreels"]):
-        code = "CDR"
+        code = "du Code des Droits Réels"
     elif any(k in title_low for k in ["cgi", "impots", "fiscal", "code general"]):
-        code = "CGI"
+        code = "du CGI"
     elif any(k in title_low for k in ["douanes", "impots indirects"]):
-        code = "C.Douanes"
+        code = "du Code des Douanes"
     elif any(k in title_low for k in ["rgpd", "gdpr"]):
-        code = "RGPD"
+        code = "du RGPD"
     elif any(k in title_low for k in ["code civil", "civil français", "code civil français"]):
-        code = "C.Civ"
+        code = "du Code Civil"
     elif any(k in title_low for k in ["code du travail français", "travail français"]):
-        code = "C.Trav"
+        code = "du Code du Travail français"
     else:
         code = None
 
@@ -1164,12 +1164,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
         '"reason":"explication","type":"modification","original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulee favorisant ' + partie + '","insertion_after":null,'
-        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 CT ou null"}],'
+        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 du Code du Travail ou null"}],'
         '"nouvelles_clauses":[{"id":11,"para_idx":null,"clause_name":"non-concurrence",'
         '"risk":"high","reason":"Protection absente - inspire du modele RAG en priorite",'
         '"type":"nouvelle_clause","original":null,'
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
-        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 CT ou null"}],'
+        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 du Code du Travail ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
         "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - JURIDICTION: " + _jurisdiction + "\\n"
         "Pour CONTRAT DE TRAVAIL (CDI/CDD): verifier periode d'essai, preavis, heures sup, conges, protection contre licenciement abusif selon le droit " + _jurisdiction + ".\\n"
@@ -1333,10 +1333,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
              "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
              "rag_source": None},
             {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
-             "reason": "Conformement a l'Art. 63 CT - protection contre licenciement abusif",
+             "reason": "Conformement a l'Art. 63 du Code du Travail - protection contre licenciement abusif",
              "original": None, "para_idx": None, "insertion_after": _last_para,
              "proposed": "En cas de licenciement abusif au sens de l'Art. 63 du Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
-             "rag_source": None, "article_ref": "Art. 63 CT"},
+             "rag_source": None, "article_ref": "Art. 63 du Code du Travail"},
             {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
              "reason": "Protection des equipes et clients de l'employeur",
              "original": None, "para_idx": None, "insertion_after": _last_para,
@@ -1414,16 +1414,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         if _arts:
                             _m["article_ref"] = _arts[0]
                         break
-        # Auto-assign rag_source from legal code when article_ref contains a known code suffix
+        # Auto-assign rag_source from legal code when article_ref contains a known code name
         _code_source_map = {
-            " CT": "codeTravail_pdf",
-            " DOC": "codeObligationsContrats_pdf",
-            " C.Com": "codeCommerce_pdf",
-            " CGI": "Code général des impôts",
-            " C.Ass": "codeAssurances_pdf",
-            " C.Fam": "codeFamille_pdf (1)",
-            " CDR": "code des droits réels",
-            " C.Douanes": "Code des douanes et impôts indirects",
+            "du Code du Travail": "codeTravail_pdf",
+            "du DOC": "codeObligationsContrats_pdf",
+            "du Code de Commerce": "codeCommerce_pdf",
+            "du CGI": "Code général des impôts",
+            "du Code des Assurances": "codeAssurances_pdf",
+            "du Code de la Famille": "codeFamille_pdf (1)",
+            "du Code des Droits Réels": "code des droits réels",
+            "du Code des Douanes": "Code des douanes et impôts indirects",
         }
         for _m in mods:
             if not _m.get("rag_source") and _m.get("article_ref"):
