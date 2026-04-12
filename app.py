@@ -490,18 +490,28 @@ def extract_article_refs(content, title=""):
         return []
     # Detect legal code abbreviation from title
     title_low = (title or "").lower()
-    if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain"]):
+    if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain", "codetravail"]):
         code = "CT"
-    elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats"]):
+    elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats", "codeobligations", "obligationscontrats"]):
         code = "DOC"
-    elif any(k in title_low for k in ["code commerce", "code de commerce"]):
+    elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce"]):
         code = "C.Com"
-    elif any(k in title_low for k in ["code penal", "code pénal"]):
+    elif any(k in title_low for k in ["code penal", "code pénal", "codepenal"]):
         code = "CP"
     elif any(k in title_low for k in ["loi 09-08", "protection des donnees", "cndp"]):
         code = "Loi 09-08"
-    elif any(k in title_low for k in ["loi 15-95", "commerce"]):
+    elif any(k in title_low for k in ["loi 15-95"]):
         code = "Loi 15-95"
+    elif any(k in title_low for k in ["code assurances", "codeassurances"]):
+        code = "C.Ass"
+    elif any(k in title_low for k in ["code famille", "codefamille", "moudawana"]):
+        code = "C.Fam"
+    elif any(k in title_low for k in ["droits reels", "droitsreels"]):
+        code = "CDR"
+    elif any(k in title_low for k in ["cgi", "impots", "fiscal", "code general"]):
+        code = "CGI"
+    elif any(k in title_low for k in ["douanes", "impots indirects"]):
+        code = "C.Douanes"
     elif any(k in title_low for k in ["rgpd", "gdpr"]):
         code = "RGPD"
     elif any(k in title_low for k in ["code civil", "civil français", "code civil français"]):
