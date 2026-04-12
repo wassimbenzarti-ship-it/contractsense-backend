@@ -109,7 +109,7 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
 .ac p{font-size:12px;color:#6b7280}
 .mz{border:2px dashed #1f2537;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:14px;color:#6b7280;display:block;font-size:13px}
 .mz:hover{border-color:#5b7cfa;color:#5b7cfa}
-.dclose{position:fixed;top:18px;right:18px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;padding:8px 16px;color:#e2e5f0;cursor:pointer;font-size:13px}
+.dclose{position:fixed;top:18px;right:18px;background:#1a2035;border:1px solid #1f2537;border-radius:8px;padding:8px 16px;color:#e2e5f0;cursor:pointer;font-size:13px;z-index:1002;display:none}
 .ana-detail{background:#0f1320;border:1px solid #1f2537;border-radius:12px;padding:20px;margin-top:16px;display:none}
 .ana-detail.show{display:block}
 .mod-user-card{background:#181c2a;border:1px solid #1f2537;border-radius:8px;padding:12px;margin-bottom:10px}
@@ -141,7 +141,6 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
 </div>
 </div>
 <div id="dash-ov">
-<button class="dclose" onclick="closeDash()">x Fermer</button>
 <div id="dash-in">
 <div id="dash-role-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(91,124,250,0.12);border:1px solid rgba(91,124,250,0.3);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#5b7cfa;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px"></div>
 <h2 id="dash-title">Mon espace</h2>
@@ -227,6 +226,7 @@ h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px
   </div>
 </div>
 </div>
+<button class="dclose" onclick="closeDash()">x Fermer</button>
 <div id="ubar">
 <span id="ueml"></span>
 <button class="usb" style="background:#1a2035;color:#e2e5f0" onclick="showDash()">Mon espace</button>
@@ -1353,8 +1353,8 @@ async function dAnaAnalyze(partie) {
   }
 }
 
-function showDash(){document.getElementById('dash-ov').classList.add('show');loadDash();}
-function closeDash(){document.getElementById('dash-ov').classList.remove('show');}
+function showDash(){document.getElementById('dash-ov').classList.add('show');var dc=document.querySelector('.dclose');if(dc)dc.style.display='block';loadDash();}
+function closeDash(){document.getElementById('dash-ov').classList.remove('show');var dc=document.querySelector('.dclose');if(dc)dc.style.display='none';}
 function dtab(t){var names=['analyses','models','juristes','abonnement','nouvelle'];document.querySelectorAll('.dtb').forEach(function(el,i){el.classList.toggle('active',names[i]===t);});document.querySelectorAll('.ds').forEach(function(s){s.classList.remove('active');});document.getElementById('d-'+t).classList.add('active');if(t==='juristes')loadJuristes();if(t==='abonnement')loadAbonnement();if(t==='nouvelle')dAnaReset();}
 async function checkRole(){
   if(!_cu)return;
@@ -2940,23 +2940,30 @@ var _cbLastCacheId   = null; // tracks the current analysis session
 
 function cbToggle() {
   _cbOpen = !_cbOpen;
-  var sb  = document.getElementById('cb-sidebar');
-  var sh  = document.getElementById('cb-shrink');
-  var dov = document.getElementById('dash-ov');
-  var wrp = document.querySelector('.wrap');
+  var sb   = document.getElementById('cb-sidebar');
+  var sh   = document.getElementById('cb-shrink');
+  var dov  = document.getElementById('dash-ov');
+  var dcl  = document.querySelector('.dclose');
+  var wrp  = document.querySelector('.wrap');
+  var ubar = document.getElementById('ubar');
   var shift = (window.innerWidth > 860) ? '340px' : '0px';
+  var closeShift = (window.innerWidth > 860) ? (340 + 18) + 'px' : '18px';
   if (_cbOpen) {
     sb.classList.add('cb-open');
-    if (dov) dov.style.right = shift;
-    if (wrp) wrp.style.paddingRight = shift;
+    if (dov)  dov.style.right        = shift;
+    if (dcl)  dcl.style.right        = closeShift;
+    if (wrp)  wrp.style.paddingRight  = shift;
+    if (ubar) ubar.style.marginRight  = shift;
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
-    if (dov) dov.style.right = '';
-    if (wrp) wrp.style.paddingRight = '';
+    if (dov)  dov.style.right        = '';
+    if (dcl)  dcl.style.right        = '';
+    if (wrp)  wrp.style.paddingRight  = '';
+    if (ubar) ubar.style.marginRight  = '';
     if (sh) sh.innerHTML = '&#8249;';
   }
 }
