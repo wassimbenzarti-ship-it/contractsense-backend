@@ -2942,20 +2942,20 @@ function cbToggle() {
   _cbOpen = !_cbOpen;
   var sb  = document.getElementById('cb-sidebar');
   var sh  = document.getElementById('cb-shrink');
-  var din = document.getElementById('dash-in');
+  var dov = document.getElementById('dash-ov');
   var wrp = document.querySelector('.wrap');
-  var pad = (window.innerWidth > 860) ? '350px' : '0px';
+  var shift = (window.innerWidth > 860) ? '340px' : '0px';
   if (_cbOpen) {
     sb.classList.add('cb-open');
-    if (din) din.style.marginRight = pad;
-    if (wrp) wrp.style.paddingRight = pad;
+    if (dov) dov.style.right = shift;
+    if (wrp) wrp.style.paddingRight = shift;
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
-    if (din) din.style.marginRight = '';
+    if (dov) dov.style.right = '';
     if (wrp) wrp.style.paddingRight = '';
     if (sh) sh.innerHTML = '&#8249;';
   }
