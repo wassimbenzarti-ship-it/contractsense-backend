@@ -312,6 +312,26 @@ _FILE_CACHE: dict = {}
 _FILE_CACHE_ORDER: list = []
 _FILE_CACHE_MAX = 200
 
+# Analysis result cache: keyed by sha256(contract_text + partie + contract_type)
+# Avoids full re-analysis when user re-submits the same contract with same settings
+_ANALYSIS_CACHE: dict = {}
+_ANALYSIS_CACHE_ORDER: list = []
+_ANALYSIS_CACHE_MAX = 30  # keep last 30 analyses in memory
+
+def _analysis_cache_key(contract_text: str, partie: str, contract_type: str) -> str:
+    raw = (contract_text[:8000] + "|" + partie + "|" + contract_type).encode()
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+def _analysis_cache_get(key: str):
+    return _ANALYSIS_CACHE.get(key)
+
+def _analysis_cache_store(key: str, result: dict):
+    _ANALYSIS_CACHE[key] = result
+    _ANALYSIS_CACHE_ORDER.append(key)
+    if len(_ANALYSIS_CACHE_ORDER) > _ANALYSIS_CACHE_MAX:
+        old = _ANALYSIS_CACHE_ORDER.pop(0)
+        _ANALYSIS_CACHE.pop(old, None)
+
 def _cache_store(key: str, data: bytes):
     _FILE_CACHE[key] = data
     _FILE_CACHE_ORDER.append(key)
@@ -734,10 +754,18 @@ def build_numbered_paragraphs(file_bytes, filename):
     return []
 
 def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ficiaire", file_bytes=None, filename=""):
+    import time as _perf; _t0 = _perf.monotonic()
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        raise ValueError("ClÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© API manquante")
+        raise ValueError("Clé API manquante")
     client = anthropic.Anthropic(api_key=api_key)
+
+    # ── Analysis result cache: skip full pipeline on repeated identical request ──
+    _cache_key = _analysis_cache_key(contract_text, partie, contract_type)
+    _cached_result = _analysis_cache_get(_cache_key)
+    if _cached_result:
+        print(f"Analysis cache HIT [{_cache_key}] — returning cached result in {(_perf.monotonic()-_t0)*1000:.0f}ms")
+        return _cached_result
 
     # Detect legal jurisdiction of the contract
     _jurisdiction = detect_jurisdiction(contract_text)
@@ -829,12 +857,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
-        # Dedicated per-category searches to ensure coverage of all doc types
+        # Dedicated per-category searches — run in parallel for speed
         seen_ids = {d.get("id") for d in all_docs}
         _cat_key = SUPA_SERVICE_KEY or SUPA_KEY
         _cat_url = SUPA_URL + "/rest/v1/rag_documents"
         _cat_hdrs = {"apikey": _cat_key, "Authorization": "Bearer " + _cat_key}
-        for cat in ["contract", "law", "doctrine", "jurisprudence"]:
+        from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+        import time as _time
+        _t_cat_start = _time.monotonic()
+        def _fetch_category(cat):
             try:
                 _cat_params = {"select": "id,title,content,source,category,party_label,jurisdiction,embedding",
                                "category": "eq." + cat, "limit": "50"}
@@ -851,21 +882,30 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                             score = cosine_similarity(query_vec, emb)
                             _cat_scored.append((score, doc))
                     _cat_scored.sort(key=lambda x: x[0], reverse=True)
-                    _added = 0
-                    for _score, doc in _cat_scored[:8]:
-                        if doc.get("id") not in seen_ids:
-                            seen_ids.add(doc.get("id"))
-                            if cat == "contract":
-                                contract_docs.append(doc)
-                            else:
-                                legal_docs.append(doc)
-                            _added += 1
                     _top = f"{_cat_scored[0][0]:.3f}" if _cat_scored else "n/a"
-                    print(f"Category [{cat}]: {len(_cat_raw)} docs, top={_top}, added {_added}")
+                    print(f"Category [{cat}]: {len(_cat_raw)} docs, top={_top}")
+                    return cat, [d for _, d in _cat_scored[:8]]
                 else:
-                    print(f"Category fetch [{cat}] error {_cat_r.status_code}: {_cat_r.text[:100]}")
+                    print(f"Category fetch [{cat}] error {_cat_r.status_code}")
+                    return cat, []
             except Exception as _ce:
                 print(f"Category search error [{cat}]: {_ce}")
+                return cat, []
+        with ThreadPoolExecutor(max_workers=4) as _pool:
+            _cat_futures = {_pool.submit(_fetch_category, cat): cat for cat in ["contract", "law", "doctrine", "jurisprudence"]}
+            for _fut in _as_completed(_cat_futures):
+                _cat, _docs = _fut.result()
+                _added = 0
+                for doc in _docs:
+                    if doc.get("id") not in seen_ids:
+                        seen_ids.add(doc.get("id"))
+                        if _cat == "contract":
+                            contract_docs.append(doc)
+                        else:
+                            legal_docs.append(doc)
+                        _added += 1
+                print(f"Category [{_cat}]: +{_added} new docs")
+        print(f"Parallel category search: {(_time.monotonic()-_t_cat_start)*1000:.0f}ms")
 
         protected_kw = ["lexisnexis","dalloz","lamy","mernissi","traite-de-droit","pdf-free","lexis"]
 
@@ -1016,12 +1056,33 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Limit text to avoid timeout
     truncated_text = numbered_text[:15000]
+    # Split prompt into cacheable static header + dynamic body (RAG context + contract params)
+    # Cache boundary: everything up to and including the legal framework rules
+    _cache_split_marker = "PROCESSUS D'ANALYSE:"
+    _split_idx = system.find(_cache_split_marker)
+    if _split_idx > 1024:
+        # Split found — cache the static rules, leave the RAG context + contract text uncached
+        _static_part = system[:_split_idx + len(_cache_split_marker)]
+        _dynamic_part = system[_split_idx + len(_cache_split_marker):]
+        _system_blocks = [
+            {"type": "text", "text": _static_part, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": _dynamic_part},
+        ]
+    else:
+        _system_blocks = system  # fallback: pass as plain string
+    import time as _t; _t_ai = _t.monotonic()
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=4000,
-        system=system,
-        messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
+        system=_system_blocks,
+        messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}],
+        extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
     )
+    _ai_ms = (_t.monotonic() - _t_ai) * 1000
+    _usage = getattr(message, "usage", None)
+    _cache_hit = getattr(_usage, "cache_read_input_tokens", 0) if _usage else 0
+    _cache_write = getattr(_usage, "cache_creation_input_tokens", 0) if _usage else 0
+    print(f"AI call: {_ai_ms:.0f}ms | cache_hit={_cache_hit}tok cache_write={_cache_write}tok")
     raw = message.content[0].text
     print("RAW FULL:", raw[:3000])
 
@@ -1332,6 +1393,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "legal_ctx_len": len(legal_context),
         "is_voyage": _rag_is_voyage,
     }
+    _total_ms = (_perf.monotonic() - _t0) * 1000
+    print(f"analyze_contract TOTAL: {_total_ms:.0f}ms")
+    result["_timing_ms"] = round(_total_ms)
+    _analysis_cache_store(_cache_key, result)
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
