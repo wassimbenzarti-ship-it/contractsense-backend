@@ -2773,8 +2773,15 @@ if (_appLang === 'en') appSetLang('en');
 <!-- ════════════════ CHATBOT SIDEBAR ════════════════ -->
 <style>
 /* ── Shrink content when sidebar opens ── */
-#dash-ov{transition:padding-right .3s ease;}
+@media(min-width:861px){
+  body.chatbot-open #dash-ov{right:340px;}
+  body.chatbot-open .wrap{padding-right:340px;}
+  body.chatbot-open #ubar{margin-right:340px;}
+  body.chatbot-open .dclose{right:392px;}
+}
 .wrap{transition:padding-right .3s ease;}
+#ubar{transition:margin-right .3s ease;}
+.dclose{transition:right .3s ease;}
 
 /* ── Sidebar container ── */
 #cb-sidebar{
@@ -2940,30 +2947,17 @@ var _cbLastCacheId   = null; // tracks the current analysis session
 
 function cbToggle() {
   _cbOpen = !_cbOpen;
-  var sb   = document.getElementById('cb-sidebar');
-  var sh   = document.getElementById('cb-shrink');
-  var dov  = document.getElementById('dash-ov');
-  var dcl  = document.querySelector('.dclose');
-  var wrp  = document.querySelector('.wrap');
-  var ubar = document.getElementById('ubar');
-  var shift = (window.innerWidth > 860) ? '340px' : '0px';
-  var closeShift = (window.innerWidth > 860) ? (340 + 42 + 10) + 'px' : '18px';
+  var sb = document.getElementById('cb-sidebar');
+  var sh = document.getElementById('cb-shrink');
+  document.body.classList.toggle('chatbot-open', _cbOpen);
   if (_cbOpen) {
     sb.classList.add('cb-open');
-    if (dov)  dov.style.right        = shift;
-    if (dcl)  dcl.style.right        = closeShift;
-    if (wrp)  wrp.style.paddingRight  = shift;
-    if (ubar) ubar.style.marginRight  = shift;
     if (sh) sh.innerHTML = '&#8250;';
     document.getElementById('cb-input').focus();
     if (!_cbWelcomed) { _cbWelcomed = true; cbWelcome(); }
     cbScrollBottom();
   } else {
     sb.classList.remove('cb-open');
-    if (dov)  dov.style.right        = '';
-    if (dcl)  dcl.style.right        = '';
-    if (wrp)  wrp.style.paddingRight  = '';
-    if (ubar) ubar.style.marginRight  = '';
     if (sh) sh.innerHTML = '&#8249;';
   }
 }
