@@ -631,6 +631,37 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         print("pgvector search exception: " + str(e))
         return []
 
+def search_rag_hybrid(query_text, query_embedding, top_k=15, jurisdiction=None):
+    """
+    Hybrid search: BM25 (full-text) + vector (pgvector) fused with RRF.
+    Uses search_rag_hybrid SQL function if available, falls back to pgvector only.
+    Returns list of docs sorted by combined relevance score.
+    """
+    try:
+        url = SUPA_URL + "/rest/v1/rpc/search_rag_hybrid"
+        vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]" if isinstance(query_embedding, list) else str(query_embedding)
+        payload = {
+            "query_text":      query_text[:500],
+            "query_embedding": vec_str,
+            "match_count":     top_k,
+        }
+        if jurisdiction and jurisdiction not in ("auto", "universel"):
+            payload["p_jurisdiction"] = jurisdiction
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
+        if r.ok:
+            results = r.json() or []
+            print(f"Hybrid search (BM25+vec): {len(results)} results")
+            return results
+        else:
+            print(f"Hybrid search error {r.status_code} — fallback to pgvector")
+    except Exception as e:
+        print(f"Hybrid search exception: {e}")
+    # Fallback: pgvector only
+    return search_rag_pgvector(query_embedding, top_k=top_k)
+
+
 def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     data = load_rag()
     if not data["documents"]:
@@ -797,8 +828,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
         # Primary: pgvector semantic search (requires Voyage 1024-dim embeddings)
         if is_voyage:
-            all_docs = search_rag_pgvector(query_vec, top_k=20)
-            print(f"pgvector: {len(all_docs)} docs")
+            # Hybrid BM25 + vector search (uses SQL search_rag_hybrid function)
+            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=25, jurisdiction=_jurisdiction)
+            if not all_docs:
+                all_docs = search_rag_pgvector(query_vec, top_k=25)
+            print(f"Primary search: {len(all_docs)} docs")
 
         # Fallback: direct Supabase fetch + in-memory cosine similarity
         if not all_docs:
