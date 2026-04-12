@@ -552,6 +552,98 @@ def save_rag_doc(doc):
         print("save_rag_doc ERROR: " + str(e))
         raise
 
+def _split_into_articles(text):
+    """Decoupe un texte legal article par article. Fallback: chunks 1200c."""
+    art_pattern = re.compile(
+        r'(?:^|\n)\s*(?:Article|Art\.?|ARTICLE)\s+'
+        r'(\d+(?:[.\-]\d+)?(?:\s+(?:bis|ter|quater))?)'
+        r'(?:\s*[-:.\u2013\u2014]\s*(.+?))?(?=\n|$)',
+        re.IGNORECASE | re.MULTILINE
+    )
+    matches = list(art_pattern.finditer(text))
+    if len(matches) < 2:
+        size, overlap = 1200, 200
+        chunks, start, idx = [], 0, 0
+        while start < len(text):
+            end = min(start + size, len(text))
+            chunks.append({"number": None, "title": None, "content": text[start:end]})
+            if end >= len(text): break
+            start += size - overlap
+            idx += 1
+        return chunks
+    articles = []
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        content = text[m.start():end].strip()
+        if len(content) < 30: continue
+        articles.append({
+            "number": m.group(1).strip(),
+            "title": (m.group(2) or "").strip()[:100],
+            "content": content[:2000],
+        })
+    return articles or [{"number": None, "title": None, "content": text[:2000]}]
+
+
+_LAW_NAMES = [
+    ("Code du Travail Marocain",         ["code du travail marocain", "code travail maroc"]),
+    ("Dahir des Obligations et Contrats", ["dahir des obligations", "doc "]),
+    ("Code de Commerce Marocain",         ["code de commerce marocain"]),
+    ("Code du Travail Francais",          ["code du travail francais"]),
+    ("Code Civil Francais",               ["code civil francais"]),
+    ("RGPD",                              ["reglement general sur la protection", "rgpd", "gdpr"]),
+    ("Loi 09-08",                         ["loi 09-08"]),
+    ("Loi 15-95",                         ["loi 15-95"]),
+]
+_TAG_KW = {
+    "cdd":             ["contrat a duree determinee", "cdd"],
+    "cdi":             ["contrat a duree indeterminee", "cdi"],
+    "licenciement":    ["licenciement", "rupture du contrat"],
+    "preavis":         ["preavis", "delai de conge"],
+    "periode_essai":   ["periode d essai", "probatoire"],
+    "non-concurrence": ["non-concurrence", "non-competition"],
+    "confidentialite": ["confidentialite", "nda", "non-disclosure"],
+    "salaire":         ["remuneration", "salaire", "indemnite"],
+    "conges":          ["conges", "vacances", "leave"],
+    "responsabilite":  ["responsabilite", "liability"],
+    "donnees_personnelles": ["donnees personnelles", "rgpd", "gdpr"],
+    "resiliation":     ["resiliation", "termination"],
+    "force_majeure":   ["force majeure"],
+    "arbitrage":       ["arbitrage", "arbitration"],
+}
+_CT_KW = {
+    "CDI":        ["contrat a duree indeterminee", "cdi"],
+    "CDD":        ["contrat a duree determinee", "cdd"],
+    "prestation": ["prestation de services", "service agreement"],
+    "NDA":        ["confidentialite", "nda", "non-disclosure"],
+    "vente":      ["contrat de vente", "sale agreement"],
+}
+
+
+def _detect_law_name(text, title=""):
+    import unicodedata as _ud
+    def _n(s): return _ud.normalize("NFD", s.lower()).encode("ascii","ignore").decode()
+    sample = _n(text[:2000] + " " + (title or ""))
+    for name, kws in _LAW_NAMES:
+        if any(_n(k) in sample for k in kws):
+            d = re.search(r'\b(19|20)\d{2}\b', text[:500])
+            return name, (d.group() if d else None)
+    return (title.strip() or None), None
+
+
+def _extract_tags_rag(text, title=""):
+    import unicodedata as _ud
+    def _n(s): return _ud.normalize("NFD", s.lower()).encode("ascii","ignore").decode()
+    sample = _n(text[:3000] + " " + title)
+    return [t for t, kws in _TAG_KW.items() if any(_n(k) in sample for k in kws)]
+
+
+def _extract_contract_types_rag(text, title=""):
+    import unicodedata as _ud
+    def _n(s): return _ud.normalize("NFD", s.lower()).encode("ascii","ignore").decode()
+    sample = _n(text[:3000] + " " + title)
+    return [ct for ct, kws in _CT_KW.items() if any(_n(k) in sample for k in kws)]
+
+
 def delete_rag_by_source(source):
     try:
         import re as _re
@@ -2780,37 +2872,66 @@ def rag_upload():
         if len(content) > 200000:
             content = content[:200000]
 
-        # Split into chunks of ~400 words
-        words = content.split()
-        chunk_size = 400
-        max_chunks = 50  # Max 50 chunks per upload to avoid timeout
-        chunks = []
-        for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size):
-            chunk = " ".join(words[i:i+chunk_size])
-            chunks.append(chunk)
-
         # Auto-detect jurisdiction from document content (can be overridden by form field)
         doc_jurisdiction = jurisdiction_override or detect_jurisdiction(content, title)
         print(f"RAG upload: jurisdiction={doc_jurisdiction} (override={bool(jurisdiction_override)})")
 
+        # Overwrite: delete existing docs with same source before re-inserting
+        overwrite = request.form.get("overwrite", "0") in ("1", "true", "yes")
+        if overwrite:
+            deleted = delete_rag_by_source(title)
+            print(f"RAG upload overwrite: deleted {deleted} existing chunks for '{title}'")
+
+        # RAG v2 metadata
+        law_name, law_date = _detect_law_name(content, title)
+        tags         = _extract_tags_rag(content, title) or None
+        ct_types     = _extract_contract_types_rag(content, title) or None
+        import hashlib as _hl
+        doc_id = _hl.md5(title.encode()).hexdigest()[:12]
+
+        # Article-level chunking
+        articles = _split_into_articles(content)
+        art_mode = "article" if (articles and articles[0]["number"]) else "chunk"
+        print(f"RAG upload: {len(articles)} {art_mode}s, law_name={law_name}")
+
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
-        for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk, voyage_key)
-            chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
+        saved = 0
+        for i, art in enumerate(articles):
+            art_num   = art.get("number")
+            art_title = art.get("title") or ""
+            chunk     = art.get("content", "")
+            if art_num:
+                chunk_title = f"{law_name or title} — Art. {art_num}"
+                if art_title: chunk_title += f" — {art_title[:60]}"
+            elif len(articles) > 1:
+                chunk_title = f"{title} (partie {i+1}/{len(articles)})"
+            else:
+                chunk_title = title
+            embedding = get_embedding(f"{chunk_title}\n{chunk}", voyage_key)
             save_rag_doc({
-                "id": str(uuid.uuid4()),
-                "title": chunk_title,
-                "category": category,
-                "content": chunk,
-                "embedding": json.dumps(embedding),
-                "source": title,
-                "jurisdiction": doc_jurisdiction,
-                "validated_at": datetime.datetime.now().isoformat()
+                "id":             str(uuid.uuid4()),
+                "title":          chunk_title,
+                "category":       category,
+                "content":        chunk,
+                "embedding":      embedding,
+                "source":         title,
+                "jurisdiction":   doc_jurisdiction,
+                "article_number": art_num,
+                "article_title":  art_title or None,
+                "law_name":       law_name,
+                "law_date":       law_date,
+                "tags":           tags,
+                "contract_types": ct_types,
+                "document_id":    doc_id,
+                "chunk_index":    i,
+                "validated_at":   datetime.datetime.now().isoformat()
             })
+            saved += 1
 
-        total = load_rag()
-        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
+        return jsonify({"success": True, "chunks": saved, "source": title,
+                        "law_name": law_name, "jurisdiction": doc_jurisdiction,
+                        "article_mode": art_mode})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
