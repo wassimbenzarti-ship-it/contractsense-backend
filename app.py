@@ -1714,10 +1714,29 @@ def apply_track_changes(file_bytes, modifications, decisions):
         # Method 2: Fuzzy match fallback
         if para is None:
             original = mod.get("original", "").strip()
+            # For long multi-paragraph originals, use only the first 200 chars to find anchor paragraph
+            match_anchor = original[:200] if len(original) > 200 else original
+            best_para = None
+            best_score = 0.0
             for p in paragraphs:
-                if p.text.strip() and fuzzy_match(original, p.text.strip()):
+                pt = p.text.strip()
+                if not pt:
+                    continue
+                # Try direct anchor match first
+                if fuzzy_match(match_anchor, pt, threshold=0.50):
                     para = p
                     break
+                # Track best overlap for fallback
+                anchor_words = set(w for w in re.findall(r"[\w\-]{3,}", match_anchor.lower()))
+                para_words  = set(w for w in re.findall(r"[\w\-]{3,}", pt.lower()))
+                if anchor_words:
+                    score = len(anchor_words & para_words) / len(anchor_words)
+                    if score > best_score:
+                        best_score = score
+                        best_para = p
+            # Accept best match if score >= 0.35
+            if para is None and best_score >= 0.35:
+                para = best_para
 
         # Handle new clauses (type=nouvelle_clause) ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ insert as new paragraph
         if mod.get('type') == 'nouvelle_clause':
@@ -1787,8 +1806,45 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 print(f"Could not find insertion point for new clause: {mod.get('clause_name')}")
             continue
 
+        # Method 3: search by article number from clause_name (e.g. "19.1" in "Article 19.1 — ...")
         if para is None:
-            print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
+            clause_name = mod.get("clause_name", "")
+            art_num = re.search(r'\b(\d+\.\d+(?:\.\d+)?)\b', clause_name)
+            if art_num:
+                art_str = art_num.group(1)
+                for p in paragraphs:
+                    if art_str in p.text:
+                        para = p
+                        break
+
+        # Method 4: no match found — insert as new paragraph after best position to avoid losing the modification
+        if para is None:
+            print(f"No paragraph match for mod {mod_id}: {mod.get('clause_name')} — inserting as new clause")
+            # Find last non-empty paragraph as insertion point
+            insert_after = None
+            for p in reversed(paragraphs):
+                if p.text.strip() and len(p.text.strip()) > 10:
+                    insert_after = p
+                    break
+            if insert_after is not None:
+                import copy as _copy
+                new_p = OxmlElement('w:p')
+                if insert_after._p.find(qn('w:pPr')) is not None:
+                    new_p.append(_copy.deepcopy(insert_after._p.find(qn('w:pPr'))))
+                ins_e = OxmlElement('w:ins')
+                ins_e.set(qn('w:id'), str(rev_id)); ins_e.set(qn('w:author'), author); ins_e.set(qn('w:date'), date)
+                rev_id += 1
+                new_r = OxmlElement('w:r')
+                new_t = OxmlElement('w:t')
+                new_t.text = f"[NOUVEAU — {mod.get('clause_name','')}] {proposed}"
+                new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                new_r.append(new_t); ins_e.append(new_r); new_p.append(ins_e)
+                next_sib = insert_after._p.getnext()
+                if next_sib is not None:
+                    insert_after._p.getparent().insert(list(insert_after._p.getparent()).index(next_sib), new_p)
+                else:
+                    insert_after._p.getparent().append(new_p)
+                applied.add(mod_id)
             continue
 
         para_text = para.text.strip()
@@ -3578,6 +3634,8 @@ def chat():
             f"3. INSTRUCTION CRITIQUE — BLOCS MODIFICATION SYSTÉMATIQUES:\n"
             f"Dès que ta réponse porte sur une ou plusieurs clauses du contrat, tu DOIS produire "
             f"autant de blocs <modification> que nécessaire (un par clause modifiée).\n"
+            f"ORDRE IMPÉRATIF: commence TOUJOURS ta réponse par les blocs <modification>, "
+            f"AVANT tout texte d'analyse. L'analyse vient APRÈS les blocs.\n"
             f"RÈGLE ABSOLUE — LE CHAMP 'proposed' EST UNE OBLIGATION DE RÉDACTION INTÉGRALE:\n"
             f"- INTERDIT: résumés, descriptions, abréviations, '[...]', 'tel que détaillé ci-dessus', 'version révisée comprenant...'\n"
             f"- INTERDIT: toute phrase du type 'voir ci-dessus', 'comme mentionné', 'cf. markup'\n"
@@ -3604,7 +3662,7 @@ def chat():
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=8000,
+            max_tokens=16000,
             system=system_prompt,
             messages=messages_for_claude,
         )
