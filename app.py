@@ -1082,6 +1082,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
         _rag_is_voyage = is_voyage
+        _rag_contract_sources = [d.get("title") or d.get("source","?") for d in (contract_docs or [])[:12]]
+        _rag_legal_sources = [d.get("title") or d.get("source","?") for d in (legal_docs or [])[:12]]
         print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
@@ -1544,6 +1546,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "model_ctx_len": len(model_context),
         "legal_ctx_len": len(legal_context),
         "is_voyage": _rag_is_voyage,
+        "contract_sources": _rag_contract_sources if "_rag_contract_sources" in dir() else [],
+        "legal_sources": _rag_legal_sources if "_rag_legal_sources" in dir() else [],
     }
     _total_ms = (_perf.monotonic() - _t0) * 1000
     print(f"analyze_contract TOTAL: {_total_ms:.0f}ms")
