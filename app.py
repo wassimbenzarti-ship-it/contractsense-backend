@@ -3554,7 +3554,7 @@ def chat():
 
         contract_block = ""
         if contract_text:
-            max_chars = 6000
+            max_chars = 80000
             excerpt = contract_text[:max_chars] + ("\n\n[…contrat tronqué…]" if len(contract_text) > max_chars else "")
             contract_block = f"\n\nTEXTE DU CONTRAT:\n{excerpt}"
 
