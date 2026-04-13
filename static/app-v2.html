@@ -2978,32 +2978,35 @@ function cbResize(el) {
   el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
-function cbAddMsg(role, html, modObj) {
+function cbAddMsg(role, html, modObjs) {
   var msgs = document.getElementById('cb-msgs');
   var div  = document.createElement('div');
   div.className = 'cb-msg ' + role;
   div.innerHTML  = html;
 
-  if (role === 'bot' && modObj) {
-    // Store mod object by key to avoid JSON injection in onclick attributes
-    var sk = 'cbm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-    _cbModStore[sk] = modObj;
+  if (role === 'bot' && modObjs) {
+    var list = Array.isArray(modObjs) ? modObjs : [modObjs];
+    list.forEach(function(modObj) {
+      if (!modObj) return;
+      var sk = 'cbm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      _cbModStore[sk] = modObj;
 
-    var card = document.createElement('div');
-    card.className = 'cb-mod-card';
+      var card = document.createElement('div');
+      card.className = 'cb-mod-card';
 
-    var origTxt  = (modObj.original || '').slice(0, 130);
-    var propTxt  = (modObj.proposed || '').slice(0, 130);
-    var origMore = (modObj.original || '').length > 130 ? '\u2026' : '';
-    var propMore = (modObj.proposed || '').length > 130 ? '\u2026' : '';
+      var origTxt  = (modObj.original || '').slice(0, 130);
+      var propTxt  = (modObj.proposed || '').slice(0, 130);
+      var origMore = (modObj.original || '').length > 130 ? '\u2026' : '';
+      var propMore = (modObj.proposed || '').length > 130 ? '\u2026' : '';
 
-    card.innerHTML =
-      '<div class="cb-mod-name">\u2726 ' + _escH(modObj.clause_name || 'Modification propos\u00e9e') + '</div>' +
-      (modObj.original ? '<div class="cb-mod-orig">\u26a0 Original\u00a0: ' + _escH(origTxt) + origMore + '</div>' : '') +
-      '<div class="cb-mod-prop">\u2713 Propos\u00e9\u00a0: ' + _escH(propTxt) + propMore + '</div>' +
-      '<button class="cb-apply-btn" data-sk="' + sk + '" onclick="cbApplyMod(this)">+ Ajouter au contrat</button>';
+      card.innerHTML =
+        '<div class="cb-mod-name">\u2726 ' + _escH(modObj.clause_name || 'Modification propos\u00e9e') + '</div>' +
+        (modObj.original ? '<div class="cb-mod-orig">\u26a0 Original\u00a0: ' + _escH(origTxt) + origMore + '</div>' : '') +
+        '<div class="cb-mod-prop">\u2713 Propos\u00e9\u00a0: ' + _escH(propTxt) + propMore + '</div>' +
+        '<button class="cb-apply-btn" data-sk="' + sk + '" onclick="cbApplyMod(this)">+ Ajouter au contrat</button>';
 
-    div.appendChild(card);
+      div.appendChild(card);
+    });
   }
 
   msgs.appendChild(div);
@@ -3099,7 +3102,8 @@ async function cbSend() {
 
     var reply = data.reply || '';
     _cbHistory.push({ role: 'assistant', content: reply });
-    cbAddMsg('bot', reply.replace(/\n/g, '<br>'), data.modification || null);
+    var modObjs = data.modifications && data.modifications.length ? data.modifications : (data.modification ? [data.modification] : null);
+    cbAddMsg('bot', reply.replace(/\n/g, '<br>'), modObjs);
   } catch(e) {
     cbHideTyping();
     cbAddMsg('bot', '\u274c ' + _escH(e.message || 'Erreur inattendue.'));

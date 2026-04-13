@@ -3599,41 +3599,41 @@ def chat():
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=2500,
+            max_tokens=6000,
             system=system_prompt,
             messages=messages_for_claude,
         )
         reply = resp.content[0].text.strip()
 
-        # ── 5. Extract optional modification block ────────────────────────────
-        modification = None
-        mod_match = re.search(r"<modification>(.*?)</modification>", reply, re.DOTALL)
-        if mod_match:
+        # ── 5. Extract all modification blocks ───────────────────────────────
+        modifications_out = []
+        for raw_json in re.findall(r"<modification>(.*?)</modification>", reply, re.DOTALL):
             try:
-                raw_json = mod_match.group(1).strip()
-                # Strip markdown code fences if Claude wrapped the JSON
+                raw_json = raw_json.strip()
                 raw_json = re.sub(r"^```(?:json)?\s*", "", raw_json)
                 raw_json = re.sub(r"\s*```$", "", raw_json).strip()
-                # Collapse internal newlines in JSON (common when Claude formats multiline)
-                # Only collapse newlines that are NOT inside string values
                 try:
-                    modification = json.loads(raw_json)
+                    mod = json.loads(raw_json)
                 except json.JSONDecodeError:
-                    # Fallback: collapse all newlines and try again
-                    raw_json_flat = " ".join(raw_json.splitlines())
-                    modification = json.loads(raw_json_flat)
-                reply = re.sub(r"\s*<modification>.*?</modification>", "", reply, flags=re.DOTALL).strip()
-                # Ensure required fields exist
+                    mod = json.loads(" ".join(raw_json.splitlines()))
                 for field in ("clause_name", "proposed"):
-                    if not modification.get(field):
-                        modification[field] = modification.get(field) or "Clause"
-                print(f"chat: modification extracted — {modification.get('clause_name','?')}")
+                    if not mod.get(field):
+                        mod[field] = "Clause"
+                modifications_out.append(mod)
+                print(f"chat: modification extracted — {mod.get('clause_name','?')}")
             except Exception as me:
-                print(f"chat: modification parse error: {me} | raw: {mod_match.group(1)[:300]}")
-        else:
+                print(f"chat: modification parse error: {me} | raw: {raw_json[:200]}")
+
+        reply = re.sub(r"\s*<modification>.*?</modification>", "", reply, flags=re.DOTALL).strip()
+
+        if not modifications_out:
             print(f"chat: no <modification> block found in reply (len={len(reply)})")
 
-        return jsonify({"reply": reply, "modification": modification})
+        return jsonify({
+            "reply": reply,
+            "modifications": modifications_out,
+            "modification": modifications_out[0] if modifications_out else None  # backward compat
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
