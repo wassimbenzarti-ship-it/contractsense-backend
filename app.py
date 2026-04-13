@@ -480,6 +480,32 @@ def clean_text(text):
         return text
     return text.replace("\x00", "").replace("\u0000", "")
 
+_ABBREV_MAP = [
+    # Droit marocain
+    (r'\bDOC\b',       'Dahir des Obligations et Contrats (9 août 1913)'),
+    (r'\bC\.Com\b',    'Loi n°15-95 (Code de Commerce)'),
+    (r'\bC\.Ass\b',    'Loi n°17-99 (Code des Assurances)'),
+    (r'\bC\.Fam\b',    'Loi n°70-03 (Code de la Famille)'),
+    (r'\bCDR\b',       'Loi n°39-08 (Code des Droits Réels)'),
+    (r'\bCGI\b',       'Code Général des Impôts'),
+    (r'\bCP\b',        'Dahir n°1-59-413 (Code Pénal)'),
+    (r'\bC\.Douanes\b','Dahir n°1-77-339 (Code des Douanes et Impôts Indirects)'),
+    # Droit du travail
+    (r'\bCT\b',        'Loi n°65-99 (Code du Travail)'),
+    (r'\bC\.Trav\b',   'Code du Travail français (L. n°2016-1088)'),
+    (r'\bC\.Civ\b',    'Code Civil français'),
+    # RGPD
+    (r'\bRGPD\b',      'Règlement UE n°2016/679 (RGPD)'),
+]
+
+def _expand_article_ref(ref):
+    """Expand legal code abbreviations to full official names."""
+    if not ref:
+        return ref
+    for pattern, replacement in _ABBREV_MAP:
+        ref = re.sub(pattern, replacement, ref)
+    return ref
+
 def extract_article_refs(content, title=""):
     """
     Extract specific article references from RAG document content.
@@ -1303,7 +1329,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
                     "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None,
-                    "article_ref": article_refs_raw[i] if i < len(article_refs_raw) and article_refs_raw[i] else None,
+                    "article_ref": _expand_article_ref(article_refs_raw[i] if i < len(article_refs_raw) and article_refs_raw[i] else None),
                 })
 
         if mods:
