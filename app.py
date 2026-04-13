@@ -3578,14 +3578,16 @@ def chat():
             f"3. INSTRUCTION CRITIQUE — BLOCS MODIFICATION SYSTÉMATIQUES:\n"
             f"Dès que ta réponse porte sur une ou plusieurs clauses du contrat, tu DOIS produire "
             f"autant de blocs <modification> que nécessaire (un par clause modifiée).\n"
-            f"RÈGLE ABSOLUE SUR LE CHAMP 'proposed': le champ 'proposed' doit contenir le TEXTE JURIDIQUE "
-            f"COMPLET ET INTÉGRAL, rédigé comme il apparaîtra dans le contrat final — pas un résumé, "
-            f"pas une description de ce qui devrait être fait, pas des crochets '[...]' ou des renvois "
-            f"'tel que détaillé ci-dessus'. L'utilisateur doit pouvoir copier-coller le contenu de "
-            f"'proposed' directement dans le contrat sans aucune modification.\n"
-            f"Si le texte proposé est long, écris-le intégralement dans le JSON (pas de troncature).\n"
-            f"Format de chaque bloc (sur UNE SEULE LIGNE, guillemets doubles, pas de backticks):\n"
-            f"<modification>{{\"clause_name\":\"Article X.X — Titre\",\"original\":\"Texte actuel exact extrait du contrat\",\"proposed\":\"TEXTE JURIDIQUE COMPLET ET INTÉGRAL prêt à insérer dans le contrat\",\"risk\":\"high\",\"reason\":\"Explication concise de l'amélioration\"}}</modification>\n"
+            f"RÈGLE ABSOLUE — LE CHAMP 'proposed' EST UNE OBLIGATION DE RÉDACTION INTÉGRALE:\n"
+            f"- INTERDIT: résumés, descriptions, abréviations, '[...]', 'tel que détaillé ci-dessus', 'version révisée comprenant...'\n"
+            f"- INTERDIT: toute phrase du type 'voir ci-dessus', 'comme mentionné', 'cf. markup'\n"
+            f"- OBLIGATOIRE: le texte juridique complet, mot pour mot, tel qu'il doit figurer dans le contrat signé\n"
+            f"- OBLIGATOIRE: si l'article a des sous-alinéas (a), (b), (c)... les écrire tous intégralement\n"
+            f"- OBLIGATOIRE: si le texte fait 500 mots, écrire les 500 mots dans le champ 'proposed'\n"
+            f"Le champ 'proposed' doit être autonome : un avocat qui le lit sans contexte doit obtenir "
+            f"le texte définitif prêt à signer.\n"
+            f"Format de chaque bloc (guillemets doubles, pas de backticks):\n"
+            f"<modification>{{\"clause_name\":\"Article X.X — Titre\",\"original\":\"Texte actuel exact\",\"proposed\":\"Texte juridique complet et intégral rédigé article par article avec tous les alinéas\",\"risk\":\"high\",\"reason\":\"Explication concise\"}}</modification>\n"
             f"4. Pour les modifications déjà proposées, référence-les par leur numéro [1], [2], etc."
         )
 
@@ -3602,7 +3604,7 @@ def chat():
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=6000,
+            max_tokens=8000,
             system=system_prompt,
             messages=messages_for_claude,
         )
