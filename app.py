@@ -37,7 +37,7 @@ CORS(app, origins=[
     "http://localhost:3000",
     "http://localhost:5173",
     "null"
-], supports_credentials=True)
+], supports_credentials=True, allow_headers=["Content-Type", "Authorization", "X-Admin-Pass"])
 
 def get_legal_framework(contract_type, jurisdiction="auto"):
     """Return mandatory legal constraints per contract type and jurisdiction."""
@@ -52,7 +52,7 @@ def get_legal_framework(contract_type, jurisdiction="auto"):
         if jur in ("droit_marocain", "auto", "universel"):
             return (
                 "DROIT DU TRAVAIL MAROCAIN - REGLES IMPERATIVES:\n"
-                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+                "- CDD: max 1 an, renouvelable UNE seule fois (Art. 16 - Loi n°65-99)\n"
                 "- Renouvellement abusif = requalification automatique en CDI\n"
                 "- Preavis: 8j (<1an), 1 mois (1-5ans), 2 mois (>5ans) ouvriers; 1/2/3 mois cadres\n"
                 "- Indemnite licenciement: 96h/an (3 premieres annees), 144h/an apres\n"
@@ -480,44 +480,68 @@ def clean_text(text):
         return text
     return text.replace("\x00", "").replace("\u0000", "")
 
+_ABBREV_MAP = [
+    # Droit marocain
+    (r'\bDOC\b',       'Dahir des Obligations et Contrats (9 août 1913)'),
+    (r'\bC\.Com\b',    'Loi n°15-95 (Code de Commerce)'),
+    (r'\bC\.Ass\b',    'Loi n°17-99 (Code des Assurances)'),
+    (r'\bC\.Fam\b',    'Loi n°70-03 (Code de la Famille)'),
+    (r'\bCDR\b',       'Loi n°39-08 (Code des Droits Réels)'),
+    (r'\bCGI\b',       'Code Général des Impôts'),
+    (r'\bCP\b',        'Dahir n°1-59-413 (Code Pénal)'),
+    (r'\bC\.Douanes\b','Dahir n°1-77-339 (Code des Douanes et Impôts Indirects)'),
+    # Droit du travail
+    (r'\bCT\b',        'Loi n°65-99 (Code du Travail)'),
+    (r'\bC\.Trav\b',   'Code du Travail français (L. n°2016-1088)'),
+    (r'\bC\.Civ\b',    'Code Civil français'),
+    # RGPD
+    (r'\bRGPD\b',      'Règlement UE n°2016/679 (RGPD)'),
+]
+
+def _expand_article_ref(ref):
+    """Expand legal code abbreviations to full official names."""
+    if not ref:
+        return ref
+    for pattern, replacement in _ABBREV_MAP:
+        ref = re.sub(pattern, replacement, ref)
+    return ref
+
 def extract_article_refs(content, title=""):
     """
     Extract specific article references from RAG document content.
-    Returns a list of strings like ['Art. 16 CT', 'Art. 63 CT', 'Art. 263 DOC'].
-    Detects the legal code abbreviation from the document title.
+    Returns a list like ['Art. 16 - Loi n°65-99 (Code du Travail)', 'Art. 263 - Dahir des Obligations et Contrats (1913)'].
+    Cites the official law number alongside the code name.
     """
     if not content:
         return []
-    # Detect legal code abbreviation from title
+    # Map document title to official law citation
     title_low = (title or "").lower()
     if any(k in title_low for k in ["code du travail", "code travail", " ct ", "travail marocain", "codetravail"]):
-        code = "CT"
+        code = "- Loi n°65-99 (Code du Travail)"
     elif any(k in title_low for k in ["doc ", "dahir des obligations", "obligations et contrats", "codeobligations", "obligationscontrats"]):
-        code = "DOC"
-    elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce"]):
-        code = "C.Com"
+        code = "- Dahir des Obligations et Contrats (9 août 1913)"
+    elif any(k in title_low for k in ["code commerce", "code de commerce", "codecommerce", "loi 15-95"]):
+        code = "- Loi n°15-95 (Code de Commerce)"
     elif any(k in title_low for k in ["code penal", "code pénal", "codepenal"]):
-        code = "CP"
+        code = "- Dahir n°1-59-413 (Code Pénal)"
     elif any(k in title_low for k in ["loi 09-08", "protection des donnees", "cndp"]):
-        code = "Loi 09-08"
-    elif any(k in title_low for k in ["loi 15-95"]):
-        code = "Loi 15-95"
+        code = "- Loi n°09-08 (Protection des données personnelles)"
     elif any(k in title_low for k in ["code assurances", "codeassurances"]):
-        code = "C.Ass"
+        code = "- Loi n°17-99 (Code des Assurances)"
     elif any(k in title_low for k in ["code famille", "codefamille", "moudawana"]):
-        code = "C.Fam"
+        code = "- Loi n°70-03 (Code de la Famille)"
     elif any(k in title_low for k in ["droits reels", "droitsreels"]):
-        code = "CDR"
+        code = "- Loi n°39-08 (Code des Droits Réels)"
     elif any(k in title_low for k in ["cgi", "impots", "fiscal", "code general"]):
-        code = "CGI"
+        code = "- Code Général des Impôts"
     elif any(k in title_low for k in ["douanes", "impots indirects"]):
-        code = "C.Douanes"
+        code = "- Dahir n°1-77-339 (Code des Douanes et Impôts Indirects)"
     elif any(k in title_low for k in ["rgpd", "gdpr"]):
-        code = "RGPD"
+        code = "- Règlement UE n°2016/679 (RGPD)"
     elif any(k in title_low for k in ["code civil", "civil français", "code civil français"]):
-        code = "C.Civ"
+        code = "- Code Civil français"
     elif any(k in title_low for k in ["code du travail français", "travail français"]):
-        code = "C.Trav"
+        code = "- Code du Travail français (L. n°2016-1088)"
     else:
         code = None
 
@@ -1084,6 +1108,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
         _rag_is_voyage = is_voyage
+        _rag_contract_sources = [d.get("title") or d.get("source","?") for d in (contract_docs or [])[:12]]
+        _rag_legal_sources = [d.get("title") or d.get("source","?") for d in (legal_docs or [])[:12]]
         print(f"RAG final: {len(contract_docs)} contract docs, {len(legal_docs)} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
@@ -1164,12 +1190,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court","risk":"high|medium|low",'
         '"reason":"explication","type":"modification","original":"texte EXACT du paragraphe",'
         '"proposed":"clause reformulee favorisant ' + partie + '","insertion_after":null,'
-        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 CT ou null"}],'
+        '"rag_source":"titre EXACT du contexte ou null","article_ref":"Art. 16 - Loi n°65-99 (Code du Travail) ou null"}],'
         '"nouvelles_clauses":[{"id":11,"para_idx":null,"clause_name":"non-concurrence",'
         '"risk":"high","reason":"Protection absente - inspire du modele RAG en priorite",'
         '"type":"nouvelle_clause","original":null,'
         '"proposed":"Clause complete favorisant ' + partie + ' avec duree, perimetre et compensation",'
-        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 CT ou null"}],'
+        '"insertion_after":50,"rag_source":"titre EXACT modele RAG ou null","article_ref":"Art. 16 - Loi n°65-99 (Code du Travail) ou null"}],'
         '"compliance":[{"id":1,"type":"loi|doctrine|jurisprudence","source":"Titre exact","issue":"Art. XX CT - description","severity":"high|medium|low","recommendation":"Ce que prevoir","para_idx":5}]}\n\n'
         "CONFORMITE OBLIGATOIRE (MINIMUM 3 elements) - JURIDICTION: " + _jurisdiction + "\\n"
         "Pour CONTRAT DE TRAVAIL (CDI/CDD): verifier periode d'essai, preavis, heures sup, conges, protection contre licenciement abusif selon le droit " + _jurisdiction + ".\\n"
@@ -1303,7 +1329,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
                     "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None,
-                    "article_ref": article_refs_raw[i] if i < len(article_refs_raw) and article_refs_raw[i] else None,
+                    "article_ref": _expand_article_ref(article_refs_raw[i] if i < len(article_refs_raw) and article_refs_raw[i] else None),
                 })
 
         if mods:
@@ -1333,10 +1359,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
              "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
              "rag_source": None},
             {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
-             "reason": "Conformement a l'Art. 63 CT - protection contre licenciement abusif",
+             "reason": "Conformement a l'Art. 63 - Loi n°65-99 (Code du Travail) - protection contre licenciement abusif",
              "original": None, "para_idx": None, "insertion_after": _last_para,
-             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 du Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
-             "rag_source": None, "article_ref": "Art. 63 CT"},
+             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 de la Loi n°65-99 relative au Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
+             "rag_source": None, "article_ref": "Art. 63 - Loi n°65-99 (Code du Travail)"},
             {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
              "reason": "Protection des equipes et clients de l'employeur",
              "original": None, "para_idx": None, "insertion_after": _last_para,
@@ -1414,16 +1440,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         if _arts:
                             _m["article_ref"] = _arts[0]
                         break
-        # Auto-assign rag_source from legal code when article_ref contains a known code suffix
+        # Auto-assign rag_source from legal code when article_ref contains a known law citation
         _code_source_map = {
-            " CT": "codeTravail_pdf",
-            " DOC": "codeObligationsContrats_pdf",
-            " C.Com": "codeCommerce_pdf",
-            " CGI": "Code général des impôts",
-            " C.Ass": "codeAssurances_pdf",
-            " C.Fam": "codeFamille_pdf (1)",
-            " CDR": "code des droits réels",
-            " C.Douanes": "Code des douanes et impôts indirects",
+            "Loi n°65-99": "codeTravail_pdf",
+            "Obligations et Contrats": "codeObligationsContrats_pdf",
+            "Loi n°15-95": "codeCommerce_pdf",
+            "Code Général des Impôts": "Code général des impôts",
+            "Loi n°17-99": "codeAssurances_pdf",
+            "Loi n°70-03": "codeFamille_pdf (1)",
+            "Loi n°39-08": "code des droits réels",
+            "Dahir n°1-77-339": "Code des douanes et impôts indirects",
         }
         for _m in mods:
             if not _m.get("rag_source") and _m.get("article_ref"):
@@ -1546,6 +1572,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "model_ctx_len": len(model_context),
         "legal_ctx_len": len(legal_context),
         "is_voyage": _rag_is_voyage,
+        "contract_sources": _rag_contract_sources if "_rag_contract_sources" in dir() else [],
+        "legal_sources": _rag_legal_sources if "_rag_legal_sources" in dir() else [],
     }
     _total_ms = (_perf.monotonic() - _t0) * 1000
     print(f"analyze_contract TOTAL: {_total_ms:.0f}ms")
@@ -2255,6 +2283,8 @@ def admin_create_user():
     if request.method == "OPTIONS": return "", 204
     try:
         data = request.get_json() or {}
+        if not _is_admin_request(data):
+            return jsonify({"error": "Accès refusé"}), 403
         email = data.get("email", "").strip()
         password = data.get("password", "").strip()
         role = data.get("role", "directeur")
