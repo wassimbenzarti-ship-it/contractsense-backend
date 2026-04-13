@@ -2361,7 +2361,11 @@ def health():
 @app.route("/app-v2.html", methods=["GET"])
 @app.route("/app-v2", methods=["GET"])
 def serve_frontend():
-    return send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 @app.route("/", methods=["GET"])
 @app.route("/index.html", methods=["GET"])
