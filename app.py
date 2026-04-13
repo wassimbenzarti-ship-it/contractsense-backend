@@ -1806,18 +1806,9 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 print(f"Could not find insertion point for new clause: {mod.get('clause_name')}")
             continue
 
-        # Method 3: search by article number from clause_name (e.g. "19.1" in "Article 19.1 — ...")
-        if para is None:
-            clause_name = mod.get("clause_name", "")
-            art_num = re.search(r'\b(\d+\.\d+(?:\.\d+)?)\b', clause_name)
-            if art_num:
-                art_str = art_num.group(1)
-                for p in paragraphs:
-                    if art_str in p.text:
-                        para = p
-                        break
+        # NOTE: No article-number search from clause_name — unreliable when Omniscient gives wrong number.
 
-        # Method 4: no match found — insert as new paragraph after best position to avoid losing the modification
+        # Fallback: no match found — insert as new paragraph to avoid losing the modification
         if para is None:
             print(f"No paragraph match for mod {mod_id}: {mod.get('clause_name')} — inserting as new clause")
             # Find last non-empty paragraph as insertion point
@@ -1849,7 +1840,26 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
         para_text = para.text.strip()
 
-        # Clear all runs
+        # For multi-paragraph clauses: find and delete all subsequent paragraphs
+        # that belong to the same clause (until next sibling/parent article heading)
+        anchor_idx = paragraphs.index(para)
+        art_match = re.search(r'\b(\d+)\.(\d+)\b', para.text)
+        extra_paras_to_delete = []
+        if art_match:
+            major, minor = int(art_match.group(1)), int(art_match.group(2))
+            for subsequent in paragraphs[anchor_idx + 1: anchor_idx + 80]:
+                st = subsequent.text.strip()
+                if not st:
+                    continue
+                # Stop if we hit a new sibling article (same major, higher or equal minor) or new major
+                next_art = re.match(r'^(?:Article\s+)?(\d+)\.(\d+)\b', st)
+                if next_art:
+                    nm, nn = int(next_art.group(1)), int(next_art.group(2))
+                    if nm != major or nn >= minor + 1:
+                        break
+                extra_paras_to_delete.append(subsequent)
+
+        # Delete anchor paragraph
         for run in para.runs:
             run.text = ""
         p = para._p
@@ -1883,6 +1893,24 @@ def apply_track_changes(file_bytes, modifications, decisions):
         ins_elem.append(ins_run)
         p.append(ins_elem)
         rev_id += 1
+
+        # Mark extra paragraphs (rest of old clause) as deleted
+        import copy as _copy
+        for ep in extra_paras_to_delete:
+            ep_text = ep.text.strip()
+            if not ep_text:
+                continue
+            for run in ep.runs:
+                run.text = ""
+            del_e = OxmlElement('w:del')
+            del_e.set(qn('w:id'), str(rev_id)); del_e.set(qn('w:author'), author); del_e.set(qn('w:date'), date)
+            del_r = OxmlElement('w:r')
+            del_rpr = OxmlElement('w:rPr'); del_r.append(del_rpr)
+            del_t = OxmlElement('w:delText')
+            del_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            del_t.text = ep_text
+            del_r.append(del_t); del_e.append(del_r); ep._p.append(del_e)
+            rev_id += 1
 
         applied.add(mod_id)
 
