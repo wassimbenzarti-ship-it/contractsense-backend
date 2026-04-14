@@ -617,7 +617,7 @@ async function analyze() {
   }
 }
 
-//  Step 2: Show parties 
+//  Step 2: Show parties
 function renderParties(parties) {
   var list = document.getElementById('parties-list');
   list.innerHTML = '';
@@ -626,7 +626,7 @@ function renderParties(parties) {
     btn.className = 'partie-btn';
     // Show name + generic role
     var roleLabel = p.party_label || p.description || p.role || '';
-    btn.innerHTML = 
+    btn.innerHTML =
       '<div class="name">' + p.name + '</div>' +
       '<div class="desc2">' + p.description + '</div>' +
       (roleLabel ? '<div style="margin-top:4px;font-size:11px;color:#5b7cfa;font-weight:600">' + roleLabel + '</div>' : '');
@@ -634,6 +634,30 @@ function renderParties(parties) {
     btn.addEventListener('click', function() { analyzeWithPartie(p.party_label || p.description || p.name); });
     list.appendChild(btn);
   });
+  // Coalition buttons: show pairwise combinations when 2+ parties
+  if (parties.length >= 2) {
+    var sep = document.createElement('div');
+    sep.style.cssText = 'width:100%;text-align:center;margin:14px 0 8px;font-size:11px;color:#4a5470;font-weight:600;letter-spacing:.05em;text-transform:uppercase';
+    sep.textContent = '— ou défendre deux parties en coalition —';
+    list.appendChild(sep);
+    for (var i = 0; i < parties.length; i++) {
+      for (var j = i + 1; j < parties.length; j++) {
+        (function(pi, pj) {
+          var labelI = pi.party_label || pi.description || pi.name;
+          var labelJ = pj.party_label || pj.description || pj.name;
+          var coalitionLabel = labelI + ' et ' + labelJ;
+          var btn2 = document.createElement('button');
+          btn2.className = 'partie-btn';
+          btn2.style.cssText = 'border:1px dashed #5b7cfa;opacity:.9';
+          btn2.innerHTML = '<div class="name" style="color:#8b9eff">&#x26A0; Coalition</div>'
+            + '<div class="desc2">' + _escH(pi.name) + ' &amp; ' + _escH(pj.name) + '</div>'
+            + '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">Défendre conjointement ces deux parties</div>';
+          btn2.addEventListener('click', function() { analyzeWithPartie(coalitionLabel); });
+          list.appendChild(btn2);
+        })(parties[i], parties[j]);
+      }
+    }
+  }
   show('step-parties');
 }
 
@@ -1310,6 +1334,30 @@ function dAnaShowParties(parties) {
     btn.onclick = (function(role){ return function(){ dAnaAnalyze(role); }; })(p.party_label || p.description || p.name || p);
     list.appendChild(btn);
   });
+  // Coalition buttons: show pairwise combinations when 2+ real parties
+  if (arr.length >= 2 && parties.length >= 2) {
+    var sep = document.createElement('div');
+    sep.style.cssText = 'width:100%;text-align:center;margin:14px 0 8px;font-size:11px;color:#4a5470;font-weight:600;letter-spacing:.05em;text-transform:uppercase';
+    sep.textContent = '— ou défendre deux parties en coalition —';
+    list.appendChild(sep);
+    for (var i = 0; i < arr.length; i++) {
+      for (var j = i + 1; j < arr.length; j++) {
+        (function(pi, pj) {
+          var labelI = pi.party_label || pi.description || pi.name;
+          var labelJ = pj.party_label || pj.description || pj.name;
+          var coalitionLabel = labelI + ' et ' + labelJ;
+          var btn2 = document.createElement('button');
+          btn2.className = 'partie-btn';
+          btn2.style.cssText = 'border:1px dashed #5b7cfa;opacity:.9';
+          btn2.innerHTML = '<div class="name" style="color:#8b9eff">&#x26A0; Coalition</div>'
+            + '<div class="desc2">' + _escH(pi.name||'') + ' &amp; ' + _escH(pj.name||'') + '</div>'
+            + '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">Défendre conjointement ces deux parties</div>';
+          btn2.onclick = (function(label){ return function(){ dAnaAnalyze(label); }; })(coalitionLabel);
+          list.appendChild(btn2);
+        })(arr[i], arr[j]);
+      }
+    }
+  }
 }
 
 var _JUR_LABELS = {droit_marocain:'droit marocain 🇲🇦',droit_francais:'droit français 🇫🇷',droit_anglais:'droit anglais 🇬🇧',droit_tunisien:'droit tunisien 🇹🇳',droit_algerien:'droit algérien 🇩🇿',droit_belge:'droit belge 🇧🇪',universel:'droit applicable 🌐'};

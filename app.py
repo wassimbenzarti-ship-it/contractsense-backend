@@ -1384,6 +1384,38 @@ def health():
     rag = load_rag()
     return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
+@app.route("/detect-jurisdiction", methods=["POST", "OPTIONS"])
+def detect_jurisdiction():
+    """Quick jurisdiction detection from contract file or text."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        file = request.files.get("file")
+        contract_text = ""
+        if file:
+            contract_text, _, _ = read_file(file)
+        if not contract_text:
+            contract_text = (request.form.get("text") or "").strip()
+        if not contract_text or len(contract_text.strip()) < 20:
+            return jsonify({"jurisdiction": "universel"})
+
+        sample = contract_text[:3000].lower()
+        # Rule-based heuristic detection
+        if any(k in sample for k in ["code du travail marocain", "dahir", "droit marocain", "maroc", "tribunal de commerce de casablanca", "doc marocain", "droit marocain"]):
+            return jsonify({"jurisdiction": "droit_marocain"})
+        if any(k in sample for k in ["code du travail français", "droit français", "loi française", "tribunal de commerce de paris", "france", "code civil français"]):
+            return jsonify({"jurisdiction": "droit_francais"})
+        if any(k in sample for k in ["english law", "laws of england", "courts of england", "english courts", "governed by the laws of"]):
+            return jsonify({"jurisdiction": "droit_anglais"})
+        if any(k in sample for k in ["droit tunisien", "tunisie", "code des obligations et des contrats tunisien"]):
+            return jsonify({"jurisdiction": "droit_tunisien"})
+        if any(k in sample for k in ["droit algérien", "algérie", "code civil algérien"]):
+            return jsonify({"jurisdiction": "droit_algerien"})
+        if any(k in sample for k in ["droit belge", "belgique", "droit belge", "code civil belge"]):
+            return jsonify({"jurisdiction": "droit_belge"})
+        return jsonify({"jurisdiction": "universel"})
+    except Exception as e:
+        return jsonify({"jurisdiction": "universel"})
+
 @app.route("/identify-parties", methods=["POST"])
 def identify_parties_route():
     try:
