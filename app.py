@@ -2296,6 +2296,116 @@ def director_delete_juriste():
     return jsonify({"status": "ok", "message": f"Juriste {juriste_email} supprimé"})
 
 
+@app.route("/chat", methods=["POST", "OPTIONS"])
+def chat():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        message        = (data.get("message") or "").strip()
+        history        = data.get("history") or []
+        contract_text  = (data.get("contract_text") or "").strip()
+        modifications  = data.get("modifications") or []
+        decisions      = data.get("decisions") or {}
+        partie         = (data.get("partie") or "").strip()
+        jurisdiction   = (data.get("jurisdiction") or "universel").strip()
+        file_cache_id  = (data.get("file_cache_id") or "").strip()
+        file_storage_path = (data.get("file_storage_path") or "").strip()
+
+        if not message:
+            return jsonify({"error": "message requis"}), 400
+
+        # Try to retrieve contract text from cache / storage if not provided
+        if not contract_text and file_cache_id:
+            cached = _cache_get(file_cache_id)
+            if cached:
+                try:
+                    contract_text = cached.decode("utf-8", errors="replace")[:8000]
+                except Exception:
+                    pass
+        if not contract_text and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+            downloaded = supa_storage_download("contracts", file_storage_path)
+            if downloaded:
+                fname = file_storage_path.rsplit("/", 1)[-1].lower()
+                try:
+                    if fname.endswith(".docx"):
+                        import io as _io
+                        doc = Document(_io.BytesIO(downloaded))
+                        contract_text = "\n".join(p.text for p in doc.paragraphs)[:8000]
+                    else:
+                        contract_text = downloaded.decode("utf-8", errors="replace")[:8000]
+                except Exception:
+                    pass
+
+        # Build accepted modifications summary
+        accepted_mods = [m for m in modifications if decisions.get(str(m.get("id") or "")) == "accepted"]
+        mods_summary = ""
+        if accepted_mods:
+            lines = []
+            for m in accepted_mods[:10]:
+                lines.append(f"- {m.get('clause_name','?')}: {(m.get('proposed') or '')[:120]}")
+            mods_summary = "\nMODIFICATIONS DÉJÀ ACCEPTÉES PAR LE CLIENT:\n" + "\n".join(lines)
+
+        # System prompt
+        system_prompt = (
+            "Tu es un assistant juridique expert en droit marocain (DOC, Code du Travail, etc.). "
+            "Tu aides un avocat ou juriste à analyser et améliorer un contrat. "
+            "Réponds toujours en français, de manière concise et professionnelle. "
+            + (f"Partie représentée : {partie}. Tu défends les intérêts de cette partie.\n" if partie else "")
+            + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:6000]}\n" if contract_text else "")
+            + mods_summary
+            + "\n\nSi tu proposes une modification de clause, inclus à la fin de ta réponse un objet JSON "
+            "sur une ligne dédiée commençant par JSON_MOD: avec le format : "
+            '{"clause_name":"...","original":"...","proposed":"..."}\n'
+            "Ne fournis ce JSON que si tu proposes une modification concrète d'une clause. "
+            "Sinon réponds normalement sans JSON."
+        )
+
+        # Build messages list for Claude
+        messages = []
+        for h in (history or [])[-8:]:
+            role = h.get("role") or "user"
+            content = h.get("content") or ""
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+        # Ensure last message is the current user message
+        if not messages or messages[-1].get("content") != message:
+            messages.append({"role": "user", "content": message})
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        response = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            system=system_prompt,
+            messages=messages
+        )
+        reply_raw = response.content[0].text.strip()
+
+        # Extract optional JSON modification
+        mod_obj = None
+        reply_lines = reply_raw.splitlines()
+        clean_lines = []
+        for line in reply_lines:
+            stripped = line.strip()
+            if stripped.startswith("JSON_MOD:"):
+                json_part = stripped[len("JSON_MOD:"):].strip()
+                try:
+                    mod_obj = json.loads(json_part)
+                except Exception:
+                    pass
+            else:
+                clean_lines.append(line)
+        reply_text = "\n".join(clean_lines).strip()
+
+        result = {"reply": reply_text}
+        if mod_obj:
+            result["modification"] = mod_obj
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def _init_storage():
     """Crée le bucket Supabase Storage au démarrage si inexistant."""
     if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
