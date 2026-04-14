@@ -907,7 +907,7 @@ function renderReview() {
 function _renderReviewJuristeBar(){
   var jAct = document.getElementById('review-juriste-bar');
   if(!jAct) return;
-  if(_userRole && _userRole !== 'juriste') { jAct.innerHTML=''; return; }
+  // Visible pour tous les rôles (juriste, directeur, solo, admin, non connecté)
   var alreadyNames = modifications.map(function(m){ return (m.clause_name||'').toLowerCase(); });
   var contractClauses = window._allContractClauses||[];
   var remaining = contractClauses.filter(function(c){ return alreadyNames.indexOf((c.name||'').toLowerCase())<0; });

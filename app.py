@@ -2405,7 +2405,7 @@ def chat():
             "Réponds toujours en français, de manière concise et professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:15000]}\n" if contract_text else "")
+            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:40000]}\n" if contract_text else "")
             + mods_summary
             + """
 
