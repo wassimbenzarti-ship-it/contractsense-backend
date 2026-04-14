@@ -2405,7 +2405,7 @@ def chat():
             "Réponds toujours en français, de manière concise et professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nCONTRAT COMPLET (utilise ce texte pour identifier les clauses exactes):\n{contract_text[:80000]}\n" if contract_text else "")
+            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:15000]}\n" if contract_text else "")
             + mods_summary
             + """
 
@@ -2438,8 +2438,8 @@ RÈGLES IMPÉRATIVES:
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         response = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=8192,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
             system=system_prompt,
             messages=messages
         )
