@@ -1020,14 +1020,30 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Filter out employment law docs for non-employment contracts
         _ct_lower = (contract_type or "").lower()
         _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi", "salari"])
-        _employment_kw = ["code du travail", "loi n°65-99", "loi 65-99", "65-99", "code travail",
-                          "licenciement", "salarie", "employeur", "preavis travail",
-                          "conges payes", "heures supplementaires", "periode d'essai"]
+        import unicodedata as _udata
+        def _norm(s):
+            return _udata.normalize("NFD", (s or "").lower()).encode("ascii", "ignore").decode()
+        # High-confidence single-match keywords (1 match = employment doc)
+        _emp_kw_strong = ["code du travail", "loi 65-99", "code travail", "licenciement",
+                          "age d'admission au travail", "age admission travail",
+                          "duree du travail", "repos hebdomadaire", "conge annuel paye",
+                          "hygiene et securite des salaries", "services medicaux du travail",
+                          "syndicats professionnels", "delegues des salaries",
+                          "comite d'entreprise", "protection de la maternite",
+                          "travail de nuit des femmes", "travaux interdits aux femmes"]
+        # Moderate keywords (2 matches = employment doc)
+        _emp_kw_mod = ["salarie", "employeur", "preavis", "conges payes",
+                       "heures supplementaires", "periode d essai", "remuneration salariale",
+                       "rupture contrat travail", "inspection du travail"]
         def _is_employment_doc(doc):
             if _is_employment:
                 return False  # keep all docs for employment contracts
-            txt = ((doc.get("title") or "") + " " + (doc.get("source") or "") + " " + (doc.get("content") or "")[:400]).lower()
-            return sum(1 for kw in _employment_kw if kw in txt) >= 2
+            txt = _norm((doc.get("title") or "") + " " + (doc.get("source") or "") + " " + (doc.get("content") or "")[:800])
+            if any(kw in txt for kw in _emp_kw_strong):
+                return True
+            if sum(1 for kw in _emp_kw_mod if kw in txt) >= 2:
+                return True
+            return False
         if not _is_employment:
             _filtered = [d for d in legal_docs if not _is_employment_doc(d)]
             if len(_filtered) < len(legal_docs):
@@ -1189,6 +1205,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "3. METHODE REDACTIONNELLE pour chaque proposed (modification ET nouvelle clause): ETAPE A - Cherche dans === MODELES DE CONTRATS === un doc dont le titre contient un mot-cle de la clause (rupture, preavis, mobilite, non-concurrence, confidentialite, conges, absence, remuneration). Si trouve: COPIE ce texte et adapte-le, mets son titre dans rag_source ET l'article pertinent dans article_ref. ETAPE B - Enrichis avec les articles de loi des === REFERENCES JURIDIQUES ===: mets l'article EXACT (ex: 'Art. 16 CT') dans article_ref et dans le texte proposed ('...conformement a l'Art. 16 CT...'). ETAPE C - Si ZERO doc RAG ne correspond: redige depuis tes connaissances, mets article_ref=null (INTERDIT d'inventer un numero d'article non verifie). CLAUSES A CREER si absentes: non-concurrence, clause penale, non-sollicitation, performance/KPI, remboursement formation. ERREUR GRAVE si aucun type=nouvelle_clause dans le JSON.\n"
         "4. NIVEAU REDACTIONNEL: Style avocat d'affaires senior - precis, technique, sans ambiguite. Si un article de loi est present dans le contexte RAG (section '-> article_ref a citer:' ou '-> Articles disponibles:'), cite-le dans proposed. Sinon, ne pas inventer de reference.\n"
         "5. CITATIONS EXACTES - REGLE ABSOLUE: Pour CHAQUE modification/nouvelle clause: (a) rag_source = titre EXACT du document RAG si un doc correspond, sinon null; (b) article_ref = reference d'article UNIQUEMENT si elle figure explicitement dans le contexte RAG fourni ci-dessus (section '-> article_ref a citer:' ou '-> Articles disponibles:'). INTERDICTION ABSOLUE d'inventer un numero d'article - si aucun article n'est dans le contexte RAG, mettre article_ref=null. Dans reason et proposed: ne citer un article que s'il est verifie dans le contexte RAG. ANTI-HALLUCINATION CRITIQUE: Le format 'Art. X - Droit marocain' (sans nom de loi specifique) est INTERDIT car il ne designe aucune loi reelle - mettre article_ref=null dans ce cas. Seuls les formats complets sont valides: 'Art. 16 - Loi n°65-99 (Code du Travail)', 'Art. 78 - Dahir des Obligations et Contrats', 'Art. 263 - Loi 15-95 (Code de Commerce)'.\n"
+        + ("8. DROIT DU TRAVAIL INTERDIT: Ce contrat est de type '" + contract_type + "' — il ne contient PAS de relation employeur/salarie. INTERDICTION ABSOLUE d'utiliser le Code du Travail (Loi n°65-99), des articles sur le licenciement, les conges payes, la duree du travail, la protection de la maternite, les syndicats, ou tout autre texte de droit du travail. Si un document RAG contient ces sujets, IGNORER completement ce document. Proposer uniquement des clauses relevant du droit commercial, des societes, des contrats d'investissement ou du DOC.\n" if not _is_employment else "")
         "6. LEGALITE: Toutes les modifications doivent respecter le droit applicable - jamais de clauses illegales.\n"
         "7. CLAUSES DE RESILIATION - PRIORITE ABSOLUE: Analyser en premier et avec le plus grand soin toutes les clauses de resiliation/terminaison/rupture. Verifier: (a) conditions de resiliation unilaterale et asymetries; (b) delais de preavis; (c) indemnites de resiliation (absentes = HIGH); (d) effets post-resiliation et survivance des obligations; (e) causes de resiliation automatique vagues (= HIGH); (f) droits en cas de force majeure ou changement de controle. Clause resiliation desequilibree = toujours risk=high.\n"
         "PROCESSUS D'ANALYSE:\n"
