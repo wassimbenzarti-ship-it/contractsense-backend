@@ -3105,9 +3105,9 @@ function cbApplyMod(btn) {
       reason:       mod.reason      || 'Modification sugg\u00e9r\u00e9e par Omniscient'
     };
     modifications.push(newMod);
-    decisions[String(newId)] = 'pending';
+    decisions[String(newId)] = 'accepted';
     renderReview();
-    btn.textContent = '\u2705 Ajout\u00e9 au contrat';
+    btn.textContent = '\u2705 Ajout\u00e9 et accept\u00e9';
     btn.classList.add('applied');
     setTimeout(function() {
       var card = document.getElementById('card-' + newId);

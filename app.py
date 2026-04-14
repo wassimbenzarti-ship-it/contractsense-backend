@@ -2388,18 +2388,29 @@ def chat():
 
         # System prompt
         system_prompt = (
-            "Tu es un assistant juridique expert en droit marocain (DOC, Code du Travail, etc.). "
-            "Tu aides un avocat ou juriste à analyser et améliorer un contrat. "
-            "Réponds toujours en français, de manière concise et professionnelle. "
-            + (f"Partie représentée : {partie}. Tu défends les intérêts de cette partie.\n" if partie else "")
+            "Tu es un assistant juridique expert en droit des contrats. "
+            "Tu aides un avocat à analyser et améliorer un contrat. "
+            "Réponds toujours en français, de manière concise et professionnelle.\n"
+            + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nCONTRAT COMPLET:\n{contract_text[:80000]}\n" if contract_text else "")
+            + (f"\nCONTRAT COMPLET (utilise ce texte pour identifier les clauses exactes):\n{contract_text[:80000]}\n" if contract_text else "")
             + mods_summary
-            + "\n\nSi tu proposes une modification de clause, inclus à la fin de ta réponse un objet JSON "
-            "sur une ligne dédiée commençant par JSON_MOD: avec le format : "
-            '{"clause_name":"...","original":"...","proposed":"..."}\n'
-            "Ne fournis ce JSON que si tu proposes une modification concrète d'une clause. "
-            "Sinon réponds normalement sans JSON."
+            + """
+
+RÈGLE CRITIQUE — MARKUPS OBLIGATOIRES:
+Chaque fois que tu analyses ou proposes une modification d'une clause, tu DOIS produire un bloc <modification> après ta réponse textuelle.
+
+Format OBLIGATOIRE (une modification par bloc):
+<modification>
+{"clause_name":"Numéro et titre exact de la clause","original":"TEXTE EXACT copié mot pour mot depuis le contrat ci-dessus","proposed":"Nouveau texte complet de la clause protégeant """ + (partie or "la partie") + """"}
+</modification>
+
+RÈGLES IMPÉRATIVES:
+1. Le champ "original" doit être le texte EXACT et COMPLET de la clause telle qu'elle apparaît dans le contrat — copie mot pour mot, sans reformulation ni résumé
+2. Le champ "proposed" doit contenir la RÉDACTION COMPLÈTE de la nouvelle clause (pas un résumé)
+3. Si plusieurs clauses sont discutées, produis plusieurs blocs <modification>
+4. Si tu réponds à une question générale sans proposer de modification concrète, ne produis PAS de bloc <modification>
+"""
         )
 
         # Build messages list for Claude
@@ -2422,25 +2433,24 @@ def chat():
         )
         reply_raw = response.content[0].text.strip()
 
-        # Extract optional JSON modification
-        mod_obj = None
-        reply_lines = reply_raw.splitlines()
-        clean_lines = []
-        for line in reply_lines:
-            stripped = line.strip()
-            if stripped.startswith("JSON_MOD:"):
-                json_part = stripped[len("JSON_MOD:"):].strip()
-                try:
-                    mod_obj = json.loads(json_part)
-                except Exception:
-                    pass
-            else:
-                clean_lines.append(line)
-        reply_text = "\n".join(clean_lines).strip()
+        # Extract all <modification>...</modification> blocks
+        mod_blocks = re.findall(r'<modification>(.*?)</modification>', reply_raw, re.DOTALL)
+        mod_list = []
+        for block in mod_blocks:
+            block = block.strip()
+            try:
+                obj = json.loads(block)
+                if obj.get("clause_name") and obj.get("proposed"):
+                    mod_list.append(obj)
+            except Exception:
+                pass
+
+        # Clean reply text — remove modification blocks
+        reply_text = re.sub(r'<modification>.*?</modification>', '', reply_raw, flags=re.DOTALL).strip()
 
         result = {"reply": reply_text}
-        if mod_obj:
-            result["modification"] = mod_obj
+        if mod_list:
+            result["modifications"] = mod_list
         return jsonify(result)
 
     except Exception as e:
