@@ -3735,7 +3735,14 @@ def chat():
             f"le texte définitif prêt à signer.\n"
             f"Format de chaque bloc (guillemets doubles, pas de backticks):\n"
             f"<modification>{{\"clause_name\":\"Article X.X — Titre\",\"original\":\"Texte actuel exact\",\"proposed\":\"Texte juridique complet et intégral rédigé article par article avec tous les alinéas\",\"risk\":\"high\",\"reason\":\"Explication concise\"}}</modification>\n"
-            f"4. Pour les modifications déjà proposées, référence-les par leur numéro [1], [2], etc."
+            f"4. IDENTIFICATION DES ARTICLES — RÈGLE CRITIQUE: Quand l'utilisateur mentionne 'Article X' ou 'clause X' "
+            f"(ex: 'clause 19', 'article 19.1'), cela désigne EXCLUSIVEMENT le titre d'article portant ce numéro dans le contrat "
+            f"(ex: 'Article 19 — Résiliation'). "
+            f"Ne JAMAIS confondre avec une occurrence du chiffre X dans le corps d'une autre clause "
+            f"(ex: '19 mois', 'délai de 19 jours', 'article 19 du Code civil'). "
+            f"Pour identifier le bon article: cherche un titre de paragraphe qui COMMENCE par 'Article 19' ou '19.' ou '19.1', "
+            f"pas un paragraphe qui contient simplement le nombre 19.\n"
+            f"5. Pour les modifications déjà proposées, référence-les par leur numéro [1], [2], etc."
         )
 
         # ── 4. Call Claude ────────────────────────────────────────────────────
