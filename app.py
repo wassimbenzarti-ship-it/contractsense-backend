@@ -443,6 +443,33 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         print("pgvector search exception: " + str(e))
         return []
 
+def search_rag_hybrid(query_text, query_embedding, top_k=15, jurisdiction=None):
+    """Hybrid BM25 + vector search via search_rag_hybrid SQL RPC.
+    Falls back to pgvector-only if the RPC isn't available."""
+    try:
+        url = SUPA_URL + "/rest/v1/rpc/search_rag_hybrid"
+        vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]" if isinstance(query_embedding, list) else str(query_embedding)
+        payload = {"query_text": query_text[:500], "query_embedding": vec_str, "match_count": top_k}
+        if jurisdiction and jurisdiction not in ("auto", "universel"):
+            payload["p_jurisdiction"] = jurisdiction
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
+        if r.ok:
+            results = r.json() or []
+            print(f"Hybrid BM25+vec: {len(results)} results")
+            return results
+        else:
+            print(f"Hybrid search error {r.status_code} — fallback to pgvector")
+    except Exception as e:
+        print(f"Hybrid search exception: {e}")
+    return search_rag_pgvector(query_embedding, top_k=top_k)
+
+def extract_article_refs(content, title=""):
+    """Extract article references (e.g. 'Art. 16 CT', 'Article 264 DOC') from RAG doc content."""
+    refs = re.findall(r'\bArt(?:icle)?\.?\s*\d+[\w\-]*(?:\s+(?:CT|DOC|CC|CO|CSC|CPCM|CPC))?\b', content or "", re.IGNORECASE)
+    return list(dict.fromkeys(refs))[:5]  # deduplicate, max 5
+
 def search_rag(query, api_key, voyage_key=None, top_k=5, partie=None):
     data = load_rag()
     if not data["documents"]:
@@ -580,47 +607,139 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         numbered_text = contract_text[:20000]
 
-    # Search RAG using pgvector — fast semantic search
+    # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
-    rag_context = ""
+    model_context = ""
+    legal_context = ""
+    _rag_contract_count = 0
+    _rag_legal_count = 0
+    LEGAL_CATS = {"loi", "law", "doctrine", "jurisprudence", "legal", "legislation"}
+    # Quick jurisdiction detection for boosting relevant docs
+    def _detect_jur(text):
+        s = text[:3000].lower()
+        if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "maroc"]):
+            return "droit_marocain"
+        if any(k in s for k in ["droit français", "loi française", "france", "code civil français"]):
+            return "droit_francais"
+        return "universel"
+    _jurisdiction = _detect_jur(contract_text)
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        # Get embedding for search query
         search_query = contract_type + " " + partie + " " + contract_text[:500]
         query_vec = get_embedding(search_query, voyage_key)
-        relevant_docs = []
-        if query_vec and len(query_vec) == 1024:
-            relevant_docs = search_rag_pgvector(query_vec, top_k=15)
-            print(f"pgvector: {len(relevant_docs)} docs found")
-        # Fallback: keyword search when Voyage AI unavailable or pgvector returns nothing
-        if not relevant_docs:
-            print("RAG fallback: using keyword search (no Voyage AI vector or pgvector empty)")
-            relevant_docs = search_rag_keyword(search_query, contract_type=contract_type, top_k=10)
-        if relevant_docs:
-            validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
-            reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
+        is_voyage = bool(voyage_key) and len(query_vec) == 1024
+        all_docs = []
 
-            if validated_clauses:
-                rag_context += "\n\nCLAUSES VALIDÉES PAR DES JURISTES (utilise ces reformulations comme modèles):\n"
-                for doc in validated_clauses:
-                    content_raw = doc.get("content", "")
-                    rag_context += "\n---\n" + content_raw[:600] + "\n"
-                rag_context += "\n→ Ces clauses ont été validées par des juristes. Inspire-toi directement de leur formulation.\n"
+        # 1. Primary: hybrid BM25 + vector (best quality)
+        if is_voyage:
+            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=25, jurisdiction=_jurisdiction)
+            if not all_docs:
+                all_docs = search_rag_pgvector(query_vec, top_k=25)
+            print(f"Primary RAG: {len(all_docs)} docs (hybrid={bool(all_docs)})")
 
-            if reference_docs:
-                rag_context += "\n\nDOCUMENTS JURIDIQUES DE RÉFÉRENCE:\n"
-                protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
-                for doc in reference_docs:
-                    title = doc.get("title", "Document")
-                    src = doc.get("source", "")
-                    is_protected = any(p in (title + src).lower() for p in protected_kw)
-                    rag_context += "\n=== " + title + " ===\n" + doc.get("content", "")[:500] + "\n"
-                    if is_protected:
-                        rag_context += "→ SOURCE PROTÉGÉE — utilise le contenu mais écris null dans rag_source\n"
-                    else:
-                        rag_context += "→ Si tu utilises ce texte, cite dans rag_source: \"" + title + "\"\n"
+        # 2. Fallback: fetch all docs with embeddings + cosine similarity
+        if not all_docs:
+            print("RAG fallback: fetching docs with embeddings from Supabase")
+            try:
+                key = SUPA_SERVICE_KEY or SUPA_KEY
+                raw_r = requests.get(
+                    SUPA_URL + "/rest/v1/rag_documents",
+                    headers={"apikey": key, "Authorization": "Bearer " + key},
+                    params={"select": "id,title,content,source,category,party_label,jurisdiction,embedding,embedding_vector", "limit": "500"},
+                    timeout=30
+                )
+                if raw_r.ok:
+                    raw_docs = raw_r.json() or []
+                    scored = []
+                    for doc in raw_docs:
+                        emb = None
+                        raw_emb = doc.get("embedding")
+                        if isinstance(raw_emb, str) and raw_emb.strip():
+                            try: emb = json.loads(raw_emb)
+                            except: pass
+                        elif isinstance(raw_emb, list):
+                            emb = raw_emb
+                        if not emb:
+                            raw_vec = doc.get("embedding_vector")
+                            if isinstance(raw_vec, str) and raw_vec.strip().startswith("["):
+                                try: emb = json.loads(raw_vec)
+                                except: pass
+                            elif isinstance(raw_vec, list):
+                                emb = raw_vec
+                        if emb and isinstance(emb, list) and len(emb) == len(query_vec):
+                            scored.append((cosine_similarity(query_vec, emb), doc))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    all_docs = [d for _, d in scored[:20]]
+                    print(f"Fallback RAG: {len(all_docs)} docs from {len(raw_docs)} total")
+            except Exception as fe:
+                print("Fallback RAG error: " + str(fe))
+
+        # 3. Last resort: keyword search
+        if not all_docs:
+            all_docs = search_rag_keyword(search_query, contract_type=contract_type, top_k=10)
+            print(f"Keyword RAG fallback: {len(all_docs)} docs")
+
+        # Jurisdiction boost
+        all_docs.sort(key=lambda d: 0 if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto") else 1)
+
+        # Separate contract models from legal references
+        contract_docs = [d for d in all_docs if d.get("category", "").lower() not in LEGAL_CATS]
+        legal_docs    = [d for d in all_docs if d.get("category", "").lower() in LEGAL_CATS]
+
+        # Filter employment law docs for non-employment contracts
+        _ct_lower = (contract_type or "").lower()
+        _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi"])
+        if not _is_employment:
+            _emp_kw = ["code du travail", "loi 65-99", "licenciement", "preavis", "heures supplementaires", "conge annuel"]
+            def _is_emp_doc(doc):
+                txt = ((doc.get("title") or "") + " " + (doc.get("source") or "") + " " + (doc.get("content") or "")[:500]).lower()
+                return any(k in txt for k in _emp_kw)
+            _n_before = len(legal_docs)
+            legal_docs = [d for d in legal_docs if not _is_emp_doc(d)]
+            if len(legal_docs) < _n_before:
+                print(f"Employment filter: removed {_n_before - len(legal_docs)} labor law docs")
+
+        protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
+
+        # Context 1: contract models → client protection
+        if contract_docs:
+            validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
+            reference = [d for d in contract_docs if "validated_clause" not in d.get("source", "")]
+            model_context = "\n\n=== MODÈLES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
+            for doc in (validated + reference)[:12]:
+                title_doc = doc.get("title", "") or doc.get("source", "modele")
+                content_doc = str(doc.get("content", ""))[:1400]
+                is_prot = any(p in (title_doc + doc.get("source", "")).lower() for p in protected_kw)
+                arts = extract_article_refs(content_doc, title_doc)
+                model_context += "\n=== " + title_doc + " ===\n"
+                if arts:
+                    model_context += "→ Articles cités: " + ", ".join(arts) + "\n"
+                model_context += content_doc + "\n"
+                model_context += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
+                if doc.get("party_label"):
+                    model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label", "")) + "]\n"
+
+        # Context 2: legal references → conformite
+        if legal_docs:
+            legal_context = "\n\n=== RÉFÉRENCES JURIDIQUES (LOIS / DOCTRINE / JURISPRUDENCE) ===\n"
+            for doc in legal_docs[:12]:
+                cat = doc.get("category", "reference").upper()
+                title_doc = doc.get("title", "") or doc.get("source", "reference")
+                content_doc = str(doc.get("content", ""))[:1400]
+                arts = extract_article_refs(content_doc, title_doc)
+                legal_context += "\n[" + cat + "] " + title_doc + "\n"
+                if arts:
+                    legal_context += "→ Articles disponibles: " + ", ".join(arts) + "\n"
+                legal_context += content_doc + "\n"
+                legal_context += "→ rag_source: " + title_doc + "\n"
+
+        _rag_contract_count = len(contract_docs)
+        _rag_legal_count = len(legal_docs)
+        print(f"RAG final: {_rag_contract_count} contract docs, {_rag_legal_count} legal docs | model={len(model_context)}c legal={len(legal_context)}c")
     except Exception as e:
         print("RAG search error: " + str(e))
+        import traceback; traceback.print_exc()
+    rag_context = model_context  # used in prompt below
 
     # Detect contract language
     english_words = len([w for w in contract_text[:2000].lower().split() if w in ['the','and','of','to','in','for','is','this','agreement','shall','party','parties','contract','hereby','whereas','including','provided','subject','pursuant','accordance','obligation','represent','warrant','indemnify','liability','termination','governing','arbitration','confidential']])
@@ -697,6 +816,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         + get_legal_framework(contract_type) +
         "\n\n"
         + rag_context +
+        + legal_context +
         "\n\nATTENTION sur les clauses validées du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
         "- Si une clause validée favorise l'autre partie, IGNORE-LA\n"
