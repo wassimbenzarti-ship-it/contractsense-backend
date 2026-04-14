@@ -38,7 +38,8 @@ def _anthropic_error_msg(e):
     return None
 
 app = Flask(__name__)
-CORS(app, origins=[
+
+_CORS_ORIGINS = [
     "https://ai.westfieldavocats.com",
     "https://westfieldavocats.com",
     "https://www.westfieldavocats.com",
@@ -48,8 +49,22 @@ CORS(app, origins=[
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",
-    "null"
-], supports_credentials=True)
+    "null",
+]
+CORS(app, origins=_CORS_ORIGINS, supports_credentials=True)
+
+@app.after_request
+def _add_cors(response):
+    """Safety net: ensure CORS headers are always present on every response."""
+    origin = request.headers.get("Origin", "")
+    if origin in _CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, X-Requested-With, apikey"
+        )
+    return response
 
 def get_legal_framework(contract_type):
     """Return mandatory legal constraints per contract type"""

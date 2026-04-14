@@ -1164,10 +1164,12 @@ async function exportDoc() {
       }
     });
     var fd = buildFormData();
+    if (window._fileCacheId) fd.append('file_cache_id', window._fileCacheId);
+    if (window._fileStoragePath) fd.append('file_storage_path', window._fileStoragePath);
     fd.append('modifications', JSON.stringify(modifications));
     fd.append('decisions', JSON.stringify(decisions));
     var resp = await fetch(BACKEND + '/export', { method: 'POST', body: fd });
-    if (!resp.ok) { var e = await resp.json(); throw new Error(e.error); }
+    if (!resp.ok) { var ed={}; try{ed=await resp.json();}catch(x){} throw new Error(ed.error||'Erreur serveur '+resp.status); }
     var blob = await resp.blob();
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
