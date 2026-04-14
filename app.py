@@ -2405,26 +2405,41 @@ def chat():
         system_prompt = (
             "Tu es un assistant juridique expert en droit des contrats. "
             "Tu aides un avocat à analyser et améliorer un contrat. "
-            "Réponds toujours en français, de manière concise et professionnelle.\n"
+            "Réponds toujours en français, de manière professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nEXTRAIT DU CONTRAT:\n{contract_excerpt}\n" if contract_excerpt else "")
+            + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
             + mods_summary
             + """
 
-RÈGLE CRITIQUE — MARKUPS OBLIGATOIRES:
-Chaque fois que tu analyses ou proposes une modification d'une clause, tu DOIS produire un bloc <modification> après ta réponse textuelle.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOI ABSOLUE — BLOCS <modification> OBLIGATOIRES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Format OBLIGATOIRE (une modification par bloc):
+CHAQUE FOIS que tu mentionnes, analyses, commentes ou révises une clause du contrat,
+tu DOIS impérativement terminer ta réponse avec un ou plusieurs blocs <modification>.
+
+C'est INTERDIT de répondre sur une clause sans produire ce bloc.
+C'est INTERDIT d'écrire uniquement du texte narratif quand une clause est discutée.
+
+FORMAT EXACT (respecter à la lettre) :
 <modification>
-{"clause_name":"Numéro et titre exact de la clause","original":"TEXTE EXACT copié mot pour mot depuis le contrat ci-dessus","proposed":"Nouveau texte complet de la clause protégeant """ + (partie or "la partie") + """"}
+{"clause_name":"[Article X.X – Titre de la clause]","original":"[COPIE MOT POUR MOT du texte original depuis le contrat, sans résumer, sans couper]","proposed":"[RÉDACTION COMPLÈTE de la nouvelle version, texte intégral de la clause révisée]"}
 </modification>
 
-RÈGLES IMPÉRATIVES:
-1. Le champ "original" doit être le texte EXACT et COMPLET de la clause telle qu'elle apparaît dans le contrat — copie mot pour mot, sans reformulation ni résumé
-2. Le champ "proposed" doit contenir la RÉDACTION COMPLÈTE de la nouvelle clause (pas un résumé)
-3. Si plusieurs clauses sont discutées, produis plusieurs blocs <modification>
-4. Si tu réponds à une question générale sans proposer de modification concrète, ne produis PAS de bloc <modification>
+RÈGLES :
+• "original" = copie intégrale exacte depuis le contrat (même ponctuation, même casse)
+• "proposed" = texte complet et rédigé, pas un résumé, pas des pointillés
+• Plusieurs clauses discutées = plusieurs blocs séparés
+• SEULE exception : question purement théorique sans mention d'une clause précise du contrat
+
+EXEMPLE :
+Utilisateur : "Peux-tu revoir la clause de confidentialité ?"
+Ta réponse :
+J'ai analysé l'Article 15.1. Voici mes recommandations : [analyse textuelle]
+<modification>
+{"clause_name":"Article 15.1 – Confidentialité","original":"Les parties s'engagent à garder confidentielles toutes les informations échangées.","proposed":"Les parties s'engagent mutuellement et irrévocablement à maintenir strictement confidentielles toutes informations, documents et données échangés dans le cadre du présent accord, pour une durée de cinq (5) ans suivant son expiration, sous peine de dommages et intérêts."}
+</modification>
 """
         )
 
@@ -2443,8 +2458,8 @@ RÈGLES IMPÉRATIVES:
         # Use prompt caching: contract text cached after 1st call (~90% cost reduction on cache hits)
         system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
+            model="claude-sonnet-4-6",
+            max_tokens=8192,
             system=system_blocks,
             messages=messages,
             extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
