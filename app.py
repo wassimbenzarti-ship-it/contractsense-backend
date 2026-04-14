@@ -2398,28 +2398,8 @@ def chat():
                 lines.append(f"- {m.get('clause_name','?')}: {(m.get('proposed') or '')[:120]}")
             mods_summary = "\nMODIFICATIONS DÉJÀ ACCEPTÉES PAR LE CLIENT:\n" + "\n".join(lines)
 
-        # Smart contract excerpt: always include first 8k chars (parties/preamble)
-        # + targeted section if message references a specific article/clause
-        contract_excerpt = ""
-        if contract_text:
-            intro = contract_text[:8000]
-            targeted = ""
-            # Detect article/clause reference in the user message
-            art_match = re.search(r'\b(?:article|clause|art\.?|cl\.?)\s*(\d+(?:\.\d+)*)\b', message, re.IGNORECASE)
-            num_match = re.search(r'\b(\d{1,2}\.\d{1,2})\b', message)
-            ref = (art_match.group(1) if art_match else None) or (num_match.group(1) if num_match else None)
-            if ref:
-                # Find the article in the full contract text
-                pattern = re.compile(
-                    r'(?:article|clause|art\.?)\s*' + re.escape(ref) + r'\b|^\s*' + re.escape(ref) + r'[\s\.\-]',
-                    re.IGNORECASE | re.MULTILINE
-                )
-                m_pos = pattern.search(contract_text)
-                if m_pos:
-                    start = max(0, m_pos.start() - 200)
-                    end = min(len(contract_text), m_pos.start() + 6000)
-                    targeted = "\n\n--- SECTION CIBLÉE (" + ref + ") ---\n" + contract_text[start:end]
-            contract_excerpt = intro + targeted if targeted else contract_text[:40000]
+        # Full contract sent every time — prompt caching makes it cheap after 1st call
+        contract_excerpt = contract_text[:80000] if contract_text else ""
 
         # System prompt
         system_prompt = (
@@ -2460,11 +2440,14 @@ RÈGLES IMPÉRATIVES:
             messages.append({"role": "user", "content": message})
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        # Use prompt caching: contract text cached after 1st call (~90% cost reduction on cache hits)
+        system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=2048,
-            system=system_prompt,
-            messages=messages
+            system=system_blocks,
+            messages=messages,
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
         reply_raw = response.content[0].text.strip()
 
