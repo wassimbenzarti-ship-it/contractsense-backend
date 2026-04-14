@@ -296,12 +296,14 @@ def parse_dt(s):
         return None
 
 # ── RAG: Supabase REST storage ────────────────────────────
-def load_rag(contract_type=None, limit=200):
+def load_rag(contract_type=None, limit=200, with_embeddings=False):
     """Load RAG docs — load a sample from each category for /rag/list endpoint only"""
     try:
-        # Load sample from each category for display
+        select_fields = "id,title,content,source,category,party_label"
+        if with_embeddings:
+            select_fields += ",embedding"
         docs = supa_get("rag_documents", {
-            "select": "id,title,content,source,category,party_label",
+            "select": select_fields,
             "limit": str(limit)
         })
         return {"documents": docs or []}
@@ -360,6 +362,31 @@ def cosine_similarity(a, b):
     if a.shape != b.shape:
         return 0.0
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
+
+def search_rag_keyword(query, contract_type=None, top_k=10):
+    """Keyword-based RAG fallback — used when Voyage AI embeddings are unavailable.
+    Scores documents by term overlap between query and title+content."""
+    data = load_rag(with_embeddings=False)
+    if not data["documents"]:
+        return []
+    query_words = set(re.findall(r'\w{3,}', query.lower()))
+    scored = []
+    for doc in data["documents"]:
+        text = (doc.get("title","") + " " + doc.get("content","")).lower()
+        doc_words = set(re.findall(r'\w{3,}', text))
+        overlap = len(query_words & doc_words)
+        if overlap == 0:
+            continue
+        score = overlap / (len(query_words) + 1)
+        # Boost by contract_type match
+        cat = (doc.get("category","") + " " + doc.get("source","")).lower()
+        if contract_type and contract_type.lower() in cat:
+            score *= 2.0
+        if "validated_clause" in doc.get("source",""):
+            score *= 1.5
+        scored.append((score, doc))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [doc for _, doc in scored[:top_k]]
 
 def get_embedding(text, voyage_key=None):
     # Try Voyage AI for semantic embeddings
@@ -565,6 +592,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         if query_vec and len(query_vec) == 1024:
             relevant_docs = search_rag_pgvector(query_vec, top_k=15)
             print(f"pgvector: {len(relevant_docs)} docs found")
+        # Fallback: keyword search when Voyage AI unavailable or pgvector returns nothing
+        if not relevant_docs:
+            print("RAG fallback: using keyword search (no Voyage AI vector or pgvector empty)")
+            relevant_docs = search_rag_keyword(search_query, contract_type=contract_type, top_k=10)
         if relevant_docs:
             validated_clauses = [d for d in relevant_docs if "validated_clause" in d.get("source", "")]
             reference_docs = [d for d in relevant_docs if "validated_clause" not in d.get("source", "")]
