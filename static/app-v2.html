@@ -707,7 +707,7 @@ async function analyzeWithPartie(partieName) {
 
     // Extraire toutes les clauses du contrat pour le dropdown "ajouter une clause"
     // Utiliser savedText (mode texte) ou lire le fichier uploadé (mode fichier)
-    var contractText = savedText || data.text || data.document_text || '';
+    var contractText = savedText || data.contract_text || data.text || data.document_text || '';
     if(!contractText && curFile) contractText = await _readFileText(curFile);
     if(contractText && !savedText) savedText = contractText; // cache pour saveAna
     window._allContractClauses = _extractContractClauses(contractText);
