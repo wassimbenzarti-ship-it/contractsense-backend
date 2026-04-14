@@ -1493,24 +1493,31 @@ def analyze_clause():
         if not clause_name:
             return jsonify({"error": "clause_name requis"}), 400
 
+        # Truncate clause_text sent to the model to avoid token blowout,
+        # but keep enough for a meaningful analysis.
+        clause_text_trunc = clause_text[:3000] if clause_text else ""
+        if clause_text and len(clause_text) > 3000:
+            clause_text_trunc += "\n[…texte tronqué pour l'analyse]"
+
         prompt = f"""Tu es un juriste expert. Analyse la clause suivante extraite d'un contrat de type "{contract_type}".
 
 Nom de la clause : {clause_name}
 Texte de la clause :
-{clause_text or "(texte non fourni — analyse sur la base du nom uniquement)"}
+{clause_text_trunc or "(texte non fourni — analyse sur la base du nom uniquement)"}
 
-Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
+Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks).
+IMPORTANT : les valeurs "original" et "proposed" doivent être des résumés concis (max 300 caractères chacun), PAS une reproduction intégrale du texte.
 {{
-  "original": "texte original de la clause (ou synthèse si non fourni)",
-  "proposed": "rédaction améliorée protégeant {partie}",
+  "original": "résumé concis de la clause originale (max 300 car.)",
+  "proposed": "rédaction améliorée protégeant {partie} (max 300 car.)",
   "risk": "high|medium|low",
-  "reason": "explication concise du risque et de la modification proposée"
+  "reason": "explication concise du risque et de la modification proposée (max 400 car.)"
 }}"""
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         msg = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = msg.content[0].text.strip()
