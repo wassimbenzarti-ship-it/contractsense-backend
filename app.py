@@ -2447,6 +2447,25 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Static frontend ──────────────────────────────────────────────────────────
+@app.route("/app-v2.html", methods=["GET"])
+@app.route("/app-v2", methods=["GET"])
+@app.route("/", methods=["GET"])
+@app.route("/index.html", methods=["GET"])
+def serve_frontend():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+@app.route("/westfield-ghost.png", methods=["GET"])
+def serve_logo():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "westfield-ghost.png"))
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 def _init_storage():
     """Crée le bucket Supabase Storage au démarrage si inexistant."""
     if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
