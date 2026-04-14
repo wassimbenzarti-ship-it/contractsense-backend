@@ -1017,6 +1017,23 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         contract_docs = [d for d in all_docs if d.get("category","").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category","").lower() in LEGAL_CATS]
 
+        # Filter out employment law docs for non-employment contracts
+        _ct_lower = (contract_type or "").lower()
+        _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi", "salari"])
+        _employment_kw = ["code du travail", "loi n°65-99", "loi 65-99", "65-99", "code travail",
+                          "licenciement", "salarie", "employeur", "preavis travail",
+                          "conges payes", "heures supplementaires", "periode d'essai"]
+        def _is_employment_doc(doc):
+            if _is_employment:
+                return False  # keep all docs for employment contracts
+            txt = ((doc.get("title") or "") + " " + (doc.get("source") or "") + " " + (doc.get("content") or "")[:400]).lower()
+            return sum(1 for kw in _employment_kw if kw in txt) >= 2
+        if not _is_employment:
+            _filtered = [d for d in legal_docs if not _is_employment_doc(d)]
+            if len(_filtered) < len(legal_docs):
+                print(f"Employment law filter: removed {len(legal_docs)-len(_filtered)} irrelevant labor law docs for contract_type='{contract_type}'")
+            legal_docs = _filtered
+
         # Dedicated per-category searches — run in parallel for speed
         seen_ids = {d.get("id") for d in all_docs}
         _cat_key = SUPA_SERVICE_KEY or SUPA_KEY
@@ -1058,6 +1075,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 _added = 0
                 for doc in _docs:
                     if doc.get("id") not in seen_ids:
+                        # Skip employment law docs for non-employment contracts
+                        if _cat in ("law", "loi", "legislation") and _is_employment_doc(doc):
+                            continue
                         seen_ids.add(doc.get("id"))
                         if _cat == "contract":
                             contract_docs.append(doc)
@@ -1349,27 +1369,50 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 nc["original"] = nc.get("original") or None
                 nc["id"] = len(mods) + 1
                 mods.append(nc)
-    # Fallback: if still no nouvelle_clause, add hardcoded defaults
+    # Fallback: if still no nouvelle_clause, add hardcoded defaults (contract-type aware)
     has_new_clause = any(m.get("type") == "nouvelle_clause" for m in mods)
     if not has_new_clause:
         _last_para = len(paragraphs) - 1 if paragraphs else None
-        _defaults = [
-            {"type": "nouvelle_clause", "clause_name": "Non-concurrence", "risk": "high",
-             "reason": "Clause absente - protection essentielle de l'employeur",
-             "original": None, "para_idx": None, "insertion_after": _last_para,
-             "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
-             "rag_source": None},
-            {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
-             "reason": "Conformement a l'Art. 63 - Loi n°65-99 (Code du Travail) - protection contre licenciement abusif",
-             "original": None, "para_idx": None, "insertion_after": _last_para,
-             "proposed": "En cas de licenciement abusif au sens de l'Art. 63 de la Loi n°65-99 relative au Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
-             "rag_source": None, "article_ref": "Art. 63 - Loi n°65-99 (Code du Travail)"},
-            {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
-             "reason": "Protection des equipes et clients de l'employeur",
-             "original": None, "para_idx": None, "insertion_after": _last_para,
-             "proposed": "Pendant le contrat et 24 mois apres cessation, l'Employeur s'interdit de solliciter ou recruter tout collaborateur ayant travaille avec le Salarie. Toute violation entraine une indemnite forfaitaire de 6 mois de salaire brut.",
-             "rag_source": None},
-        ]
+        _ct_fb = (contract_type or "").lower()
+        _is_emp_fb = _ct_fb in ("employment", "cdi", "cdd") or any(k in _ct_fb for k in ["travail", "emploi", "salari"])
+        if _is_emp_fb:
+            # Employment contract defaults
+            _defaults = [
+                {"type": "nouvelle_clause", "clause_name": "Non-concurrence", "risk": "high",
+                 "reason": "Clause absente - protection essentielle de l'employeur",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "Le salarie s'interdit, pendant une duree de 12 mois apres cessation du contrat, d'exercer une activite concurrente directement ou indirectement pour tout concurrent de l'Employeur dans le secteur geographique concerne. En contrepartie, l'Employeur verse une indemnite de non-concurrence egale a 30% de la remuneration mensuelle brute par mois de restriction.",
+                 "rag_source": None},
+                {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
+                 "reason": "Conformement a l'Art. 63 - Loi n°65-99 (Code du Travail) - protection contre licenciement abusif",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "En cas de licenciement abusif au sens de l'Art. 63 de la Loi n°65-99 relative au Code du Travail, l'Employeur verse au Salarie une indemnite forfaitaire equivalente a 3 mois de salaire brut, independamment des indemnites legales.",
+                 "rag_source": None, "article_ref": "Art. 63 - Loi n°65-99 (Code du Travail)"},
+                {"type": "nouvelle_clause", "clause_name": "Non-sollicitation", "risk": "medium",
+                 "reason": "Protection des equipes et clients de l'employeur",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "Pendant le contrat et 24 mois apres cessation, l'Employeur s'interdit de solliciter ou recruter tout collaborateur ayant travaille avec le Salarie. Toute violation entraine une indemnite forfaitaire de 6 mois de salaire brut.",
+                 "rag_source": None},
+            ]
+        else:
+            # Generic/commercial/investment contract defaults — no employment law references
+            _defaults = [
+                {"type": "nouvelle_clause", "clause_name": "Clause de confidentialite", "risk": "high",
+                 "reason": "Absence de clause de confidentialite - protection des informations sensibles echangees entre les parties",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "Chaque partie s'engage a maintenir strictement confidentielle toute information designee comme telle ou raisonnablement consideree comme confidentielle, et a ne pas la divulguer a des tiers sans accord ecrit prealable. Cette obligation survit pendant 3 ans apres la fin du contrat.",
+                 "rag_source": None},
+                {"type": "nouvelle_clause", "clause_name": "Clause penale", "risk": "medium",
+                 "reason": "Absence de clause penale - sanctionner les manquements contractuels",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "En cas de manquement grave a l'une des obligations essentielles du present contrat, la partie defaillante est redevable d'une indemnite forfaitaire dont le montant est fixe d'un commun accord, sans prejudice de tout dommage superieur dument justifie.",
+                 "rag_source": None},
+                {"type": "nouvelle_clause", "clause_name": "Clause de resiliation", "risk": "high",
+                 "reason": "Absence ou insuffisance des conditions de resiliation - risque d'asymetrie et de blocage",
+                 "original": None, "para_idx": None, "insertion_after": _last_para,
+                 "proposed": "Chaque partie peut resilier le present contrat en cas de manquement grave de l'autre partie non remedie dans un delai de 30 jours suivant une mise en demeure ecrite. En cas de resiliation, les parties conviennent de liquider les obligations mutuelles en cours dans un delai de 60 jours.",
+                 "rag_source": None},
+            ]
         for _nc in _defaults:
             _nc["id"] = len(mods) + 1
             mods.append(_nc)
