@@ -538,7 +538,7 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ficiaire", file_bytes=None, filename=""):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©nÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ©ficiaire", file_bytes=None, filename="", progress_cb=None):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("ClÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ© API manquante")
@@ -554,6 +554,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         numbered_text = contract_text[:20000]
 
     # Search RAG using pgvector ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ fast semantic search
+    if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
     rag_context = ""
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
@@ -688,13 +689,35 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Limit text to avoid timeout
     truncated_text = numbered_text[:15000]
-    message = client.messages.create(
+    if progress_cb: progress_cb("\U0001f916 Démarrage de l\'analyse IA...")
+    raw = ""
+    _clause_buf = ""
+    _law_buf = ""
+    import re as _re
+    with client.messages.stream(
         model="claude-haiku-4-5-20251001",
         max_tokens=4000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
-    )
-    raw = message.content[0].text
+    ) as _stream:
+        for _tok in _stream.text_stream:
+            raw += _tok
+            if progress_cb:
+                _clause_buf += _tok
+                _law_buf += _tok
+                # Detect clause name being analyzed
+                _cm = _re.search(r'"clause_name"\s*:\s*"([^"]{4,70})"', _clause_buf)
+                if _cm:
+                    progress_cb("\U0001f50d Analyse : " + _cm.group(1))
+                    _clause_buf = _clause_buf[_cm.end():]
+                # Detect legal references
+                _lm = _re.search(r'((?:Loi|loi)\s+n[\xb0\u00b0][\s\d-]+|(?:Article|art\.?)\s+\d+\s+(?:du\s+)?(?:DOC|Code|CCJA|Dahir)|Code\s+(?:du travail|des obligations))', _law_buf)
+                if _lm:
+                    progress_cb("\u2696\ufe0f " + _lm.group(1).strip())
+                    _law_buf = ""
+                if len(_clause_buf) > 2000: _clause_buf = _clause_buf[-500:]
+                if len(_law_buf) > 2000: _law_buf = _law_buf[-500:]
+    if progress_cb: progress_cb("\u2705 Traitement des résultats...")
     print("RAW FULL:", raw[:3000])
 
     # Strip markdown code blocks
@@ -1459,6 +1482,101 @@ def identify_parties_route():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/analyze/stream", methods=["POST", "OPTIONS"])
+def analyze_stream():
+    """SSE streaming endpoint: sends real-time progress events then the final result."""
+    if request.method == "OPTIONS": return "", 204
+    import threading, queue as _queue, json as _json
+
+    # Read all form data before entering the generator (WSGI constraint)
+    file     = request.files.get("file")
+    lang     = request.form.get("lang", "fr")
+    contract_type = request.form.get("type", "generic")
+    api_key  = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
+    partie   = request.form.get("partie", "la partie beneficiaire") or "la partie beneficiaire"
+    user_email = request.form.get("user_email", "").strip()
+    file_bytes = file.read() if file else None
+    filename   = file.filename if file else ""
+
+    q = _queue.Queue()
+
+    def worker():
+        def _cb(msg):
+            q.put({"type": "progress", "message": msg})
+        try:
+            _cb("\U0001f4c4 Lecture du document...")
+            # Auth / quota check
+            if not user_email:
+                q.put({"type": "error", "message": "Connexion requise."})
+                return
+            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+            remaining = 9999
+            if rows:
+                acc = rows[0]
+                remaining = 9999 if acc.get("is_admin") else (acc.get("analyses_remaining") or 0)
+            if remaining <= 0:
+                q.put({"type": "error", "message": "Quota epuise."})
+                return
+            if not file_bytes:
+                q.put({"type": "error", "message": "Fichier manquant."})
+                return
+            import io as _io
+            contract_text, _, _ = read_file(type("F", (), {"read": lambda s: file_bytes, "filename": filename, "seek": lambda s,x: None})())
+            if not contract_text or len(contract_text.strip()) < 50:
+                q.put({"type": "error", "message": "Fichier vide ou illisible."})
+                return
+            _cb(f"\U0001f4c4 Document lu ({len(contract_text.split())} mots)...")
+            result = analyze_contract(contract_text, lang, contract_type, api_key, partie,
+                                      file_bytes=file_bytes, filename=filename, progress_cb=_cb)
+            # Quota decrement
+            if remaining < 9999:
+                supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
+            # Cache
+            file_cache_id = str(uuid.uuid4())
+            _cache_store(file_cache_id, file_bytes)
+            result["file_cache_id"] = file_cache_id
+            result["file_storage_path"] = None
+            if file_bytes and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+                try:
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "docx"
+                    if ext in ("docx", "pdf", "doc", "txt"):
+                        storage_path = str(uuid.uuid4()) + "." + ext
+                        ct_map = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                  "pdf": "application/pdf", "doc": "application/msword", "txt": "text/plain"}
+                        upload_r = supa_storage_upload("contracts", storage_path, file_bytes, ct_map.get(ext, "application/octet-stream"))
+                        if upload_r.ok:
+                            result["file_storage_path"] = storage_path
+                except Exception:
+                    pass
+            result["contract_text"] = contract_text[:80000]
+            q.put({"type": "result", "data": result})
+        except Exception as e:
+            q.put({"type": "error", "message": _anthropic_error_msg(e) or str(e)})
+        finally:
+            q.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def generate():
+        while True:
+            try:
+                item = q.get(timeout=180)
+            except Exception:
+                yield "data: " + _json.dumps({"type": "error", "message": "Timeout"}) + "\n\n"
+                return
+            if item is None:
+                return
+            yield "data: " + _json.dumps(item, ensure_ascii=False) + "\n\n"
+
+    from flask import stream_with_context
+    # NOTE: do NOT set Connection: keep-alive — it is forbidden in HTTP/2 (Railway uses HTTP/2)
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
