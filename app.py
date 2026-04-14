@@ -2150,6 +2150,71 @@ def rag_upload():
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
+@app.route("/rag/diag", methods=["GET", "POST"])
+def rag_diag():
+    """Diagnostic endpoint: check voyage AI, pgvector, embedding dimensions, doc count"""
+    import traceback
+    diag = {}
+    try:
+        # 1. Check env vars
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        diag["voyage_key_present"] = bool(voyage_key)
+        diag["anthropic_key_present"] = bool(os.environ.get("ANTHROPIC_API_KEY",""))
+
+        # 2. Test Voyage AI embedding
+        diag["voyage_test"] = "skipped (no key)"
+        if voyage_key:
+            try:
+                vec = get_embedding("contrat de travail CDI Maroc", voyage_key)
+                diag["voyage_test"] = "ok"
+                diag["voyage_dims"] = len(vec) if vec else 0
+            except Exception as e:
+                diag["voyage_test"] = "error: " + str(e)
+
+        # 3. Count docs in RAG + check embedding_vector coverage
+        try:
+            all_docs = supa_get("rag_documents", {"select": "id,source,category", "limit": "2000"})
+            diag["total_docs"] = len(all_docs or [])
+            # Check a few for embedding_vector
+            sample = supa_get("rag_documents", {
+                "select": "id,embedding_vector",
+                "limit": "10",
+                "embedding_vector": "not.is.null"
+            })
+            diag["docs_with_embedding_vector"] = len(sample or [])
+        except Exception as e:
+            diag["doc_count_error"] = str(e)
+
+        # 4. Test pgvector search
+        diag["pgvector_test"] = "skipped"
+        if voyage_key:
+            try:
+                vec = get_embedding("contrat de travail CDI licenciement préavis Maroc", voyage_key)
+                if vec and len(vec) == 1024:
+                    results = search_rag_pgvector(vec, top_k=5)
+                    diag["pgvector_test"] = "ok"
+                    diag["pgvector_results"] = len(results)
+                    diag["pgvector_titles"] = [r.get("title","?") for r in results[:3]]
+                else:
+                    diag["pgvector_test"] = f"wrong dims: {len(vec) if vec else 0}"
+            except Exception as e:
+                diag["pgvector_test"] = "error: " + str(e)
+
+        # 5. Test keyword fallback
+        try:
+            kw_results = search_rag_keyword("contrat de travail CDI licenciement Maroc", contract_type="employment", top_k=5)
+            diag["keyword_fallback_results"] = len(kw_results)
+            diag["keyword_fallback_titles"] = [r.get("title","?") for r in kw_results[:3]]
+        except Exception as e:
+            diag["keyword_fallback_error"] = str(e)
+
+    except Exception as e:
+        diag["fatal_error"] = str(e)
+        diag["traceback"] = traceback.format_exc()
+
+    return jsonify(diag)
+
+
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
     try:
