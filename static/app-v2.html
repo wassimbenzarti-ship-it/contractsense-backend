@@ -3074,9 +3074,10 @@ async function cbSend() {
   document.getElementById('cb-send').disabled = true;
 
   try {
-    // Only send savedText if it belongs to the current analysis session
+    // Send contract text if available in this session
+    var contractTxt = savedText || '';
+    // Also pass cache/storage IDs so backend can recover if savedText is empty
     var currentCacheId = window._fileCacheId || '';
-    var contractTxt = (currentCacheId === _cbLastCacheId && currentCacheId) ? (savedText || '') : '';
 
     var payload = {
       message:       msg,
