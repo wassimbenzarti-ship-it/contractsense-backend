@@ -1475,6 +1475,8 @@ def analyze():
             except Exception as _e:
                 print(f"Storage upload error: {_e}")
         result["file_storage_path"] = file_storage_path
+        # Include extracted contract text so frontend can cache it for chatbot
+        result["contract_text"] = contract_text[:80000]
 
         return jsonify(result)
     except Exception as e:
@@ -2326,7 +2328,7 @@ def chat():
             cached = _cache_get(file_cache_id)
             if cached:
                 try:
-                    contract_text = cached.decode("utf-8", errors="replace")[:8000]
+                    contract_text = cached.decode("utf-8", errors="replace")[:80000]
                 except Exception:
                     pass
         if not contract_text and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
@@ -2337,9 +2339,9 @@ def chat():
                     if fname.endswith(".docx"):
                         import io as _io
                         doc = Document(_io.BytesIO(downloaded))
-                        contract_text = "\n".join(p.text for p in doc.paragraphs)[:8000]
+                        contract_text = "\n".join(p.text for p in doc.paragraphs)[:80000]
                     else:
-                        contract_text = downloaded.decode("utf-8", errors="replace")[:8000]
+                        contract_text = downloaded.decode("utf-8", errors="replace")[:80000]
                 except Exception:
                     pass
 
@@ -2359,7 +2361,7 @@ def chat():
             "Réponds toujours en français, de manière concise et professionnelle. "
             + (f"Partie représentée : {partie}. Tu défends les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:6000]}\n" if contract_text else "")
+            + (f"\nCONTRAT COMPLET:\n{contract_text[:80000]}\n" if contract_text else "")
             + mods_summary
             + "\n\nSi tu proposes une modification de clause, inclus à la fin de ta réponse un objet JSON "
             "sur une ligne dédiée commençant par JSON_MOD: avec le format : "
@@ -2382,7 +2384,7 @@ def chat():
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         response = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=1024,
+            max_tokens=8192,
             system=system_prompt,
             messages=messages
         )

@@ -1344,6 +1344,15 @@ async function dAnaAnalyze(partie) {
     decisions = {}; modifications.forEach(function(m){ decisions[m.id]='pending'; });
     if (data.file_cache_id) window._fileCacheId = data.file_cache_id;
     if (data.file_storage_path) window._fileStoragePath = data.file_storage_path;
+    if (data.contract_text) {
+      savedText = data.contract_text;
+      window._allContractClauses = _extractContractClauses(savedText);
+      if (!window._allContractClauses.length && data._paragraphs && data._paragraphs.length) {
+        window._allContractClauses = data._paragraphs.map(function(p) {
+          return { name: p.text.slice(0, 80), text: p.text, idx: p.idx };
+        }).filter(function(c) { return c.name.length > 5; });
+      }
+    }
     document.getElementById('d-ana-loading').style.display = 'none';
     renderReview();
   } catch(e) {
@@ -2944,8 +2953,6 @@ function cbNewAnalysis() {
   _cbWelcomed  = false;
   _cbModStore  = {};
   _cbLastCacheId = window._fileCacheId || null;
-  // In dashboard mode savedText may still contain a previous contract: clear it
-  if (_dashAnalysis) savedText = '';
   document.getElementById('cb-msgs').innerHTML = '';
   cbOpen();
 }
