@@ -25,6 +25,18 @@ except ImportError:
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+def _anthropic_error_msg(e):
+    """Return a user-friendly French message for Anthropic API errors, or None."""
+    msg = str(e)
+    if "usage limits" in msg or "usage_limits" in msg or "You have reached your specified API usage limits" in msg:
+        return ("Limite de budget API atteinte. Veuillez augmenter votre limite mensuelle "
+                "sur console.anthropic.com → Billing → Usage limits.")
+    if "rate_limit" in msg or "rate limit" in msg.lower() or "529" in msg or "overloaded" in msg.lower():
+        return "L'API est temporairement surchargée. Veuillez réessayer dans quelques secondes."
+    if "invalid_api_key" in msg or "authentication" in msg.lower():
+        return "Clé API invalide ou absente. Vérifiez la variable ANTHROPIC_API_KEY."
+    return None
+
 app = Flask(__name__)
 CORS(app, origins=[
     "https://ai.westfieldavocats.com",
@@ -1055,7 +1067,7 @@ def queue_add():
         supa_insert("analyses_queue", doc)
         return jsonify({"status": "ok"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/rag/suggest", methods=["POST", "OPTIONS"])
@@ -1087,7 +1099,7 @@ def rag_suggest():
         })
         return jsonify({"status": "ok"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/list", methods=["GET"])
 def suggestions_list():
@@ -1097,7 +1109,7 @@ def suggestions_list():
         r = requests.get(url, headers=headers, timeout=10)
         return jsonify({"suggestions": r.json() if r.ok else []})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/preview/<suggestion_id>", methods=["GET", "OPTIONS"])
 def suggestion_preview(suggestion_id):
@@ -1118,7 +1130,7 @@ def suggestion_preview(suggestion_id):
         resp.headers["Content-Disposition"] = "inline; filename=" + filename
         return resp
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/approve/<suggestion_id>", methods=["POST", "OPTIONS"])
 def suggestion_approve(suggestion_id):
@@ -1146,7 +1158,7 @@ def suggestion_approve(suggestion_id):
         supa_update("pending_suggestions", suggestion_id, {"status": "approved"})
         return jsonify({"status": "ok", "message": "Approuve et ajoute au RAG"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 @app.route("/suggestions/reject/<suggestion_id>", methods=["POST", "OPTIONS"])
 def suggestion_reject(suggestion_id):
     if request.method == "OPTIONS": return "", 204
@@ -1154,7 +1166,7 @@ def suggestion_reject(suggestion_id):
         supa_update("pending_suggestions", suggestion_id, {"status": "rejected"})
         return jsonify({"status": "ok", "message": "Suggestion rejetee"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 # ===== DIRECTOR SUGGESTIONS (juriste -> directeur -> admin) =====
 
@@ -1192,7 +1204,7 @@ def suggest_to_director():
         })
         return jsonify({"status": "ok", "message": "Suggestion envoyee au directeur"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/list-for-director", methods=["GET", "OPTIONS"])
 def suggestions_list_for_director():
@@ -1218,7 +1230,7 @@ def suggestions_list_for_director():
             })
         return jsonify({"suggestions": result})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/forward-to-admin/<suggestion_id>", methods=["POST", "OPTIONS"])
 def forward_suggestion_to_admin(suggestion_id):
@@ -1241,7 +1253,7 @@ def forward_suggestion_to_admin(suggestion_id):
         supa_update("pending_suggestions_director", suggestion_id, {"status": "forwarded"})
         return jsonify({"status": "ok", "message": "Suggestion transmise a admin"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/suggestions/reject-director/<suggestion_id>", methods=["POST", "OPTIONS"])
 def reject_director_suggestion(suggestion_id):
@@ -1250,7 +1262,7 @@ def reject_director_suggestion(suggestion_id):
         supa_update("pending_suggestions_director", suggestion_id, {"status": "rejected"})
         return jsonify({"status": "ok"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/analyses/request-revision/<analysis_id>", methods=["POST", "OPTIONS"])
@@ -1285,7 +1297,7 @@ def request_revision_by_director(analysis_id):
             return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
         return jsonify({"status": "ok", "updated": len(rows)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/analyses/validate-by-director/<analysis_id>", methods=["POST", "OPTIONS"])
@@ -1314,11 +1326,11 @@ def validate_analysis_by_director(analysis_id):
             return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
         return jsonify({"status": "ok", "updated": len(rows)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
         return jsonify({"status": "ok", "message": "Suggestion rejetee par le directeur"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 # ===== ADMIN USER CREATION =====
@@ -1377,7 +1389,7 @@ def admin_create_user():
         })
         return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -1430,7 +1442,7 @@ def identify_parties_route():
         result = identify_parties(contract_text, lang, api_key)
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
@@ -1512,7 +1524,7 @@ def analyze():
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/analyze-clause", methods=["POST", "OPTIONS"])
@@ -1564,7 +1576,7 @@ IMPORTANT : les valeurs "original" et "proposed" doivent être des résumés con
     except json.JSONDecodeError:
         return jsonify({"error": "Réponse IA invalide", "raw": raw[:200]}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/export", methods=["POST"])
@@ -1645,7 +1657,7 @@ def export():
             download_name="contrat-track-changes.docx"
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 # ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Queue: Supabase REST storage ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
 def load_queue():
@@ -1760,7 +1772,7 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
         return jsonify({"success": True, "score": scoring.get("score", 50)})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/queue/list", methods=["GET"])
@@ -1897,7 +1909,7 @@ def queue_validate():
         return jsonify({"success": True, "chunks_indexed": len(chunks)})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/queue/reject", methods=["POST"])
@@ -1909,7 +1921,7 @@ def queue_reject():
         delete_queue_item(contract_id)
         return jsonify({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/rag/upload", methods=["POST"])
@@ -1965,7 +1977,7 @@ def rag_upload():
         return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
@@ -2012,7 +2024,7 @@ def rag_list():
             "total_docs": len(result)
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
@@ -2022,7 +2034,7 @@ def rag_delete_by_id(doc_id):
         sb.table("rag_documents").delete().eq("id", doc_id).execute()
         return jsonify({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 @app.route("/rag/delete", methods=["POST", "DELETE", "OPTIONS"])
 def rag_delete():
@@ -2034,7 +2046,7 @@ def rag_delete():
         count = delete_rag_by_source(source)
         return jsonify({"success": True, "deleted": count})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 # ── Account info + free tier weekly reset ────────────────────────────────────
 
@@ -2243,7 +2255,7 @@ def director_create_juriste():
             else:
                 return jsonify({"error": "Erreur création compte auth: " + r.text[:200]}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
     # Upsert user_accounts row (supprimer l'ancienne si elle existe, puis réinsérer)
     existing_row = supa_get("user_accounts", {"email": f"eq.{juriste_email}", "limit": "1"})
@@ -2454,7 +2466,7 @@ RÈGLES IMPÉRATIVES:
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
 # ── Static frontend ──────────────────────────────────────────────────────────
