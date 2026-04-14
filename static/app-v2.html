@@ -622,43 +622,50 @@ async function analyze() {
 function renderParties(parties) {
   var list = document.getElementById('parties-list');
   list.innerHTML = '';
+  var selected = [];
+
+  // Confirm button (shown when ≥1 party selected)
+  var confirmBtn = document.createElement('button');
+  confirmBtn.style.cssText = 'display:none;width:100%;margin-top:14px;padding:12px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:9px;color:#fff;font-weight:700;font-size:14px;cursor:pointer';
+  confirmBtn.textContent = 'Analyser →';
+  confirmBtn.onclick = function() {
+    if (!selected.length) return;
+    analyzeWithPartie(selected.join(' et '));
+  };
+
+  function updateConfirm() {
+    confirmBtn.style.display = selected.length ? '' : 'none';
+    confirmBtn.textContent = selected.length >= 2
+      ? 'Analyser la coalition (' + selected.length + ' parties) →'
+      : 'Analyser →';
+  }
+
   parties.forEach(function(p) {
+    var label = p.party_label || p.description || p.name;
+    var roleLabel = p.party_label || p.description || p.role || '';
     var btn = document.createElement('button');
     btn.className = 'partie-btn';
-    // Show name + generic role
-    var roleLabel = p.party_label || p.description || p.role || '';
     btn.innerHTML =
       '<div class="name">' + p.name + '</div>' +
       '<div class="desc2">' + p.description + '</div>' +
       (roleLabel ? '<div style="margin-top:4px;font-size:11px;color:#5b7cfa;font-weight:600">' + roleLabel + '</div>' : '');
-    // Pass party_label (generic role) not company name
-    btn.addEventListener('click', function() { analyzeWithPartie(p.party_label || p.description || p.name); });
+    btn.addEventListener('click', function() {
+      var idx = selected.indexOf(label);
+      if (idx === -1) {
+        selected.push(label);
+        btn.style.outline = '2px solid #5b7cfa';
+        btn.style.background = '#1a2040';
+      } else {
+        selected.splice(idx, 1);
+        btn.style.outline = '';
+        btn.style.background = '';
+      }
+      updateConfirm();
+    });
     list.appendChild(btn);
   });
-  // Coalition buttons: show pairwise combinations when 2+ parties
-  if (parties.length >= 2) {
-    var sep = document.createElement('div');
-    sep.style.cssText = 'width:100%;text-align:center;margin:14px 0 8px;font-size:11px;color:#4a5470;font-weight:600;letter-spacing:.05em;text-transform:uppercase';
-    sep.textContent = '— ou défendre deux parties en coalition —';
-    list.appendChild(sep);
-    for (var i = 0; i < parties.length; i++) {
-      for (var j = i + 1; j < parties.length; j++) {
-        (function(pi, pj) {
-          var labelI = pi.party_label || pi.description || pi.name;
-          var labelJ = pj.party_label || pj.description || pj.name;
-          var coalitionLabel = labelI + ' et ' + labelJ;
-          var btn2 = document.createElement('button');
-          btn2.className = 'partie-btn';
-          btn2.style.cssText = 'border:1px dashed #5b7cfa;opacity:.9';
-          btn2.innerHTML = '<div class="name" style="color:#8b9eff">&#x26A0; Coalition</div>'
-            + '<div class="desc2">' + _escH(pi.name) + ' &amp; ' + _escH(pj.name) + '</div>'
-            + '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">Défendre conjointement ces deux parties</div>';
-          btn2.addEventListener('click', function() { analyzeWithPartie(coalitionLabel); });
-          list.appendChild(btn2);
-        })(parties[i], parties[j]);
-      }
-    }
-  }
+
+  list.appendChild(confirmBtn);
   show('step-parties');
 }
 
@@ -1326,39 +1333,48 @@ function dAnaShowParties(parties) {
   document.getElementById('d-ana-parties').style.display = '';
   var list = document.getElementById('d-parties-list'); list.innerHTML = '';
   var arr = parties.length ? parties : [{name:'Analyser (générique)', party_label:'Partie', description:''}];
+  var selected = [];
+
+  // Confirm button
+  var confirmBtn = document.createElement('button');
+  confirmBtn.style.cssText = 'display:none;width:100%;margin-top:14px;padding:12px;background:linear-gradient(135deg,#5b7cfa,#8b5cf6);border:none;border-radius:9px;color:#fff;font-weight:700;font-size:14px;cursor:pointer';
+  confirmBtn.textContent = 'Analyser →';
+  confirmBtn.onclick = function() {
+    if (!selected.length) return;
+    dAnaAnalyze(selected.join(' et '));
+  };
+
+  function updateConfirm() {
+    confirmBtn.style.display = selected.length ? '' : 'none';
+    confirmBtn.textContent = selected.length >= 2
+      ? 'Analyser la coalition (' + selected.length + ' parties) →'
+      : 'Analyser →';
+  }
+
   arr.forEach(function(p) {
+    var label = p.party_label || p.description || p.name || p;
     var btn = document.createElement('button');
     btn.className = 'partie-btn';
     btn.innerHTML = '<div class="name">' + _escH(p.name||p) + '</div>' +
       (p.description ? '<div class="desc2">' + _escH(p.description) + '</div>' : '') +
       (p.party_label ? '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">' + _escH(p.party_label) + '</div>' : '');
-    btn.onclick = (function(role){ return function(){ dAnaAnalyze(role); }; })(p.party_label || p.description || p.name || p);
+    btn.onclick = function() {
+      var idx = selected.indexOf(label);
+      if (idx === -1) {
+        selected.push(label);
+        btn.style.outline = '2px solid #5b7cfa';
+        btn.style.background = '#1a2040';
+      } else {
+        selected.splice(idx, 1);
+        btn.style.outline = '';
+        btn.style.background = '';
+      }
+      updateConfirm();
+    };
     list.appendChild(btn);
   });
-  // Coalition buttons: show pairwise combinations when 2+ real parties
-  if (arr.length >= 2 && parties.length >= 2) {
-    var sep = document.createElement('div');
-    sep.style.cssText = 'width:100%;text-align:center;margin:14px 0 8px;font-size:11px;color:#4a5470;font-weight:600;letter-spacing:.05em;text-transform:uppercase';
-    sep.textContent = '— ou défendre deux parties en coalition —';
-    list.appendChild(sep);
-    for (var i = 0; i < arr.length; i++) {
-      for (var j = i + 1; j < arr.length; j++) {
-        (function(pi, pj) {
-          var labelI = pi.party_label || pi.description || pi.name;
-          var labelJ = pj.party_label || pj.description || pj.name;
-          var coalitionLabel = labelI + ' et ' + labelJ;
-          var btn2 = document.createElement('button');
-          btn2.className = 'partie-btn';
-          btn2.style.cssText = 'border:1px dashed #5b7cfa;opacity:.9';
-          btn2.innerHTML = '<div class="name" style="color:#8b9eff">&#x26A0; Coalition</div>'
-            + '<div class="desc2">' + _escH(pi.name||'') + ' &amp; ' + _escH(pj.name||'') + '</div>'
-            + '<div style="margin-top:3px;font-size:11px;color:#5b7cfa;font-weight:600">Défendre conjointement ces deux parties</div>';
-          btn2.onclick = (function(label){ return function(){ dAnaAnalyze(label); }; })(coalitionLabel);
-          list.appendChild(btn2);
-        })(arr[i], arr[j]);
-      }
-    }
-  }
+
+  list.appendChild(confirmBtn);
 }
 
 var _JUR_LABELS = {droit_marocain:'droit marocain 🇲🇦',droit_francais:'droit français 🇫🇷',droit_anglais:'droit anglais 🇬🇧',droit_tunisien:'droit tunisien 🇹🇳',droit_algerien:'droit algérien 🇩🇿',droit_belge:'droit belge 🇧🇪',universel:'droit applicable 🌐'};
