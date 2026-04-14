@@ -2398,6 +2398,29 @@ def chat():
                 lines.append(f"- {m.get('clause_name','?')}: {(m.get('proposed') or '')[:120]}")
             mods_summary = "\nMODIFICATIONS DÉJÀ ACCEPTÉES PAR LE CLIENT:\n" + "\n".join(lines)
 
+        # Smart contract excerpt: always include first 8k chars (parties/preamble)
+        # + targeted section if message references a specific article/clause
+        contract_excerpt = ""
+        if contract_text:
+            intro = contract_text[:8000]
+            targeted = ""
+            # Detect article/clause reference in the user message
+            art_match = re.search(r'\b(?:article|clause|art\.?|cl\.?)\s*(\d+(?:\.\d+)*)\b', message, re.IGNORECASE)
+            num_match = re.search(r'\b(\d{1,2}\.\d{1,2})\b', message)
+            ref = (art_match.group(1) if art_match else None) or (num_match.group(1) if num_match else None)
+            if ref:
+                # Find the article in the full contract text
+                pattern = re.compile(
+                    r'(?:article|clause|art\.?)\s*' + re.escape(ref) + r'\b|^\s*' + re.escape(ref) + r'[\s\.\-]',
+                    re.IGNORECASE | re.MULTILINE
+                )
+                m_pos = pattern.search(contract_text)
+                if m_pos:
+                    start = max(0, m_pos.start() - 200)
+                    end = min(len(contract_text), m_pos.start() + 6000)
+                    targeted = "\n\n--- SECTION CIBLÉE (" + ref + ") ---\n" + contract_text[start:end]
+            contract_excerpt = intro + targeted if targeted else contract_text[:40000]
+
         # System prompt
         system_prompt = (
             "Tu es un assistant juridique expert en droit des contrats. "
@@ -2405,7 +2428,7 @@ def chat():
             "Réponds toujours en français, de manière concise et professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + (f"\nEXTRAIT DU CONTRAT:\n{contract_text[:40000]}\n" if contract_text else "")
+            + (f"\nEXTRAIT DU CONTRAT:\n{contract_excerpt}\n" if contract_excerpt else "")
             + mods_summary
             + """
 
