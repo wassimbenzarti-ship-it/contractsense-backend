@@ -2392,15 +2392,18 @@ def rag_diag():
 
         # 3. Count docs in RAG + check embedding_vector coverage
         try:
-            all_docs = supa_get("rag_documents", {"select": "id,source,category", "limit": "2000"})
+            all_docs = supa_get("rag_documents", {"select": "id,source,category,jurisdiction,embedding_vector", "limit": "2000"})
             diag["total_docs"] = len(all_docs or [])
-            # Check a few for embedding_vector
-            sample = supa_get("rag_documents", {
-                "select": "id,embedding_vector",
-                "limit": "10",
-                "embedding_vector": "not.is.null"
-            })
-            diag["docs_with_embedding_vector"] = len(sample or [])
+            # Count docs with embedding_vector populated (non-null, non-empty)
+            with_vec = [d for d in (all_docs or []) if d.get("embedding_vector")]
+            diag["docs_with_embedding_vector"] = len(with_vec)
+            diag["docs_missing_vector"] = diag["total_docs"] - len(with_vec)
+            # Breakdown by category/jurisdiction
+            from collections import Counter
+            diag["categories"] = dict(Counter(d.get("category","?") for d in (all_docs or [])))
+            diag["jurisdictions"] = dict(Counter(d.get("jurisdiction") or "null" for d in (all_docs or [])))
+            # Sample sources
+            diag["sample_sources"] = list(set(d.get("source","?") for d in (all_docs or [])))[:10]
         except Exception as e:
             diag["doc_count_error"] = str(e)
 
@@ -2550,10 +2553,14 @@ def rag_reindex():
                         continue
                     # Update embedding_vector and embedding JSON
                     vec_str = "[" + ",".join(str(x) for x in emb) + "]"
-                    supa_patch("rag_documents",
-                               {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
-                               "id=eq." + doc["id"])
-                    fixed += 1
+                    patch_r = supa_patch("rag_documents",
+                                         {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
+                                         "id=eq." + doc["id"])
+                    if patch_r.ok or patch_r.status_code == 204:
+                        fixed += 1
+                    else:
+                        print(f"reindex PATCH failed {patch_r.status_code}: {patch_r.text[:300]}")
+                        errors += 1
                 except Exception as de:
                     print("reindex doc error: " + str(de))
                     errors += 1
