@@ -2273,6 +2273,7 @@ def rag_upload():
         file = request.files.get("file")
         title = request.form.get("source_name") or request.form.get("title") or (file.filename.rsplit(".",1)[0] if file else "Document")
         category = request.form.get("doc_type") or request.form.get("category", "general")
+        jurisdiction = request.form.get("jurisdiction", "").strip() or None
         title_base = title  # Use as source key
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         if not file:
@@ -2350,6 +2351,7 @@ def rag_upload():
                 "content": chunk,
                 "embedding": embedding,  # raw list — save_rag_doc handles JSON + pgvector
                 "source": title,
+                "jurisdiction": jurisdiction,
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
@@ -2432,7 +2434,7 @@ def rag_list():
         offset = 0
         while True:
             batch = supa_get("rag_documents", {
-                "select": "id,source,category,party_label",
+                "select": "id,source,category,party_label,jurisdiction",
                 "limit": "1000",
                 "offset": str(offset)
             })
@@ -2453,6 +2455,7 @@ def rag_list():
                     "chunks": 0,
                     "type": doc.get("category",""),
                     "party_label": doc.get("party_label",""),
+                    "jurisdiction": doc.get("jurisdiction",""),
                     "warning": False
                 }
             grouped[src]["chunks"] += 1
@@ -2481,17 +2484,20 @@ def rag_retag():
         body = request.get_json(force=True) or {}
         source = body.get("source", "").strip()
         new_category = body.get("category", "").strip()
-        if not source or not new_category:
-            return jsonify({"error": "source et category requis"}), 400
-        # Fetch all docs with this source
+        new_jurisdiction = body.get("jurisdiction", "").strip()
+        if not source or (not new_category and not new_jurisdiction):
+            return jsonify({"error": "source et au moins category ou jurisdiction requis"}), 400
         docs = supa_get("rag_documents", {"select": "id", "source": f"eq.{source}", "limit": "500"})
         if not docs:
             return jsonify({"error": "Aucun document trouvé pour cette source"}), 404
+        updates = {}
+        if new_category: updates["category"] = new_category
+        if new_jurisdiction: updates["jurisdiction"] = new_jurisdiction
         updated = 0
         for doc in docs:
-            supa_patch("rag_documents", {"category": new_category}, f"id=eq.{doc['id']}")
+            supa_patch("rag_documents", updates, f"id=eq.{doc['id']}")
             updated += 1
-        return jsonify({"success": True, "updated": updated, "source": source, "new_category": new_category})
+        return jsonify({"success": True, "updated": updated, "source": source, **updates})
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
