@@ -2472,6 +2472,30 @@ def rag_list():
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
+@app.route("/rag/retag", methods=["POST", "OPTIONS"])
+def rag_retag():
+    """Update the category of all RAG documents with a given source name."""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        body = request.get_json(force=True) or {}
+        source = body.get("source", "").strip()
+        new_category = body.get("category", "").strip()
+        if not source or not new_category:
+            return jsonify({"error": "source et category requis"}), 400
+        # Fetch all docs with this source
+        docs = supa_get("rag_documents", {"select": "id", "source": f"eq.{source}", "limit": "500"})
+        if not docs:
+            return jsonify({"error": "Aucun document trouvé pour cette source"}), 404
+        updated = 0
+        for doc in docs:
+            supa_patch("rag_documents", {"category": new_category}, f"id=eq.{doc['id']}")
+            updated += 1
+        return jsonify({"success": True, "updated": updated, "source": source, "new_category": new_category})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
 @app.route("/rag/reindex", methods=["POST", "OPTIONS"])
 def rag_reindex():
     """Re-embed all RAG docs that are missing embedding_vector (pgvector column).
