@@ -806,6 +806,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "   → Délais de remédiation trop courts (< 3 mois) pour des manquements opérationnels complexes = RISQUE ÉLEVÉ\n"
         "   → Obligation de remboursement > 0 = RISQUE CRITIQUE (risk=high)\n"
         " Si aucun article de resiliation n'existe = RISQUE CRITIQUE, propose une nouvelle clause.\n"
+        " RÈGLE ABSOLUE — CONSÉQUENCES DE RÉSILIATION SÉPARÉES OBLIGATOIRES :\n"
+        "   Si le contrat contient un article traitant des CONSÉQUENCES de la résiliation"
+        " (ex: restitution intégrale des avantages/subventions/bénéfices fiscaux, remboursements, absence d'indemnité),"
+        " tu DOIS créer UNE modification séparée portant UNIQUEMENT sur ces conséquences — PAS regroupée avec la durée ou la procédure.\n"
+        "   Cette modification DOIT avoir risk=high si : restitution intégrale exigée, ou aucune indemnité pour " + partie + ", ou obligation de remboursement non proratisée.\n"
+        "   INTERDICTION ABSOLUE : Ne jamais regrouper les conséquences de résiliation avec la clause de durée.\n"
         "  RESPONSABILITE/LIABILITY : Verifier systematiquement (1) plafonds de responsabilite, (2) exclusions de garantie, (3) indemnisation asymetrique. Si " + partie + " supporte une responsabilite illimitee ou superieure a celle de la partie adverse = RISQUE CRITIQUE.\n"
         "  REMBOURSEMENT/RESTITUTION : Verifier toute obligation de rembourser avances, subventions ou benefices fiscaux. Quantifier le montant max que " + partie + " pourrait devoir rembourser en cas de manquement ou resiliation.\n\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
@@ -840,7 +846,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"insertion_after":"para_idx après lequel insérer ou null si modification",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
-        "- MINIMUM 8 modifications obligatoires — un juriste qui en trouve moins de 8 n'a pas analysé exhaustivement\n"
+        "- MINIMUM 10 modifications obligatoires — un juriste qui en trouve moins de 10 n'a pas analysé exhaustivement\n"
+        "- OBLIGATION SUPPLÉMENTAIRE : Si le contrat a un article 'Résiliation' avec des CONSÉQUENCES (restitution, remboursement, pas d'indemnité) → cet article doit être une modification SÉPARÉE avec risk=high\n"
         "- para_idx: numéro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
         "- proposed: clause juridique complète et professionnelle, rédigée en style contractuel soutenu\n"
@@ -861,7 +868,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     import re as _re
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=4000,
+        max_tokens=6000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     ) as _stream:
