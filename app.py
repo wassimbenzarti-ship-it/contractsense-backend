@@ -327,6 +327,13 @@ def save_rag_doc(doc):
         
         # Save embedding both as JSON (legacy) and as vector (pgvector)
         emb = doc_copy.get("embedding")
+        # Parse JSON string if caller passed json.dumps() instead of raw list
+        if emb and isinstance(emb, str):
+            try:
+                emb = json.loads(emb)
+                doc_copy["embedding"] = emb
+            except Exception:
+                emb = None
         if emb and isinstance(emb, list) and len(emb) == 1024:
             doc_copy["embedding_vector"] = emb  # pgvector column
             doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
@@ -2273,7 +2280,7 @@ def rag_upload():
                 "title": chunk_title,
                 "category": category,
                 "content": chunk,
-                "embedding": json.dumps(embedding),
+                "embedding": embedding,  # raw list — save_rag_doc handles JSON + pgvector
                 "source": title,
                 "validated_at": datetime.datetime.now().isoformat()
             })
@@ -2392,6 +2399,68 @@ def rag_list():
             "documents": result,
             "total": sum(d["chunks"] for d in result),
             "total_docs": len(result)
+        })
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/rag/reindex", methods=["POST", "OPTIONS"])
+def rag_reindex():
+    """Re-embed all RAG docs that are missing embedding_vector (pgvector column).
+    Called after the rag_upload bug-fix to backfill existing documents."""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        if not voyage_key:
+            return jsonify({"error": "VOYAGE_API_KEY manquante — impossible de ré-indexer"}), 400
+
+        # Fetch docs without embedding_vector, in batches
+        fixed = 0
+        skipped = 0
+        errors = 0
+        offset = 0
+        batch_size = 100
+        while True:
+            # Fetch docs missing embedding_vector
+            docs = supa_get("rag_documents", {
+                "select": "id,content,embedding",
+                "embedding_vector": "is.null",
+                "limit": str(batch_size),
+                "offset": str(offset)
+            })
+            if not docs:
+                break
+            for doc in docs:
+                try:
+                    content = doc.get("content") or ""
+                    if not content.strip():
+                        skipped += 1
+                        continue
+                    # Re-compute embedding
+                    emb = get_embedding(content[:1000], voyage_key)
+                    if not emb or len(emb) != 1024:
+                        skipped += 1
+                        continue
+                    # Update embedding_vector and embedding JSON
+                    vec_str = "[" + ",".join(str(x) for x in emb) + "]"
+                    supa_patch("rag_documents",
+                               {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
+                               "id=eq." + doc["id"])
+                    fixed += 1
+                except Exception as de:
+                    print("reindex doc error: " + str(de))
+                    errors += 1
+            if len(docs) < batch_size:
+                break
+            offset += batch_size
+
+        return jsonify({
+            "success": True,
+            "fixed": fixed,
+            "skipped": skipped,
+            "errors": errors,
+            "message": f"{fixed} documents ré-indexés avec embedding_vector pgvector"
         })
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
