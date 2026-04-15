@@ -706,7 +706,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             if len(legal_docs) < _n_before:
                 print(f"Employment filter: removed {_n_before - len(legal_docs)} labor law docs")
 
-        protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis"]
+        protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis",
+                        "ailovecontracts"]  # modèles de clauses tierces — inspiration silencieuse, jamais citées
 
         # Context 1: contract models → client protection
         if contract_docs:
@@ -825,7 +826,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
         "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) — CECI EST OBLIGATOIRE SANS EXCEPTION (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
-        "5. RAG OBLIGATOIRE: Cite UNIQUEMENT les sources marquées === SOURCE dans le contexte. NE JAMAIS inventer. NE JAMAIS citer LexisNexis/ouvrages payants. Si source protégée ou absente du contexte → rag_source: null.\n"
+        "5. RAG — RÈGLE DE CITATION STRICTE: Cite une source dans rag_source UNIQUEMENT si elle fonde DIRECTEMENT la modification proposée — c'est-à-dire si elle traite précisément du même aspect juridique que la clause originale modifiée."
+        " INTERDIT: citer un article qui parle d'un aspect connexe mais différent (ex: Art.255 traite des conséquences du non-respect du préavis → NE PAS le citer pour une clause qui définit la durée du préavis)."
+        " Si la source est seulement thématiquement proche mais ne fonde pas directement le proposed → rag_source: null."
+        " NE JAMAIS inventer de source. NE JAMAIS citer LexisNexis/ouvrages payants. Sources marquées 'null (protege)' → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
         "PROCESSUS D'ANALYSE:\n"
         "Étape 1: Lis tout le contrat\n"
