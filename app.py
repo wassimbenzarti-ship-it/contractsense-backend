@@ -815,9 +815,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "Étape 5: Vérifie chaque modification contre le RAG pour citer les sources\n\n"
         + get_legal_framework(contract_type) +
         "\n\n"
-        + rag_context +
-        + legal_context +
-        "\n\nATTENTION sur les clauses validées du RAG:\n"
+        + rag_context
+        + legal_context
+        + "\n\nATTENTION sur les clauses validées du RAG:\n"
         "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
         "- Si une clause validée favorise l'autre partie, IGNORE-LA\n"
         "- Vérifie toujours que ta proposition avantage bien " + partie + "\n\n"
