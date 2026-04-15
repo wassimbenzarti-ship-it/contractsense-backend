@@ -620,7 +620,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     legal_context = ""
     _rag_contract_count = 0
     _rag_legal_count = 0
-    LEGAL_CATS = {"loi", "law", "doctrine", "jurisprudence", "legal", "legislation"}
+    LEGAL_CATS = {"loi", "law", "law_employment", "law_commercial", "law_civil",
+                  "doctrine", "jurisprudence", "legal", "legislation"}
     # Quick jurisdiction detection for boosting relevant docs
     def _detect_jur(text):
         s = text[:3000].lower()
@@ -692,6 +693,28 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Separate contract models from legal references
         contract_docs = [d for d in all_docs if d.get("category", "").lower() not in LEGAL_CATS]
         legal_docs    = [d for d in all_docs if d.get("category", "").lower() in LEGAL_CATS]
+
+        # Domain filter: keep only contract models relevant to this contract type
+        # Docs tagged contract_{type} are domain-specific; docs tagged "contract" are generic (allowed for all)
+        # This prevents NDA clauses from appearing in employment contracts, etc.
+        _CT_DOMAINS = {
+            "employment": "contract_employment",
+            "cdi": "contract_employment", "cdd": "contract_employment",
+            "nda": "contract_nda",
+            "service": "contract_service",
+            "purchase": "contract_purchase",
+            "saas": "contract_saas",
+            "partnership": "contract_partnership",
+        }
+        _domain_cat = _CT_DOMAINS.get(_ct_lower)
+        if _domain_cat:
+            def _domain_ok(doc):
+                cat = (doc.get("category") or "").lower()
+                # Accept: exact domain match, generic "contract", or untagged
+                return cat in ("contract", _domain_cat) or not cat.startswith("contract_")
+            _n_before_domain = len(contract_docs)
+            contract_docs = [d for d in contract_docs if _domain_ok(d)]
+            print(f"Domain filter ({_ct_lower}→{_domain_cat}): {_n_before_domain} → {len(contract_docs)} contract docs")
 
         # Filter employment law docs for non-employment contracts
         _ct_lower = (contract_type or "").lower()
@@ -2269,14 +2292,51 @@ def rag_upload():
         if len(content) > 200000:
             content = content[:200000]
 
-        # Split into chunks of ~400 words
-        words = content.split()
-        chunk_size = 400
-        max_chunks = 50  # Max 50 chunks per upload to avoid timeout
-        chunks = []
-        for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size):
-            chunk = " ".join(words[i:i+chunk_size])
-            chunks.append(chunk)
+        # Smart chunking: split at article/clause boundaries first, fallback to 400-word chunks
+        def _split_into_clauses(text, max_chunks=80):
+            # Try to split at article markers: Article X, Art. X, ARTICLE X, §X, numbered sections
+            import re as _re
+            article_pat = _re.compile(
+                r'(?=\n\s*(?:Article|Art\.?|ARTICLE|§|Section|Clause|CLAUSE)\s+\d+[\.\-\s])',
+                _re.IGNORECASE
+            )
+            parts = article_pat.split(text)
+            # Filter out empty/too-short fragments
+            parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 80]
+            if len(parts) >= 3:
+                # Merge very short adjacent parts (< 100 chars) with the next
+                merged = []
+                buf = ""
+                for p in parts:
+                    buf = (buf + "\n" + p).strip() if buf else p
+                    if len(buf) >= 100:
+                        merged.append(buf)
+                        buf = ""
+                if buf:
+                    merged.append(buf)
+                # Cap at max_chunks, each chunk max 1200 chars
+                result = []
+                for part in merged[:max_chunks]:
+                    if len(part) <= 1200:
+                        result.append(part)
+                    else:
+                        # Sub-chunk oversized parts at word boundaries
+                        words_p = part.split()
+                        for j in range(0, len(words_p), 200):
+                            result.append(" ".join(words_p[j:j+200]))
+                            if len(result) >= max_chunks:
+                                break
+                    if len(result) >= max_chunks:
+                        break
+                if result:
+                    return result
+            # Fallback: 400-word chunks
+            words = text.split()
+            chunk_size = 400
+            return [" ".join(words[i:i+chunk_size])
+                    for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size)]
+
+        chunks = _split_into_clauses(content)
 
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
