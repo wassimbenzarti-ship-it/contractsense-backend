@@ -2785,16 +2785,31 @@ FORMAT EXACT (respecter à la lettre) :
 
 RÈGLES :
 • "original" = copie intégrale exacte depuis le contrat (même ponctuation, même casse)
-• "proposed" = texte complet et rédigé, pas un résumé, pas des pointillés
-• Plusieurs clauses discutées = plusieurs blocs séparés
-• SEULE exception : question purement théorique sans mention d'une clause précise du contrat
+• "proposed" = texte COMPLET et rédigé intégralement — incorpore TOUTES les améliorations dans une seule rédaction
+• NE JAMAIS produire une liste de bullets à la place du bloc — les bullets sont INTERDITS comme réponse finale
+• Si tu proposes 5 améliorations sur une clause → rédige UNE clause complète qui intègre les 5 améliorations
+• Plusieurs clauses DIFFÉRENTES discutées = plusieurs blocs séparés (un par clause)
+• SEULE exception : question strictement théorique sans référence à une clause du contrat présent
+
+ANTI-PATTERN INTERDIT :
+❌ "Voici mes recommandations :
+   - Allonger les délais à 6 mois
+   - Ajouter un droit de résiliation
+   - ..."
+→ C'est INTERDIT. Ces bullets doivent être transformées en rédaction intégrée dans le bloc <modification>.
+
+PATTERN CORRECT :
+✓ "J'ai analysé l'Article X. [courte explication textuelle]"
+<modification>
+{"clause_name":"Article X – Titre","original":"texte original exact","proposed":"Article X refondu intégrant TOUTES les améliorations : [texte complet rédigé]"}
+</modification>
 
 EXEMPLE :
 Utilisateur : "Peux-tu revoir la clause de confidentialité ?"
 Ta réponse :
-J'ai analysé l'Article 15.1. Voici mes recommandations : [analyse textuelle]
+J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge la durée, précise les sanctions et ajoute un droit de remédiation.
 <modification>
-{"clause_name":"Article 15.1 – Confidentialité","original":"Les parties s'engagent à garder confidentielles toutes les informations échangées.","proposed":"Les parties s'engagent mutuellement et irrévocablement à maintenir strictement confidentielles toutes informations, documents et données échangés dans le cadre du présent accord, pour une durée de cinq (5) ans suivant son expiration, sous peine de dommages et intérêts."}
+{"clause_name":"Article 15.1 – Confidentialité","original":"Les parties s'engagent à garder confidentielles toutes les informations échangées.","proposed":"Les parties s'engagent mutuellement et irrévocablement à maintenir strictement confidentielles toutes informations, documents et données échangés dans le cadre du présent accord, pour une durée de cinq (5) ans suivant son expiration. En cas de divulgation non autorisée, la partie fautive dispose d'un délai de trente (30) jours pour remédier au manquement avant que des dommages et intérêts ne soient exigibles."}
 </modification>
 """
         )
