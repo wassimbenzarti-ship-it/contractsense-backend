@@ -601,11 +601,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Build numbered paragraphs for precise matching
     paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
     
-    # Build numbered contract text for AI
+    # Build numbered contract text for AI — 300 paragraphs / 40k chars for long contracts (Art. 19+)
     if paragraphs:
-        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:150])
+        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:300])
     else:
-        numbered_text = contract_text[:20000]
+        numbered_text = contract_text[:40000]
 
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
