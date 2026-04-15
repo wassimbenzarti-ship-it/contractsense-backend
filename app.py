@@ -798,7 +798,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         " ATTENTION : la clause de DUREE ou DUREE DU CONTRAT n'est PAS une clause de resiliation — ne les confonds pas, meme si la clause de duree mentionne l'expiration."
         " Analyse OBLIGATOIREMENT : (1) qui peut resilier et dans quels cas (manquement, faillite, force majeure, convenance), (2) le preavis requis, (3) les consequences financieres (penalites, indemnites de resiliation, remboursements exiges),"
         " (4) si " + partie + " peut etre force de rembourser des sommes importantes."
-        " Si aucun article de resiliation n'existe = RISQUE CRITIQUE, propose une nouvelle clause. Obligation de remboursement > 0 = RISQUE CRITIQUE (risk=high).\n"
+        " CRITERES AUTOMATIQUES DE RISQUE ELEVE (risk=high) :\n"
+        "   → Résiliation UNILATÉRALE possible UNIQUEMENT par la contrepartie (asymétrie totale) = RISQUE ÉLEVÉ OBLIGATOIRE\n"
+        "   → Restitution INTÉGRALE des avantages, subventions ou bénéfices fiscaux sans proratisation = RISQUE ÉLEVÉ\n"
+        "   → Aucun droit de résiliation de " + partie + " pour manquement grave de la contrepartie ou changement législatif = RISQUE ÉLEVÉ\n"
+        "   → Renonciation à indemnité ou dommages-intérêts en cas de résiliation abusive = RISQUE ÉLEVÉ\n"
+        "   → Délais de remédiation trop courts (< 3 mois) pour des manquements opérationnels complexes = RISQUE ÉLEVÉ\n"
+        "   → Obligation de remboursement > 0 = RISQUE CRITIQUE (risk=high)\n"
+        " Si aucun article de resiliation n'existe = RISQUE CRITIQUE, propose une nouvelle clause.\n"
         "  RESPONSABILITE/LIABILITY : Verifier systematiquement (1) plafonds de responsabilite, (2) exclusions de garantie, (3) indemnisation asymetrique. Si " + partie + " supporte une responsabilite illimitee ou superieure a celle de la partie adverse = RISQUE CRITIQUE.\n"
         "  REMBOURSEMENT/RESTITUTION : Verifier toute obligation de rembourser avances, subventions ou benefices fiscaux. Quantifier le montant max que " + partie + " pourrait devoir rembourser en cas de manquement ou resiliation.\n\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
@@ -845,8 +852,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
     )
 
-    # Limit text to avoid timeout
-    truncated_text = numbered_text[:15000]
+    # Limit text — 40k chars ensures late articles (Art. 19+) are included
+    truncated_text = numbered_text[:40000]
     if progress_cb: progress_cb("\U0001f916 Démarrage de l\'analyse IA...")
     raw = ""
     _clause_buf = ""
