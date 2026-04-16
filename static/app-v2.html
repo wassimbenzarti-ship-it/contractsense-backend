@@ -1547,7 +1547,7 @@ async function loadDash(){
   }
   var STATUS_LABELS={'draft':'Brouillon','pending_review':'En attente directeur','in_review':'En cours de révision','revision_requested':'Renvoyé pour révision par le directeur juridique','validated':'Validé par directeur','final_validated':'Validé — dans le RAG'};
   var STATUS_COLORS={'draft':'#4a5470','pending_review':'#f59e0b','in_review':'#5b7cfa','revision_requested':'#ef4444','validated':'#10b981','final_validated':'#10b981'};
-  window._renderAnalyses=function(list){
+  window._renderAnalyses=async function(list){
     // Trier : analyses normales par date, [ADVERSE] insérées juste après leur originale
     var sorted=[];
     var normals=list.filter(function(x){return !x.filename||x.filename.indexOf('[ADVERSE]')<0;});
@@ -1558,6 +1558,7 @@ async function loadDash(){
     });
     // Ajouter les [ADVERSE] orphelines non encore insérées
     list.filter(function(x){return x.filename&&x.filename.indexOf('[ADVERSE]')===0&&sorted.indexOf(x)<0;}).forEach(function(x){sorted.push(x);});
+    await new Promise(function(r){ setTimeout(r, 0); });
     document.getElementById('alist').innerHTML=sorted.length===0
       ?'<p style="color:#6b7280;font-size:13px;padding:20px 0">Aucune analyse</p>'
       :sorted.map(function(x){
@@ -1592,7 +1593,7 @@ async function loadDash(){
           +'</div>';
       }).join('');
   };
-  window._renderAnalyses(a);
+  await window._renderAnalyses(a);
   window.filterAnalysesByJuriste=function(val){
     if(!val) return window._renderAnalyses(window._userAnalyses);
     if(val==='__own__') return window._renderAnalyses(window._userAnalyses.filter(function(x){return !x._juristeEmail;}));
@@ -1919,6 +1920,7 @@ async function showAnaDetail(idx) {
   // Rendre inline dans la carte
   var inlineDiv = document.getElementById('ana-detail-inline-'+idx);
   if(inlineDiv) {
+    await new Promise(function(r){ setTimeout(r, 0); });
     inlineDiv.innerHTML = html;
     inlineDiv.style.display = 'block';
     inlineDiv.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -2343,6 +2345,7 @@ async function loadJuristes(){
           +'</div></div>';
       }).join('')+'</div>';
     }
+    await new Promise(function(r){ setTimeout(r, 0); });
     el.innerHTML=html;
 
     // Admin: sync payments button
