@@ -2558,6 +2558,12 @@ def rag_list():
                 d["warning_msg"] = "Trop peu de chunks"
 
         result = sorted(grouped.values(), key=lambda x: (x.get("type",""), x.get("source","")))
+
+        # Optional keyword filter: /rag/list?q=investissement
+        q = (request.args.get("q") or "").strip().lower()
+        if q:
+            result = [d for d in result if q in d.get("source","").lower()]
+
         return jsonify({
             "documents": result,
             "total": sum(d["chunks"] for d in result),
@@ -2565,6 +2571,31 @@ def rag_list():
         })
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/rag/find", methods=["GET"])
+def rag_find():
+    """Search RAG documents by keyword in source/title. GET /rag/find?q=investissement"""
+    q = (request.args.get("q") or "").strip().lower()
+    if not q:
+        return jsonify({"error": "Paramètre q requis"}), 400
+    try:
+        docs = supa_get("rag_documents", {
+            "select": "id,title,source,category,jurisdiction",
+            "limit": "2000"
+        })
+        matches = [d for d in (docs or []) if q in (d.get("source","") + d.get("title","")).lower()]
+        sources = {}
+        for d in matches:
+            src = d.get("source","?")
+            sources[src] = sources.get(src, 0) + 1
+        return jsonify({
+            "query": q,
+            "matching_chunks": len(matches),
+            "sources": [{"source": s, "chunks": n} for s, n in sorted(sources.items())]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/rag/retag", methods=["POST", "OPTIONS"])
