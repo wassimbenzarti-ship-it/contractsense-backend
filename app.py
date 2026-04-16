@@ -552,11 +552,28 @@ def extract_text_from_docx(file_bytes):
         except Exception as e2:
             raise ValueError("Impossible de lire le fichier Word: " + str(e2))
 
+def extract_text_from_pdf(file_bytes):
+    """Extract plain text from a PDF using pypdf (pure-Python, no system deps)."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(file_bytes))
+        pages = []
+        for page in reader.pages:
+            t = page.extract_text() or ""
+            if t.strip():
+                pages.append(t)
+        return "\n".join(pages)
+    except Exception as e:
+        print("PDF extract error: " + str(e))
+        return ""
+
 def read_file(file):
     file_bytes = file.read()
     filename = file.filename.lower()
     if filename.endswith(".docx") or filename.endswith(".doc"):
         text = extract_text_from_docx(file_bytes)
+    elif filename.endswith(".pdf"):
+        text = extract_text_from_pdf(file_bytes)
     else:
         text = file_bytes.decode("utf-8", errors="ignore")
     # Remove null bytes
@@ -2346,6 +2363,8 @@ def rag_upload():
         filename = file.filename.lower()
         if filename.endswith(".docx") or filename.endswith(".doc"):
             content = extract_text_from_docx(file_bytes)
+        elif filename.endswith(".pdf"):
+            content = extract_text_from_pdf(file_bytes)
         else:
             content = file_bytes.decode("utf-8", errors="ignore")
 
