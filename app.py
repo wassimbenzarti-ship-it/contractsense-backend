@@ -599,7 +599,7 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email=""):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("Clé API manquante")
@@ -689,6 +689,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
         # Jurisdiction boost
         all_docs.sort(key=lambda d: 0 if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto") else 1)
+
+        # Director priority boost: docs tagged with this director's org come first (2x priority)
+        if director_email:
+            _dir_prefix = "org:" + director_email + "§"
+            _dir_docs   = [d for d in all_docs if (d.get("source") or "").startswith(_dir_prefix)]
+            _other_docs = [d for d in all_docs if not (d.get("source") or "").startswith(_dir_prefix)]
+            all_docs = _dir_docs + _other_docs
+            if _dir_docs:
+                print(f"Director RAG boost: {len(_dir_docs)} docs prioritized for {director_email}")
 
         # Separate contract models from legal references
         contract_docs = [d for d in all_docs if d.get("category", "").lower() not in LEGAL_CATS]
@@ -1729,11 +1738,14 @@ def analyze_stream():
             if not user_email:
                 q.put({"type": "error", "message": "Connexion requise."})
                 return
-            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
             remaining = 9999
+            _dir_email_stream = ""
             if rows:
                 acc = rows[0]
                 remaining = 9999 if acc.get("is_admin") else (acc.get("analyses_remaining") or 0)
+                _parent_s = (acc.get("parent_email") or "").strip()
+                _dir_email_stream = _parent_s if _parent_s else (user_email if (acc.get("role") or "") == "directeur" else "")
             if remaining <= 0:
                 q.put({"type": "error", "message": "Quota epuise."})
                 return
@@ -1747,7 +1759,8 @@ def analyze_stream():
                 return
             _cb(f"\U0001f4c4 Document lu ({len(contract_text.split())} mots)...")
             result = analyze_contract(contract_text, lang, contract_type, api_key, partie,
-                                      file_bytes=file_bytes, filename=filename, progress_cb=_cb)
+                                      file_bytes=file_bytes, filename=filename, progress_cb=_cb,
+                                      director_email=_dir_email_stream)
             # Quota decrement
             if remaining < 9999:
                 supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
@@ -1811,7 +1824,7 @@ def analyze():
             return jsonify({"error": "Connexion requise pour analyser un contrat."}), 401
 
         # Check analyses_remaining — upsert row if missing (3 free analyses by default)
-        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
         if not rows:
             # First time user — create free account with 3 analyses
             import datetime as _dt
@@ -1822,12 +1835,16 @@ def analyze():
                 "subscription_end": reset_date
             })
             remaining = 3
+            director_email = user_email  # new user = directeur by default
         else:
             acc = rows[0]
             if acc.get("is_admin"):
                 remaining = 9999  # admin = unlimited
             else:
                 remaining = acc.get("analyses_remaining", 0) or 0
+            # Director email: juriste → parent_email; directeur → own email
+            _parent = (acc.get("parent_email") or "").strip()
+            director_email = _parent if _parent else (user_email if (acc.get("role") or "") == "directeur" else "")
 
         if remaining <= 0:
             return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
@@ -1837,7 +1854,7 @@ def analyze():
         contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
+        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename, director_email=director_email)
 
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
@@ -2193,6 +2210,17 @@ def queue_validate():
         category = admin_category or contract.get("category", "generic")
         party_label = admin_party_label or contract.get("party_label", "")
 
+        # Resolve director_email from submitted_by → parent_email (for RAG priority tagging)
+        _submitted_by = contract.get("submitted_by", "")
+        _dir_email = ""
+        if _submitted_by:
+            _u = supa_get("user_accounts", {"email": f"eq.{_submitted_by}", "select": "parent_email,role", "limit": "1"})
+            if _u:
+                _dir_email = (_u[0].get("parent_email") or "").strip()
+                if not _dir_email and (_u[0].get("role") or "") == "directeur":
+                    _dir_email = _submitted_by
+        _source_prefix = ("org:" + _dir_email + "§") if _dir_email else ""
+
         # Use admin-edited modifications if provided
         edited_mods = body.get("edited_modifications", [])
         if edited_mods:
@@ -2228,7 +2256,7 @@ def queue_validate():
                 "contract_type": category,
                 "content": chunk,
                 "embedding": embedding,
-                "source": title_base,
+                "source": _source_prefix + title_base,
                 "key_clauses": contract.get("key_clauses", []),
                 "score": contract.get("score", 50),
                 "validated_at": datetime.datetime.now().isoformat()
@@ -2251,7 +2279,7 @@ def queue_validate():
                 "contract_type": category,
                 "content": mod_text,
                 "embedding": json.dumps(embedding),
-                "source": "admin_validated_clause",
+                "source": _source_prefix + "admin_validated_clause",
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
