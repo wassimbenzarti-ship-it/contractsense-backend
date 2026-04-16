@@ -335,7 +335,8 @@ def save_rag_doc(doc):
             except Exception:
                 emb = None
         if emb and isinstance(emb, list) and len(emb) == 1024:
-            doc_copy["embedding_vector"] = emb  # pgvector column
+            # pgvector requires string format "[x,y,...]" — NOT a JSON array
+            doc_copy["embedding_vector"] = "[" + ",".join(str(x) for x in emb) + "]"
             doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
             print("save_rag_doc: embedding 1024 dims OK")
         elif emb and isinstance(emb, list):
@@ -2708,6 +2709,56 @@ def rag_reindex():
         })
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/rag/reindex-all", methods=["POST", "OPTIONS"])
+def rag_reindex_all():
+    """Force re-embed ALL RAG docs (including those with malformed embedding_vector).
+    Use when pgvector search returns 0 results despite docs having embedding_vector."""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        if not voyage_key:
+            return jsonify({"error": "VOYAGE_API_KEY manquante"}), 400
+        fixed = skipped = errors = 0
+        offset = 0
+        batch_size = 50  # smaller batches — each needs a Voyage AI call
+        while True:
+            docs = supa_get("rag_documents", {
+                "select": "id,content",
+                "limit": str(batch_size),
+                "offset": str(offset)
+            })
+            if not docs:
+                break
+            for doc in docs:
+                try:
+                    content = (doc.get("content") or "").strip()
+                    if not content:
+                        skipped += 1
+                        continue
+                    emb = get_embedding(content[:1000], voyage_key)
+                    if not emb or len(emb) != 1024:
+                        skipped += 1
+                        continue
+                    vec_str = "[" + ",".join(str(x) for x in emb) + "]"
+                    patch_r = supa_patch("rag_documents",
+                                        {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
+                                        "id=eq." + doc["id"])
+                    if patch_r.ok or patch_r.status_code == 204:
+                        fixed += 1
+                    else:
+                        errors += 1
+                except Exception as de:
+                    errors += 1
+            if len(docs) < batch_size:
+                break
+            offset += batch_size
+        return jsonify({"success": True, "fixed": fixed, "skipped": skipped, "errors": errors,
+                        "message": f"{fixed} docs ré-indexés (embedding_vector corrigé en format pgvector)"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
