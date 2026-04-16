@@ -707,6 +707,37 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             all_docs = search_rag_keyword(search_query, contract_type=contract_type, top_k=10)
             print(f"Keyword RAG fallback: {len(all_docs)} docs")
 
+        # 4. Supplement: user-uploaded docs (non-ailovecontracts) via source/title ilike
+        # Prevents protected-source dominance from burying user docs in hybrid BM25 ranking
+        try:
+            _protected_pfx = ["ailovecontracts", "lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit"]
+            _kw_terms = list(dict.fromkeys(
+                w for w in re.findall(r'[a-zA-ZÀ-ÿ]{5,}', (contract_type + " " + contract_text[:300]).lower())
+                if w not in {"cette","avec","dans","pour","les","des","une","par","sur","que","qui","leur","leurs","dont","mais","aussi","entre","comme","plus","sans","tout","tous","toute","toutes","selon","vers","sous"}
+            ))[:4]
+            _existing_ids = {d.get("id") for d in all_docs}
+            _suppl_key = SUPA_SERVICE_KEY or SUPA_KEY
+            _added = 0
+            for _kw in _kw_terms:
+                _sr = requests.get(
+                    SUPA_URL + "/rest/v1/rag_documents",
+                    headers={"apikey": _suppl_key, "Authorization": "Bearer " + _suppl_key},
+                    params={"select": "id,title,content,source,category,party_label,jurisdiction",
+                            "or": f"(source.ilike.*{_kw}*,title.ilike.*{_kw}*)",
+                            "limit": "30"},
+                    timeout=8
+                )
+                if _sr.ok:
+                    for _d in (_sr.json() or []):
+                        if _d.get("id") not in _existing_ids and not any(p in (_d.get("source","")).lower() for p in _protected_pfx):
+                            all_docs.insert(0, _d)  # prepend — higher priority than protected sources
+                            _existing_ids.add(_d.get("id"))
+                            _added += 1
+            if _added:
+                print(f"Supplementary user-doc search: +{_added} non-protected docs added")
+        except Exception as _se:
+            print("Supplementary search error: " + str(_se))
+
         # Jurisdiction boost
         all_docs.sort(key=lambda d: 0 if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto") else 1)
 
