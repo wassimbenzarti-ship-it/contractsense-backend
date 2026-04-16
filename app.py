@@ -620,6 +620,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     legal_context = ""
     _rag_contract_count = 0
     _rag_legal_count = 0
+    _rag_debug_contract = []
+    _rag_debug_legal = []
     LEGAL_CATS = {"loi", "law", "law_employment", "law_commercial", "law_civil",
                   "doctrine", "jurisprudence", "legal", "legislation"}
     # Quick jurisdiction detection for boosting relevant docs
@@ -741,6 +743,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis",
                         "ailovecontracts"]  # modèles de clauses tierces — inspiration silencieuse, jamais citées
 
+        # Build debug info — tracks which docs the model actually receives
+        _rag_debug_contract = []
+        _rag_debug_legal = []
+
         # Context 1: contract models → client protection
         if contract_docs:
             validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
@@ -758,6 +764,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                 model_context += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
                 if doc.get("party_label"):
                     model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label", "")) + "]\n"
+                _rag_debug_contract.append({
+                    "title": title_doc,
+                    "source": doc.get("source", ""),
+                    "category": doc.get("category", ""),
+                    "protected": is_prot
+                })
 
         # Context 2: legal references → conformite
         if legal_docs:
@@ -772,6 +784,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     legal_context += "→ Articles disponibles: " + ", ".join(arts) + "\n"
                 legal_context += content_doc + "\n"
                 legal_context += "→ rag_source: " + title_doc + "\n"
+                _rag_debug_legal.append({
+                    "title": title_doc,
+                    "source": doc.get("source", ""),
+                    "category": doc.get("category", "")
+                })
 
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
@@ -1039,6 +1056,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
     result["_paragraphs"] = paragraphs
+    # Debug: what the RAG pipeline actually found and sent to the model
+    _citeable = [d["title"] for d in _rag_debug_contract if not d["protected"]]
+    _protected = [d["title"] for d in _rag_debug_contract if d["protected"]]
+    result["_rag_debug"] = {
+        "contract_docs_in_context": _rag_debug_contract,
+        "legal_docs_in_context": _rag_debug_legal,
+        "citeable_sources": _citeable,
+        "protected_sources_silenced": _protected,
+        "total_found": _rag_contract_count + _rag_legal_count
+    }
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
