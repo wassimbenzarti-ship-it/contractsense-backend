@@ -706,6 +706,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Domain filter: keep only contract models relevant to this contract type
         # Docs tagged contract_{type} are domain-specific; docs tagged "contract" are generic (allowed for all)
         # This prevents NDA clauses from appearing in employment contracts, etc.
+        _ct_lower = (contract_type or "").lower()
         _CT_DOMAINS = {
             "employment": "contract_employment",
             "cdi": "contract_employment", "cdd": "contract_employment",
@@ -726,7 +727,6 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             print(f"Domain filter ({_ct_lower}→{_domain_cat}): {_n_before_domain} → {len(contract_docs)} contract docs")
 
         # Filter employment law docs for non-employment contracts
-        _ct_lower = (contract_type or "").lower()
         _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi"])
         if not _is_employment:
             _emp_kw = ["code du travail", "loi 65-99", "licenciement", "preavis", "heures supplementaires", "conge annuel"]
