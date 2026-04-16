@@ -554,7 +554,9 @@ def extract_text_from_docx(file_bytes):
             raise ValueError("Impossible de lire le fichier Word: " + str(e2))
 
 def extract_text_from_pdf(file_bytes):
-    """Extract plain text from a PDF using pypdf (pure-Python, no system deps)."""
+    """Extract plain text from a PDF. Uses pypdf for text PDFs, falls back to
+    Claude Vision (Haiku) for scanned PDFs where pypdf returns little/no text."""
+    text = ""
     try:
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(file_bytes))
@@ -563,10 +565,49 @@ def extract_text_from_pdf(file_bytes):
             t = page.extract_text() or ""
             if t.strip():
                 pages.append(t)
-        return "\n".join(pages)
+        text = "\n".join(pages)
     except Exception as e:
-        print("PDF extract error: " + str(e))
-        return ""
+        print("pypdf error: " + str(e))
+
+    # If pypdf extracted enough text, use it
+    if len(text.strip()) > 200:
+        return text
+
+    # Scanned PDF fallback: send to Claude Vision via Anthropic API
+    print("PDF semble scanné (pypdf < 200 chars) — fallback Claude Vision OCR")
+    try:
+        _ak = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not _ak:
+            return text
+        _client = anthropic.Anthropic(api_key=_ak)
+        _pdf_b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
+        _resp = _client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": _pdf_b64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": "Extrait tout le texte de ce document. Retourne uniquement le texte brut, sans commentaires ni formatage markdown."
+                    }
+                ]
+            }]
+        )
+        ocr_text = _resp.content[0].text if _resp.content else ""
+        print(f"Claude Vision OCR: {len(ocr_text)} chars extraits")
+        return ocr_text
+    except Exception as e:
+        print("Claude Vision PDF OCR error: " + str(e))
+        return text
 
 def read_file(file):
     file_bytes = file.read()
