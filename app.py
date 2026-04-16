@@ -2471,19 +2471,28 @@ def rag_diag():
             except Exception as e:
                 diag["voyage_test"] = "error: " + str(e)
 
-        # 3. Count docs in RAG + check embedding_vector coverage
+        # 3. Count docs in RAG using Prefer: count=exact (bypasses 1000-row limit)
         try:
-            all_docs = supa_get("rag_documents", {"select": "id,source,category,jurisdiction,embedding_vector", "limit": "2000"})
-            diag["total_docs"] = len(all_docs or [])
-            # Count docs with embedding_vector populated (non-null, non-empty)
+            key = SUPA_SERVICE_KEY or SUPA_KEY
+            cnt_r = requests.get(
+                SUPA_URL + "/rest/v1/rag_documents",
+                headers={"apikey": key, "Authorization": "Bearer " + key,
+                         "Prefer": "count=exact"},
+                params={"select": "id,source,category,jurisdiction,embedding_vector",
+                        "limit": "1"},
+                timeout=15
+            )
+            total_count = int(cnt_r.headers.get("content-range", "0/0").split("/")[-1] or 0)
+            diag["total_docs"] = total_count
+            diag["total_docs_note"] = "count exact via Prefer:count=exact"
+            # Sample 1000 for category/missing-vector stats
+            all_docs = supa_get("rag_documents", {"select": "id,source,category,jurisdiction,embedding_vector", "limit": "1000"})
             with_vec = [d for d in (all_docs or []) if d.get("embedding_vector")]
-            diag["docs_with_embedding_vector"] = len(with_vec)
-            diag["docs_missing_vector"] = diag["total_docs"] - len(with_vec)
-            # Breakdown by category/jurisdiction
+            diag["sample_size"] = len(all_docs or [])
+            diag["docs_with_embedding_vector_in_sample"] = len(with_vec)
             from collections import Counter
             diag["categories"] = dict(Counter(d.get("category","?") for d in (all_docs or [])))
             diag["jurisdictions"] = dict(Counter(d.get("jurisdiction") or "null" for d in (all_docs or [])))
-            # Sample sources
             diag["sample_sources"] = list(set(d.get("source","?") for d in (all_docs or [])))[:10]
         except Exception as e:
             diag["doc_count_error"] = str(e)
@@ -2495,6 +2504,7 @@ def rag_diag():
                 vec = get_embedding("contrat de travail CDI licenciement préavis Maroc", voyage_key)
                 if vec and len(vec) == 1024:
                     results = search_rag_pgvector(vec, top_k=5)
+                    results = results if isinstance(results, list) else []
                     diag["pgvector_test"] = "ok"
                     diag["pgvector_results"] = len(results)
                     diag["pgvector_titles"] = [r.get("title","?") for r in results[:3]]
@@ -2576,22 +2586,31 @@ def rag_list():
 @app.route("/rag/find", methods=["GET"])
 def rag_find():
     """Search RAG documents by keyword in source/title. GET /rag/find?q=investissement"""
-    q = (request.args.get("q") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify({"error": "Paramètre q requis"}), 400
     try:
-        docs = supa_get("rag_documents", {
-            "select": "id,title,source,category,jurisdiction",
-            "limit": "2000"
-        })
-        matches = [d for d in (docs or []) if q in (d.get("source","") + d.get("title","")).lower()]
+        # Use Supabase server-side ilike filter — bypasses the 1000-row client limit
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key}
+        r = requests.get(
+            SUPA_URL + "/rest/v1/rag_documents",
+            headers=headers,
+            params={
+                "select": "id,title,source,category,jurisdiction",
+                "or": f"(source.ilike.*{q}*,title.ilike.*{q}*)",
+                "limit": "2000"
+            },
+            timeout=15
+        )
+        docs = r.json() if r.ok else []
         sources = {}
-        for d in matches:
+        for d in (docs or []):
             src = d.get("source","?")
             sources[src] = sources.get(src, 0) + 1
         return jsonify({
             "query": q,
-            "matching_chunks": len(matches),
+            "matching_chunks": len(docs or []),
             "sources": [{"source": s, "chunks": n} for s, n in sorted(sources.items())]
         })
     except Exception as e:
