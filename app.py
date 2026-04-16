@@ -2423,6 +2423,12 @@ def rag_upload():
 
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
+
+        # Upsert: delete existing docs with same source name to avoid duplicates
+        deleted = delete_rag_by_source(title)
+        if deleted:
+            print(f"rag_upload: supprimé {deleted} ancien(s) chunk(s) pour source='{title}'")
+
         for i, chunk in enumerate(chunks):
             embedding = get_embedding(chunk, voyage_key)
             chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
@@ -2438,7 +2444,8 @@ def rag_upload():
             })
 
         total = load_rag()
-        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
+        return jsonify({"success": True, "chunks": len(chunks), "source": title,
+                        "replaced": deleted, "total_docs": len(total["documents"])})
 
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
