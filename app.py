@@ -2013,7 +2013,30 @@ def analyze():
         contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename, director_email=director_email)
+        # Fetch director's personal cabinet models (priority RAG context)
+        _user_models_extra = []
+        _models_email_a = director_email or user_email
+        if _models_email_a:
+            try:
+                _sk_a = SUPA_SERVICE_KEY or SUPA_KEY
+                _um_a = requests.get(
+                    SUPA_URL + "/rest/v1/user_models",
+                    headers={"apikey": _sk_a, "Authorization": "Bearer " + _sk_a},
+                    params={"user_email": f"eq.{_models_email_a}",
+                            "select": "id,filename,content",
+                            "limit": "10"},
+                    timeout=5
+                )
+                if _um_a.ok:
+                    _user_models_extra = [m for m in (_um_a.json() or [])
+                                          if m.get("content") and len(m.get("content", "").strip()) > 50]
+                    if _user_models_extra:
+                        print(f"[/analyze] Cabinet models injected: {len(_user_models_extra)} for {_models_email_a}")
+            except Exception as _ume_a:
+                print("user_models fetch error (analyze): " + str(_ume_a))
+        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename,
+                                  director_email=director_email,
+                                  user_models_extra=_user_models_extra or None)
 
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
