@@ -2596,6 +2596,7 @@ def models_upload():
     if request.method == "OPTIONS": return "", 204
     try:
         user_email = request.form.get("user_email", "").strip()
+        user_id = request.form.get("user_id", "").strip() or None
         file = request.files.get("file")
         if not file or not user_email:
             return jsonify({"error": "Fichier et user_email requis"}), 400
@@ -2622,14 +2623,11 @@ def models_upload():
         except Exception:
             pass
         doc_id = str(uuid.uuid4())
-        supa_insert("user_models", {
-            "id": doc_id,
-            "user_email": user_email,
-            "filename": file.filename,
-            "content": content,
-            "category": "modele",
-            "is_public": False
-        })
+        row = {"id": doc_id, "user_email": user_email, "filename": file.filename,
+               "content": content, "category": "modele", "is_public": False}
+        if user_id:
+            row["user_id"] = user_id
+        supa_insert("user_models", row)
         print(f"models_upload: {file.filename} ({len(content)} chars) → user_models for {user_email}")
         return jsonify({"success": True, "id": doc_id, "filename": file.filename, "chars": len(content)})
     except Exception as e:
