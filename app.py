@@ -441,8 +441,11 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
         if r.ok:
             results = r.json()
+            if not isinstance(results, list):
+                print(f"pgvector unexpected response (not a list): {str(results)[:200]}")
+                return []
             print(f"pgvector search: {len(results)} results")
-            return results or []
+            return results
         else:
             print("pgvector search error " + str(r.status_code) + ": " + r.text[:300])
             return []
@@ -463,9 +466,12 @@ def search_rag_hybrid(query_text, query_embedding, top_k=15, jurisdiction=None):
         headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
         r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.ok:
-            results = r.json() or []
-            print(f"Hybrid BM25+vec: {len(results)} results")
-            return results
+            results = r.json()
+            if not isinstance(results, list):
+                print(f"Hybrid unexpected response (not a list): {str(results)[:200]}")
+            else:
+                print(f"Hybrid BM25+vec: {len(results)} results")
+                return results
         else:
             print(f"Hybrid search error {r.status_code} — fallback to pgvector")
     except Exception as e:
