@@ -658,7 +658,7 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email=""):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("Clé API manquante")
@@ -836,12 +836,31 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Build debug info — tracks which docs the model actually receives
         _rag_debug_contract = []
         _rag_debug_legal = []
+        model_context = ""
+        legal_context = ""
+
+        # Context 0: Director's own cabinet models — always injected, highest priority, citeable
+        if user_models_extra:
+            model_context = "\n\n=== MODÈLES CABINET (RÉFÉRENCE PRIORITAIRE — TOUJOURS CITER) ===\n"
+            for um in user_models_extra[:8]:
+                title_um = um.get("filename", "Modele cabinet")
+                content_um = str(um.get("content", ""))[:2000]
+                if content_um.strip():
+                    model_context += "\n=== " + title_um + " ===\n"
+                    model_context += content_um + "\n"
+                    model_context += "→ rag_source: " + title_um + "\n"
+                    _rag_debug_contract.insert(0, {
+                        "title": title_um,
+                        "source": "cabinet-model",
+                        "category": "modele",
+                        "protected": False
+                    })
 
         # Context 1: contract models → client protection
         if contract_docs:
             validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
             reference = [d for d in contract_docs if "validated_clause" not in d.get("source", "")]
-            model_context = "\n\n=== MODÈLES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
+            model_context += "\n\n=== MODÈLES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
             for doc in (validated + reference)[:12]:
                 title_doc = doc.get("title", "") or doc.get("source", "modele")
                 content_doc = str(doc.get("content", ""))[:1400]
@@ -1875,9 +1894,32 @@ def analyze_stream():
                 q.put({"type": "error", "message": "Fichier vide ou illisible."})
                 return
             _cb(f"\U0001f4c4 Document lu ({len(contract_text.split())} mots)...")
+            # Fetch director's personal cabinet models (used as priority RAG context)
+            _user_models_extra = []
+            _models_email = _dir_email_stream or user_email
+            if _models_email:
+                try:
+                    _sk = SUPA_SERVICE_KEY or SUPA_KEY
+                    _um_r = requests.get(
+                        SUPA_URL + "/rest/v1/user_models",
+                        headers={"apikey": _sk, "Authorization": "Bearer " + _sk},
+                        params={"user_email": f"eq.{_models_email}",
+                                "select": "id,filename,content",
+                                "content": "not.is.null",
+                                "limit": "10"},
+                        timeout=5
+                    )
+                    if _um_r.ok:
+                        _user_models_extra = [m for m in (_um_r.json() or [])
+                                              if m.get("content") and len(m.get("content","").strip()) > 50]
+                        if _user_models_extra:
+                            print(f"Cabinet models injected: {len(_user_models_extra)} for {_models_email}")
+                except Exception as _ume:
+                    print("user_models fetch error: " + str(_ume))
             result = analyze_contract(contract_text, lang, contract_type, api_key, partie,
                                       file_bytes=file_bytes, filename=filename, progress_cb=_cb,
-                                      director_email=_dir_email_stream)
+                                      director_email=_dir_email_stream,
+                                      user_models_extra=_user_models_extra or None)
             # Quota decrement
             if remaining < 9999:
                 supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
@@ -2522,6 +2564,46 @@ def rag_upload():
 
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+@app.route("/models/upload", methods=["POST", "OPTIONS"])
+def models_upload():
+    """Upload a personal cabinet model for a director — no admin validation needed.
+    Stored in user_models with full text content; injected as priority RAG context
+    into every analysis run by that director."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        user_email = request.form.get("user_email", "").strip()
+        file = request.files.get("file")
+        if not file or not user_email:
+            return jsonify({"error": "Fichier et user_email requis"}), 400
+        file_bytes = file.read()
+        fname = file.filename.lower()
+        if fname.endswith(".docx") or fname.endswith(".doc"):
+            content = extract_text_from_docx(file_bytes)
+        elif fname.endswith(".pdf"):
+            content = extract_text_from_pdf(file_bytes)
+        else:
+            content = file_bytes.decode("utf-8", errors="ignore")
+        content = (content or "").replace("\x00", "")
+        if len(content.strip()) < 20:
+            return jsonify({"error": "Document vide ou illisible"}), 400
+        # Resolve user_id from user_accounts
+        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "id", "limit": "1"})
+        user_id = rows[0].get("id") if rows else None
+        doc_id = str(uuid.uuid4())
+        supa_insert("user_models", {
+            "id": doc_id,
+            "user_id": user_id,
+            "user_email": user_email,
+            "filename": file.filename,
+            "content": content,
+            "category": "modele",
+            "is_public": False
+        })
+        print(f"models_upload: {file.filename} ({len(content)} chars) → user_models for {user_email}")
+        return jsonify({"success": True, "id": doc_id, "filename": file.filename, "chars": len(content)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/rag/diag", methods=["GET", "POST"])
 def rag_diag():
