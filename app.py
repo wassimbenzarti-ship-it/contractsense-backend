@@ -2591,7 +2591,7 @@ def models_upload():
         rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "id", "limit": "1"})
         user_id = rows[0].get("id") if rows else None
         doc_id = str(uuid.uuid4())
-        supa_post("user_models", {
+        supa_insert("user_models", {
             "id": doc_id,
             "user_id": user_id,
             "user_email": user_email,
