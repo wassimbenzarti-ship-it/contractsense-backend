@@ -1438,7 +1438,7 @@ async function checkRole(){
   if(!_cu)return;
   try{
     // Utilise la clé anon pour contourner la RLS utilisateur (même approche que loadJuristes)
-    var r=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=role,parent_email',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+    var r=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=role,parent_email,is_admin,payment_status',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
     if(r.ok){
       var d=await r.json();
       if(d[0]){_userRole=d[0].role;_userParentEmail=d[0].parent_email;_isAdmin=!!d[0].is_admin;window._dirPayStatus=d[0].payment_status;}
@@ -1657,19 +1657,35 @@ async function loadDash(){
   if(_userRole==='directeur'||_isAdmin)loadJuristes();
 }
 async function upMdl(inp){
+  console.log('[upMdl] triggered, _cu=', _cu ? _cu.email : 'null');
   if(!_cu){showAuth();return;}
   if(!_userRole) await checkRole();
-  var f=inp.files[0];if(!f)return;
+  console.log('[upMdl] role=', _userRole, 'files=', inp.files.length);
+  var f=inp.files[0];
+  if(!f){alert('Aucun fichier sélectionné.');return;}
+  var lbl=document.querySelector('label[for="minp"]');
+  var origLbl=lbl?lbl.textContent:'';
+  if(lbl)lbl.textContent='Upload en cours...';
   var fd=new FormData();
   fd.append('file',f);
   fd.append('user_email',_cu.email);
+  console.log('[upMdl] posting to', BACKEND+'/models/upload', 'file=', f.name, 'email=', _cu.email);
   try{
     var r=await fetch(BACKEND+'/models/upload',{method:'POST',body:fd});
+    console.log('[upMdl] response status=', r.status);
     var d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Erreur upload');
+    console.log('[upMdl] response body=', d);
+    if(!r.ok) throw new Error(d.error||'Erreur upload ('+r.status+')');
+    if(lbl)lbl.textContent=origLbl;
+    inp.value='';
     alert('Modèle personnel enregistré (' + d.chars + ' caractères). Il sera utilisé en priorité dans vos analyses.');
     loadDash();
-  }catch(e){alert('Erreur : '+e.message);}
+  }catch(e){
+    console.error('[upMdl] error:', e);
+    if(lbl)lbl.textContent=origLbl;
+    inp.value='';
+    alert('Erreur upload : '+e.message);
+  }
 }
 
 async function _decrementAnalyses(){
