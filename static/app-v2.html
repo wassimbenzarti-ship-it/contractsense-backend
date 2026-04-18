@@ -1660,53 +1660,16 @@ async function upMdl(inp){
   if(!_cu){showAuth();return;}
   if(!_userRole) await checkRole();
   var f=inp.files[0];if(!f)return;
-  var r=await sf('/rest/v1/user_models',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify({user_id:_cu.id,user_email:_cu.email,filename:f.name,category:'contract',is_public:false})});
-  if(r.ok){
-    var alertMsg='Modele uploade';
-    try{
-      var fd=new FormData();
-      fd.append('file',f);
-      fd.append('source',f.name);
-      fd.append('category','contract');
-      fd.append('suggested_by',_cu.email);
-      if(_userRole==='juriste' && _userParentEmail){
-        // Juriste -> soumet au directeur pour validation
-        fd.append('target_email',_userParentEmail);
-        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
-        var sd=await r2.json();
-        if(!r2.ok) throw new Error(sd.error||'Erreur suggest-to-director');
-        alertMsg='Modele soumis au directeur juridique pour validation';
-      } else {
-        // Directeur -> approche avant/après pour trouver l'ID créé et le forwarder à l'admin
-        var dirEmail=encodeURIComponent(_cu.email);
-        // 1. Snapshot des IDs existants dans la boite directeur
-        var idsBefore=[];
-        try{var rlB=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);if(rlB.ok){var lb=await rlB.json();idsBefore=(lb.suggestions||[]).map(function(s){return s.id;});}}catch(e){}
-        // 2. Créer la suggestion (directeur se soumet à lui-même)
-        fd.append('target_email',_cu.email);
-        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
-        var r2txt=await r2.text();
-        if(!r2.ok) throw new Error('suggest-to-director: '+r2.status+' '+r2txt);
-        // 3. Récupérer la liste après et trouver la nouvelle suggestion (diff des IDs)
-        var rlA=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);
-        if(rlA.ok){
-          var la=await rlA.json();
-          var newSuggs=(la.suggestions||[]).filter(function(s){return idsBefore.indexOf(s.id)<0;});
-          if(newSuggs.length>0){
-            var sid=newSuggs[0].id;
-            await fetch(BACKEND+'/suggestions/forward-to-admin/'+sid,{method:'POST'});
-            alertMsg='Modele soumis pour validation admin';
-          } else {
-            alertMsg='Modele soumis pour validation admin';
-          }
-        } else {
-          alertMsg='Modele soumis pour validation admin';
-        }
-      }
-    }catch(e2){console.log('Suggest error:',e2);alertMsg='Modele uploade (erreur soumission: '+e2.message+')';}
-    alert(alertMsg);
+  var fd=new FormData();
+  fd.append('file',f);
+  fd.append('user_email',_cu.email);
+  try{
+    var r=await fetch(BACKEND+'/models/upload',{method:'POST',body:fd});
+    var d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erreur upload');
+    alert('Modèle personnel enregistré (' + d.chars + ' caractères). Il sera utilisé en priorité dans vos analyses.');
     loadDash();
-  }else alert('Erreur upload');
+  }catch(e){alert('Erreur : '+e.message);}
 }
 
 async function _decrementAnalyses(){
