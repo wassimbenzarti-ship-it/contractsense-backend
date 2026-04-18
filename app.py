@@ -2590,6 +2590,11 @@ def models_upload():
         # Resolve user_id from user_accounts
         rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "id", "limit": "1"})
         user_id = rows[0].get("id") if rows else None
+        # Delete any existing record with same user_email + filename (avoid 409 unique conflict)
+        try:
+            supa_delete("user_models", {"user_email": f"eq.{user_email}", "filename": f"eq.{file.filename}"})
+        except Exception:
+            pass
         doc_id = str(uuid.uuid4())
         supa_insert("user_models", {
             "id": doc_id,
