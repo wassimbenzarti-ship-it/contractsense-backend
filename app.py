@@ -442,8 +442,11 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
         r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
         if r.ok:
             results = r.json()
+            if not isinstance(results, list):
+                print(f"pgvector unexpected response (not a list): {str(results)[:200]}")
+                return []
             print(f"pgvector search: {len(results)} results")
-            return results or []
+            return results
         else:
             print("pgvector search error " + str(r.status_code) + ": " + r.text[:300])
             return []
@@ -464,9 +467,12 @@ def search_rag_hybrid(query_text, query_embedding, top_k=15, jurisdiction=None):
         headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
         r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.ok:
-            results = r.json() or []
-            print(f"Hybrid BM25+vec: {len(results)} results")
-            return results
+            results = r.json()
+            if not isinstance(results, list):
+                print(f"Hybrid unexpected response (not a list): {str(results)[:200]}")
+            else:
+                print(f"Hybrid BM25+vec: {len(results)} results")
+                return results
         else:
             print(f"Hybrid search error {r.status_code} — fallback to pgvector")
     except Exception as e:
@@ -856,29 +862,44 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                         "protected": False
                     })
 
-        # Context 1: contract models → client protection
+        # Context 1: contract models → split between director policy (NIVEAU 1) and generic protective (NIVEAU 2)
         if contract_docs:
-            validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
-            reference = [d for d in contract_docs if "validated_clause" not in d.get("source", "")]
-            model_context += "\n\n=== MODÈLES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
-            for doc in (validated + reference)[:12]:
+            def _is_director_model(doc):
+                source = doc.get("source", "")
+                cat = doc.get("category", "")
+                return ("validated_clause" in source or "cabinet-model" in source
+                        or cat in ("modele", "director_model"))
+            validated = [d for d in contract_docs if _is_director_model(d)]
+            reference = [d for d in contract_docs if not _is_director_model(d)]
+
+            def _fmt_doc(doc, ctx):
                 title_doc = doc.get("title", "") or doc.get("source", "modele")
                 content_doc = str(doc.get("content", ""))[:1400]
                 is_prot = any(p in (title_doc + doc.get("source", "")).lower() for p in protected_kw)
                 arts = extract_article_refs(content_doc, title_doc)
-                model_context += "\n=== " + title_doc + " ===\n"
+                ctx += "\n--- " + title_doc + " ---\n"
                 if arts:
-                    model_context += "→ Articles cités: " + ", ".join(arts) + "\n"
-                model_context += content_doc + "\n"
-                model_context += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
+                    ctx += "→ Articles cités: " + ", ".join(arts) + "\n"
+                ctx += content_doc + "\n"
+                ctx += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
                 if doc.get("party_label"):
-                    model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label", "")) + "]\n"
+                    ctx += "[PARTIE PROTEGEE: " + str(doc.get("party_label", "")) + "]\n"
                 _rag_debug_contract.append({
                     "title": title_doc,
                     "source": doc.get("source", ""),
                     "category": doc.get("category", ""),
                     "protected": is_prot
                 })
+                return ctx
+
+            if validated:
+                model_context += "\n\n=== POLITIQUE JURIDIQUE DU DIRECTEUR (CLAUSES VALIDÉES) ===\n"
+                for doc in validated[:8]:
+                    model_context = _fmt_doc(doc, model_context)
+            if reference:
+                model_context += "\n\n=== CLAUSES PROTECTRICES DE RÉFÉRENCE ===\n"
+                for doc in reference[:6]:
+                    model_context = _fmt_doc(doc, model_context)
 
         # Context 2: legal references → conformite
         if legal_docs:
@@ -999,22 +1020,24 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "\n\n"
         + rag_context
         + legal_context
-        + "\n\nRÈGLE ABSOLUE — MODÈLES CABINET (PRIORITÉ MAXIMALE):\n"
-        "Quand un MODÈLE CABINET figure dans le contexte (section MODÈLES CABINET RÉFÉRENCE PRIORITAIRE),\n"
-        "tu DOIS reprendre ses clauses, termes et chiffres EXACTS pour rédiger tes propositions.\n"
-        "EXEMPLES OBLIGATOIRES:\n"
-        "- Modèle prévoit préavis 12 mois → ta proposition dit 12 mois (pas 180 jours)\n"
-        "- Modèle prévoit CIRDI à Paris → ta proposition cite le CIRDI à Paris (pas CNUDCI)\n"
-        "- Modèle prévoit indemnité 24 mois → ta proposition dit 24 mois\n"
-        "- Modèle prévoit stabilisation fiscale 15 ans → ta proposition dit 15 ans\n"
-        "- Modèle prévoit renégociation 30j puis résolution 90j → ta proposition reprend ces délais\n"
-        "INTERDIT: inventer des délais, tribunaux ou mécanismes différents quand le modèle cabinet traite du même sujet.\n"
-        "Pour chaque modification, vérifie d'abord si le modèle cabinet contient une clause sur ce sujet — si oui, UTILISE-LA.\n"
-        "Cite rag_source avec le nom du fichier modèle cabinet quand tu t'en inspires.\n\n"
-        "ATTENTION sur les clauses validées du RAG:\n"
-        "- Utilise-les UNIQUEMENT si elles sont favorables à " + partie + "\n"
-        "- Si une clause validée favorise l'autre partie, IGNORE-LA\n"
-        "- Vérifie toujours que ta proposition avantage bien " + partie + "\n\n"
+        + "\n\n=== HIÉRARCHIE DES SOURCES — RÈGLE D'UTILISATION ===\n"
+        "NIVEAU 0 — MODÈLES CABINET (section MODÈLES CABINET ci-dessus) — PRIORITÉ ABSOLUE :\n"
+        "   Pour chaque modification, vérifie D'ABORD si un modèle cabinet traite du même sujet.\n"
+        "   Si oui : reprendre ses clauses, termes et chiffres EXACTS. Exemples obligatoires :\n"
+        "   · Modèle prévoit préavis 12 mois → proposed dit 12 mois (pas 180 jours)\n"
+        "   · Modèle prévoit CIRDI à Paris → proposed cite CIRDI à Paris (pas CNUDCI)\n"
+        "   · Modèle prévoit indemnité 24 mois → proposed dit 24 mois\n"
+        "   · Modèle prévoit renégociation 30j / résolution 90j → proposed reprend ces délais\n"
+        "   INTERDIT d'inventer quand le modèle cabinet traite du même sujet.\n"
+        "   Cite rag_source avec le nom du fichier modèle cabinet.\n\n"
+        "NIVEAU 1 — POLITIQUE JURIDIQUE DU DIRECTEUR (section ci-dessus) — AUTORITÉ ABSOLUE :\n"
+        "   Clauses validées par le directeur. Si favorable à " + partie + " : proposed reprend termes EXACTS.\n"
+        "   INTERDIT d'inventer si le directeur en prévoit. Si défavorable → ignore, rédige librement.\n\n"
+        "NIVEAU 2 — CLAUSES PROTECTRICES DE RÉFÉRENCE (section ci-dessus) — INSPIRATION :\n"
+        "   Reprends leur logique si favorable à " + partie + " — sans obligation de reproduire mot pour mot.\n\n"
+        "NIVEAU 3 — RÉFÉRENCES JURIDIQUES (lois / doctrine / jurisprudence) — CONFORMITÉ :\n"
+        "   Sert à argumenter les risques dans reason. Cite les articles pertinents.\n"
+        "   N'impose pas la rédaction du proposed.\n\n"
         "IMPORTANT: Le contrat est numéroté [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
