@@ -891,7 +891,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             model_context = "\n\n=== MODÈLES CABINET (RÉFÉRENCE PRIORITAIRE — TOUJOURS CITER) ===\n"
             for um in user_models_extra[:8]:
                 title_um = um.get("filename", "Modele cabinet")
-                content_um = str(um.get("content", ""))[:2000]
+                content_um = str(um.get("content", ""))[:6000]
                 if content_um.strip():
                     model_context += "\n=== " + title_um + " ===\n"
                     model_context += content_um + "\n"
