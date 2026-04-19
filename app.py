@@ -740,8 +740,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
         # Context 1: contract models → split between director policy (validated) and generic protective models
         if contract_docs:
-            validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
-            reference = [d for d in contract_docs if "validated_clause" not in d.get("source", "")]
+            def _is_director_model(doc):
+                source = doc.get("source", "")
+                cat = doc.get("category", "")
+                return ("validated_clause" in source or "cabinet-model" in source
+                        or cat in ("modele", "director_model"))
+            validated = [d for d in contract_docs if _is_director_model(d)]
+            reference = [d for d in contract_docs if not _is_director_model(d)]
 
             def _fmt_doc(doc, model_context_str):
                 title_doc = doc.get("title", "") or doc.get("source", "modele")
