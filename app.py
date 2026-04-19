@@ -690,14 +690,41 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     LEGAL_CATS = {"loi", "law", "law_employment", "law_commercial", "law_civil",
                   "doctrine", "jurisprudence", "legal", "legislation"}
     # Quick jurisdiction detection for boosting relevant docs
+    # Returns (jurisdiction_tag, is_foreign_unsupported)
     def _detect_jur(text):
         s = text[:3000].lower()
-        if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "maroc"]):
-            return "droit_marocain"
-        if any(k in s for k in ["droit français", "loi française", "france", "code civil français"]):
-            return "droit_francais"
-        return "universel"
-    _jurisdiction = _detect_jur(contract_text)
+        if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "royaume du maroc", "maroc"]):
+            return "droit_marocain", False
+        if any(k in s for k in ["droit français", "loi française", "france", "code civil français", "droit de la france"]):
+            return "droit_francais", False
+        # Detect foreign jurisdictions we have no RAG for — don't inject wrong-law docs
+        _foreign_kw = [
+            "estonian law", "droit estonien", "estonia", "estonie",
+            "german law", "droit allemand", "deutsches recht",
+            "english law", "droit anglais", "laws of england",
+            "us law", "droit américain", "new york law", "delaware law",
+            "dutch law", "droit néerlandais", "netherlands",
+            "swiss law", "droit suisse", "switzerland",
+            "belgian law", "droit belge", "belgique",
+            "luxembourg law", "droit luxembourgeois",
+            "spanish law", "droit espagnol",
+            "italian law", "droit italien",
+            "portuguese law", "droit portugais",
+            "polish law", "droit polonais",
+            "czech law", "droit tchèque",
+            "hungarian law", "droit hongrois",
+            "romanian law", "droit roumain",
+            "bulgarian law", "droit bulgare",
+            "greek law", "droit grec",
+            "swedish law", "droit suédois",
+            "danish law", "droit danois",
+            "finnish law", "droit finlandais",
+            "norwegian law", "droit norvégien",
+        ]
+        if any(k in s for k in _foreign_kw):
+            return "foreign_unsupported", True
+        return "universel", False
+    _jurisdiction, _is_foreign_jurisdiction = _detect_jur(contract_text)
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
@@ -823,6 +850,20 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             _n_before_domain = len(contract_docs)
             contract_docs = [d for d in contract_docs if _domain_ok(d)]
             print(f"Domain filter ({_ct_lower}→{_domain_cat}): {_n_before_domain} → {len(contract_docs)} contract docs")
+
+        # Filter legal docs for foreign/unsupported jurisdictions — avoid injecting wrong-law doctrine
+        if _is_foreign_jurisdiction:
+            _n_before_jur = len(legal_docs)
+            legal_docs = []  # No legal RAG for this jurisdiction — let AI use its own knowledge
+            print(f"Foreign jurisdiction detected: suppressed {_n_before_jur} legal docs to avoid wrong-law injection")
+
+        # Filter by jurisdiction match for supported jurisdictions
+        elif _jurisdiction not in ("universel", "auto"):
+            _n_before_jur = len(legal_docs)
+            legal_docs = [d for d in legal_docs
+                          if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto", None)]
+            if len(legal_docs) < _n_before_jur:
+                print(f"Jurisdiction filter ({_jurisdiction}): {_n_before_jur} → {len(legal_docs)} legal docs")
 
         # Filter employment law docs for non-employment contracts
         _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi"])
