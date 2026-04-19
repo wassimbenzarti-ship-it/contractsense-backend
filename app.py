@@ -3290,9 +3290,42 @@ def chat():
         jurisdiction   = (data.get("jurisdiction") or "universel").strip()
         file_cache_id  = (data.get("file_cache_id") or "").strip()
         file_storage_path = (data.get("file_storage_path") or "").strip()
+        user_email_chat = (data.get("user_email") or "").strip()
 
         if not message:
             return jsonify({"error": "message requis"}), 400
+
+        # Fetch director's cabinet models for injection into system prompt
+        _chat_models_ctx = ""
+        if user_email_chat:
+            try:
+                _sk_c = SUPA_SERVICE_KEY or SUPA_KEY
+                # Find director email: juriste → parent_email, directeur → own email
+                _acc_rows = supa_get("user_accounts", {"email": f"eq.{user_email_chat}", "select": "role,parent_email", "limit": "1"})
+                _dir_email_c = user_email_chat  # fallback
+                if _acc_rows:
+                    _parent_c = (_acc_rows[0].get("parent_email") or "").strip()
+                    _role_c = (_acc_rows[0].get("role") or "").strip()
+                    if _parent_c:
+                        _dir_email_c = _parent_c
+                    elif _role_c != "directeur":
+                        _dir_email_c = ""
+                _um_c = requests.get(
+                    SUPA_URL + "/rest/v1/user_models",
+                    headers={"apikey": _sk_c, "Authorization": "Bearer " + _sk_c},
+                    params={"user_email": f"eq.{_dir_email_c}", "select": "filename,content", "limit": "10"},
+                    timeout=5
+                )
+                if _um_c.ok:
+                    _models_c = [m for m in (_um_c.json() or []) if m.get("content") and len(m.get("content","").strip()) > 50]
+                    if _models_c:
+                        _chat_models_ctx = "\n\n=== MODÈLES CABINET DU DIRECTEUR (RÉFÉRENCE PRIORITAIRE) ===\n"
+                        for _mc in _models_c[:5]:
+                            _chat_models_ctx += f"\n--- {_mc.get('filename','Modèle')} ---\n{str(_mc.get('content',''))[:2000]}\n"
+                        _chat_models_ctx += "\n=== FIN MODÈLES CABINET ===\n"
+                        print(f"[/chat] Cabinet models injected: {len(_models_c)} for {_dir_email_c}")
+            except Exception as _ce:
+                print(f"[/chat] user_models fetch error: {_ce}")
 
         # Try to retrieve contract text from cache / storage if not provided
         if not contract_text and file_cache_id:
@@ -3335,6 +3368,10 @@ def chat():
             "Réponds toujours en français, de manière professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+            + _chat_models_ctx
+            + ("\nRÈGLE ABSOLUE — MODÈLES CABINET: Quand un MODÈLE CABINET DIRECTEUR figure ci-dessus, "
+               "reprends SES clauses, termes et chiffres EXACTS dans tes propositions de modification "
+               "(CIRDI pas CNUDCI, préavis 12 mois pas 180 jours, etc.).\n" if _chat_models_ctx else "")
             + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
             + mods_summary
             + """
