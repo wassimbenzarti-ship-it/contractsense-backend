@@ -904,12 +904,25 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     })
 
         # Context 1: contract models → split between director policy (NIVEAU 1) and generic protective (NIVEAU 2)
+        # Rule: admin_validated_clause = NIVEAU 1 for everyone
+        #       modele/director_model = NIVEAU 1 only for the originating director's org; NIVEAU 2 for others
         if contract_docs:
+            _dir_org_prefix = ("org:" + director_email + "§") if director_email else None
             def _is_director_model(doc):
                 source = doc.get("source", "")
                 cat = doc.get("category", "")
-                return ("validated_clause" in source or "cabinet-model" in source
-                        or cat in ("modele", "director_model"))
+                if "validated_clause" in source:
+                    return True  # admin_validated_clause → NIVEAU 1 for all
+                if "cabinet-model" in source:
+                    return True  # user_models injected as Context 0 → always NIVEAU 1
+                if cat in ("modele", "director_model"):
+                    # NIVEAU 1 only for the originating director's org
+                    if _dir_org_prefix and source.startswith(_dir_org_prefix):
+                        return True
+                    if not source.startswith("org:"):
+                        return True  # No org prefix (admin direct upload) → NIVEAU 1
+                    return False  # Different director's model → NIVEAU 2 for this user
+                return False
             validated = [d for d in contract_docs if _is_director_model(d)]
             reference = [d for d in contract_docs if not _is_director_model(d)]
 
