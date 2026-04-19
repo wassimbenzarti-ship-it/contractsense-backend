@@ -738,23 +738,34 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis",
                         "ailovecontracts"]  # modèles de clauses tierces — inspiration silencieuse, jamais citées
 
-        # Context 1: contract models → client protection
+        # Context 1: contract models → split between director policy (validated) and generic protective models
         if contract_docs:
             validated = [d for d in contract_docs if "validated_clause" in d.get("source", "")]
             reference = [d for d in contract_docs if "validated_clause" not in d.get("source", "")]
-            model_context = "\n\n=== MODÈLES DE CONTRATS ET CLAUSES PROTECTRICES ===\n"
-            for doc in (validated + reference)[:12]:
+
+            def _fmt_doc(doc, model_context_str):
                 title_doc = doc.get("title", "") or doc.get("source", "modele")
                 content_doc = str(doc.get("content", ""))[:1400]
                 is_prot = any(p in (title_doc + doc.get("source", "")).lower() for p in protected_kw)
                 arts = extract_article_refs(content_doc, title_doc)
-                model_context += "\n=== " + title_doc + " ===\n"
+                model_context_str += "\n--- " + title_doc + " ---\n"
                 if arts:
-                    model_context += "→ Articles cités: " + ", ".join(arts) + "\n"
-                model_context += content_doc + "\n"
-                model_context += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
+                    model_context_str += "→ Articles cités: " + ", ".join(arts) + "\n"
+                model_context_str += content_doc + "\n"
+                model_context_str += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
                 if doc.get("party_label"):
-                    model_context += "[PARTIE PROTEGEE PAR CE MODELE: " + str(doc.get("party_label", "")) + "]\n"
+                    model_context_str += "[PARTIE PROTEGEE: " + str(doc.get("party_label", "")) + "]\n"
+                return model_context_str
+
+            model_context = ""
+            if validated:
+                model_context += "\n\n=== POLITIQUE JURIDIQUE DU DIRECTEUR (CLAUSES VALIDÉES) ===\n"
+                for doc in validated[:8]:
+                    model_context = _fmt_doc(doc, model_context)
+            if reference:
+                model_context += "\n\n=== CLAUSES PROTECTRICES DE RÉFÉRENCE ===\n"
+                for doc in reference[:6]:
+                    model_context = _fmt_doc(doc, model_context)
 
         # Context 2: legal references → conformite
         if legal_docs:
@@ -870,20 +881,22 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "\n\n"
         + rag_context
         + legal_context
-        + "\n\n=== HIÉRARCHIE DES SOURCES ===\n"
-        "1. MODÈLES DU DIRECTEUR (section MODÈLES DE CONTRATS ci-dessus) — AUTORITÉ ABSOLUE :\n"
-        "   Ces clauses s'imposent dans le proposed. Si un modèle couvre le même article ou sujet que le contrat analysé "
-        "   ET qu'il est favorable à " + partie + ", ton proposed DOIT en reprendre les termes EXACTS :\n"
-        "   · délais précis (ex: renégociation 30j, résolution 90j, préavis 12 mois)\n"
-        "   · indemnités et montants (ex: indemnité 24 mois, indemnisation intégrale)\n"
-        "   · mécanismes juridiques (ex: CIRDI à Paris, pas CNUDCI; résolution avec indemnisation)\n"
-        "   INTERDIT d'inventer tes propres délais ou mécanismes si le modèle du directeur en prévoit.\n"
-        "   Adapte uniquement les noms des parties et l'objet — conserve la substance du modèle.\n"
-        "   Si le modèle favorise l'autre partie → ignore-le et rédige librement en faveur de " + partie + ".\n\n"
-        "2. RÉFÉRENCES JURIDIQUES (section RÉFÉRENCES JURIDIQUES ci-dessus) — INSPIRATION :\n"
-        "   Les lois, doctrine et jurisprudence servent à argumenter et vérifier la conformité légale.\n"
-        "   Inspire-toi de leur contenu pour renforcer le proposed, cite les articles pertinents dans reason.\n"
-        "   Ces sources n'imposent pas de termes exacts — elles informent et légitiment.\n\n"
+        + "\n\n=== HIÉRARCHIE DES SOURCES — RÈGLE D'UTILISATION ===\n"
+        "NIVEAU 1 — POLITIQUE JURIDIQUE DU DIRECTEUR (section ci-dessus) — AUTORITÉ ABSOLUE :\n"
+        "   Ce sont les clauses validées par le directeur = la politique juridique du cabinet.\n"
+        "   Si une clause validée couvre le même article ou sujet ET est favorable à " + partie + " :\n"
+        "   → ton proposed DOIT reprendre ses termes EXACTS (délais, montants, mécanismes).\n"
+        "   → INTERDIT d'inventer tes propres termes si la politique du directeur en prévoit.\n"
+        "   → Adapte uniquement les noms des parties et l'objet — conserve la substance.\n"
+        "   Si la clause validée favorise l'autre partie → ignore-la, rédige librement.\n\n"
+        "NIVEAU 2 — CLAUSES PROTECTRICES DE RÉFÉRENCE (section ci-dessus) — INSPIRATION PROTECTRICE :\n"
+        "   Ce sont des modèles de contrats et clauses types protectrices.\n"
+        "   Inspire-toi de leur structure et de leurs mécanismes pour rédiger le proposed.\n"
+        "   Si elles sont favorables à " + partie + ", reprends leur logique — sans obligation de reproduire mot pour mot.\n\n"
+        "NIVEAU 3 — RÉFÉRENCES JURIDIQUES (lois / doctrine / jurisprudence) — ANALYSE DE CONFORMITÉ :\n"
+        "   Ces sources servent à identifier et argumenter les risques dans le champ reason :\n"
+        "   → Cite les articles de loi qui rendent la clause litigieuse ou déséquilibrée.\n"
+        "   → Elles légitiment le diagnostic mais n'imposent pas la rédaction du proposed.\n\n"
         "IMPORTANT: Le contrat est numéroté [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
