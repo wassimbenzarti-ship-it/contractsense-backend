@@ -3373,9 +3373,28 @@ def chat():
         jurisdiction   = (data.get("jurisdiction") or "universel").strip()
         file_cache_id  = (data.get("file_cache_id") or "").strip()
         file_storage_path = (data.get("file_storage_path") or "").strip()
+        user_email_chat = (data.get("user_email") or "").strip()
 
         if not message:
             return jsonify({"error": "message requis"}), 400
+
+        # Chat quota — 15 messages per user (requires chat_remaining column in user_accounts)
+        _chat_is_admin = False
+        _chat_remaining = None
+        if user_email_chat:
+            try:
+                _chat_acc = supa_get("user_accounts", {"email": f"eq.{user_email_chat}", "select": "is_admin,chat_remaining", "limit": "1"})
+                if _chat_acc:
+                    _chat_is_admin = bool(_chat_acc[0].get("is_admin"))
+                    if not _chat_is_admin:
+                        _chat_remaining = _chat_acc[0].get("chat_remaining")
+                        if _chat_remaining is None:
+                            supa_patch("user_accounts", {"chat_remaining": 15}, f"email=eq.{user_email_chat}")
+                            _chat_remaining = 15
+                        if _chat_remaining <= 0:
+                            return jsonify({"error": "Quota de messages épuisé (0/15). Veuillez renouveler votre abonnement.", "chat_remaining": 0}), 403
+            except Exception as _qe:
+                print(f"[/chat] quota check error: {_qe}")
 
         # Try to retrieve contract text from cache / storage if not provided
         if not contract_text and file_cache_id:
@@ -3411,6 +3430,29 @@ def chat():
         # Full contract sent every time — prompt caching makes it cheap after 1st call
         contract_excerpt = contract_text[:80000] if contract_text else ""
 
+        # Search RAG for legal context relevant to the user's question
+        _legal_rag_ctx = ""
+        try:
+            _vkey = os.environ.get("VOYAGE_API_KEY")
+            _qemb = get_embedding(message[:500], voyage_key=_vkey)
+            _rdocs = search_rag_hybrid(message[:300], _qemb, top_k=5)
+            if not _rdocs:
+                _rdocs = search_rag_pgvector(_qemb, top_k=5)
+            if not _rdocs:
+                _rdocs = search_rag_keyword(message, top_k=5)
+            if _rdocs:
+                _legal_rag_ctx = "\n\n=== BASE LÉGALE ET DOCUMENTAIRE (extraits pertinents) ===\n"
+                for _rd in _rdocs[:5]:
+                    _rt = _rd.get("title") or _rd.get("source") or "Document"
+                    _rc = str(_rd.get("content", ""))[:1500]
+                    if _rc.strip():
+                        _legal_rag_ctx += f"\n[{_rt}]\n{_rc}\n"
+                _legal_rag_ctx += "\n=== FIN BASE LÉGALE ===\n"
+                _legal_rag_ctx += "Cite précisément ces sources légales quand tu t'y réfères dans ta réponse.\n"
+                print(f"[/chat] RAG: {len(_rdocs)} docs for: {message[:60]}")
+        except Exception as _re:
+            print(f"[/chat] RAG error: {_re}")
+
         # System prompt
         system_prompt = (
             "Tu es un assistant juridique expert en droit des contrats. "
@@ -3418,6 +3460,7 @@ def chat():
             "Réponds toujours en français, de manière professionnelle.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+            + _legal_rag_ctx
             + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
             + mods_summary
             + """
@@ -3509,6 +3552,16 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
         result = {"reply": reply_text}
         if mod_list:
             result["modifications"] = mod_list
+        # Decrement chat quota and return remaining count
+        if user_email_chat and _chat_remaining is not None and not _chat_is_admin:
+            try:
+                new_remaining = max(0, _chat_remaining - 1)
+                supa_patch("user_accounts", {"chat_remaining": new_remaining}, f"email=eq.{user_email_chat}")
+                result["chat_remaining"] = new_remaining
+            except Exception:
+                pass
+        elif _chat_is_admin:
+            result["chat_remaining"] = 9999
         return jsonify(result)
 
     except Exception as e:
