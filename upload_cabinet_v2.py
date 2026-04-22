@@ -56,6 +56,27 @@ CATEGORY_KEYWORDS = {
 }
 
 
+def _readable(text, sample=2000):
+    """Retourne False si le texte ressemble à du binaire."""
+    s = text[:sample]
+    ratio = sum(1 for c in s if c.isprintable() or c in '\n\r\t') / max(len(s), 1)
+    return ratio >= 0.70
+
+
+def _unlock_pdf(raw_bytes, filepath):
+    """Déverrouille un PDF protégé avec pikepdf. Retourne les bytes (déverrouillés ou originaux)."""
+    try:
+        import pikepdf, io
+        with pikepdf.open(io.BytesIO(raw_bytes), password="") as pdf:
+            buf = io.BytesIO()
+            pdf.save(buf)
+            unlocked = buf.getvalue()
+            print(f"    🔓 PDF déverrouillé automatiquement")
+            return unlocked
+    except Exception:
+        return raw_bytes
+
+
 def normalize(s):
     s = unicodedata.normalize('NFD', s)
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
@@ -97,27 +118,24 @@ def extract_text(filepath):
             print(f"    Erreur DOCX: {e}")
             return None
     elif ext == '.pdf':
+        raw_bytes = open(filepath, 'rb').read()
+        pdf_bytes = _unlock_pdf(raw_bytes, filepath)
+        import io
         try:
             import pdfplumber
-            text = ""
-            with pdfplumber.open(filepath) as pdf:
-                for page in pdf.pages:
-                    t = page.extract_text()
-                    if t: text += t + "\n"
-            if len(text.strip()) > 100:
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            if len(text.strip()) > 100 and _readable(text):
                 return text
         except: pass
         try:
             import PyPDF2
-            text = ""
-            with open(filepath, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                for page in reader.pages:
-                    text += page.extract_text() or ""
-            if len(text.strip()) > 100:
+            reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            text = "\n".join(p.extract_text() or "" for p in reader.pages)
+            if len(text.strip()) > 100 and _readable(text):
                 return text
         except: pass
-        print(f"    PDF scanne - OCR requis (ilovepdf.com)")
+        print(f"    PDF scanné ou illisible - OCR requis (ilovepdf.com)")
         return None
     return None
 
@@ -171,14 +189,19 @@ def upload_file(filepath, doc_type, category, jurisdiction, overwrite, jurisdict
         if final_jurisdiction:
             payload['jurisdiction'] = final_jurisdiction
 
-        with open(filepath, 'rb') as f:
-            mime = 'application/pdf' if filepath.lower().endswith('.pdf') else 'application/octet-stream'
-            resp = requests.post(
-                f"{BACKEND}/rag/upload",
-                files={'file': (filename, f, mime)},
-                data=payload,
-                timeout=300
-            )
+        mime = 'application/pdf' if filepath.lower().endswith('.pdf') else 'application/octet-stream'
+        if filepath.lower().endswith('.pdf'):
+            raw = open(filepath, 'rb').read()
+            file_bytes = _unlock_pdf(raw, filepath)
+        else:
+            file_bytes = open(filepath, 'rb').read()
+        import io
+        resp = requests.post(
+            f"{BACKEND}/rag/upload",
+            files={'file': (filename, io.BytesIO(file_bytes), mime)},
+            data=payload,
+            timeout=300
+        )
 
         if resp.ok:
             result = resp.json()
