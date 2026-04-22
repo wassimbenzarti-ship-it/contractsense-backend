@@ -910,7 +910,6 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"type":"modification|nouvelle_clause",'
         '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
-        '"type":"modification|nouvelle_clause",'
         '"insertion_after":"para_idx après lequel insérer ou null si modification",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
@@ -1032,7 +1031,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             ids = re.findall(r'"id"\s*:\s*(\d+)', raw)
             names = re.findall(r'"clause_name"\s*:\s*"([^"]+)"', raw)
             risks = re.findall(r'"risk"\s*:\s*"([^"]+)"', raw)
-            originals = re.findall(r'"original"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            originals_raw = re.findall(r'"original"\s*:\s*(null|"(?:[^"\\]|\\.)*")', raw)
+            originals = [None if o == 'null' else o[1:-1] for o in originals_raw]
             proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             rag_sources = re.findall(r'"rag_source"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
@@ -1045,7 +1045,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "risk": risks[i] if i < len(risks) else "medium",
                     "type": types[i] if i < len(types) else "modification",
                     "reason": reasons[i] if i < len(reasons) else "",
-                    "original": originals[i] if i < len(originals) else "",
+                    "original": originals[i] if i < len(originals) else None,
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
                     "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None
@@ -1056,8 +1056,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         else:
             raise ValueError("Impossible d'extraire les modifications")
 
-    # Add confidence score based on RAG usage
+    # Enforce: nouvelle_clause must have original=null (Claude sometimes copies paragraph
+    # text into original for nouvelle_clause, which cascades and shifts all originals after it)
     mods = result.get("modifications", [])
+    for mod in mods:
+        if mod.get("type") == "nouvelle_clause" and mod.get("original"):
+            mod["original"] = None
+
+    # Add confidence score based on RAG usage
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
     result["_paragraphs"] = paragraphs
