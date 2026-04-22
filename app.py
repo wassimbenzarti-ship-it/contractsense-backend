@@ -2452,17 +2452,25 @@ def rag_upload():
 
         # Smart chunking: split at article/clause boundaries first, fallback to 400-word chunks
         def _split_into_clauses(text, max_chunks=80):
-            # Try to split at article markers: Article X, Art. X, ARTICLE X, §X, numbered sections
             import re as _re
+            # Strip table-of-contents lines (e.g. "Article 2 ........ 8") before splitting
+            toc_line = _re.compile(r'(?m)^[^\n]*\.{5,}[^\n]*\d+\s*$\n?')
+            text_clean = toc_line.sub('', text).strip()
+            # If stripping TOC removed too much content, use original
+            if len(text_clean) < 200:
+                text_clean = text
+
+            # Split at article/clause headers that are followed by real content
             article_pat = _re.compile(
                 r'(?=\n\s*(?:Article|Art\.?|ARTICLE|§|Section|Clause|CLAUSE)\s+\d+[\.\-\s])',
                 _re.IGNORECASE
             )
-            parts = article_pat.split(text)
-            # Filter out empty/too-short fragments
-            parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 80]
+            parts = article_pat.split(text_clean)
+            # Filter out TOC-like fragments: must have real content (no chunk that's just a reference line)
+            parts = [p.strip() for p in parts
+                     if p.strip() and len(p.strip()) > 80
+                     and not _re.match(r'^(Article|Art\.?|§)\s+\d+[^\n]{0,5}$', p.strip(), _re.IGNORECASE)]
             if len(parts) >= 3:
-                # Merge very short adjacent parts (< 100 chars) with the next
                 merged = []
                 buf = ""
                 for p in parts:
@@ -2472,13 +2480,11 @@ def rag_upload():
                         buf = ""
                 if buf:
                     merged.append(buf)
-                # Cap at max_chunks, each chunk max 1200 chars
                 result = []
                 for part in merged[:max_chunks]:
                     if len(part) <= 1200:
                         result.append(part)
                     else:
-                        # Sub-chunk oversized parts at word boundaries
                         words_p = part.split()
                         for j in range(0, len(words_p), 200):
                             result.append(" ".join(words_p[j:j+200]))
@@ -2489,7 +2495,7 @@ def rag_upload():
                 if result:
                     return result
             # Fallback: 400-word chunks
-            words = text.split()
+            words = text_clean.split()
             chunk_size = 400
             return [" ".join(words[i:i+chunk_size])
                     for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size)]
