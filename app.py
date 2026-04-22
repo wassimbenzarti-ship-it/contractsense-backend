@@ -3435,16 +3435,16 @@ def chat():
         try:
             _vkey = os.environ.get("VOYAGE_API_KEY")
             _qemb = get_embedding(message[:500], voyage_key=_vkey)
-            _rdocs = search_rag_hybrid(message[:300], _qemb, top_k=5)
+            _rdocs = search_rag_hybrid(message[:300], _qemb, top_k=15)
             if not _rdocs:
-                _rdocs = search_rag_pgvector(_qemb, top_k=5)
+                _rdocs = search_rag_pgvector(_qemb, top_k=15)
             if not _rdocs:
-                _rdocs = search_rag_keyword(message, top_k=5)
+                _rdocs = search_rag_keyword(message, top_k=15)
             if _rdocs:
                 _legal_rag_ctx = "\n\n=== BASE LÉGALE ET DOCUMENTAIRE (extraits pertinents) ===\n"
-                for _rd in _rdocs[:5]:
+                for _rd in _rdocs[:10]:
                     _rt = _rd.get("title") or _rd.get("source") or "Document"
-                    _rc = str(_rd.get("content", ""))[:1500]
+                    _rc = str(_rd.get("content", ""))[:3000]
                     if _rc.strip():
                         _legal_rag_ctx += f"\n[{_rt}]\n{_rc}\n"
                 _legal_rag_ctx += "\n=== FIN BASE LÉGALE ===\n"
