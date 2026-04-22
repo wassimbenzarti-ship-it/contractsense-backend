@@ -1679,6 +1679,124 @@ def admin_create_user():
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
+
+@app.route("/admin/users", methods=["GET", "OPTIONS"])
+def admin_list_users():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        caller_email = request.args.get("caller_email", "").strip()
+        if not caller_email:
+            return jsonify({"error": "caller_email requis"}), 400
+        rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not rows or not (rows[0].get("is_admin") or rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        users = supa_get("user_accounts", {
+            "select": "id,email,role,is_admin,parent_email,created_at,payment_status,analyses_remaining,subscription_end,nb_juristes_max",
+            "order": "created_at.desc",
+            "limit": "1000"
+        })
+        return jsonify({"users": users or []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/sync-payments", methods=["POST", "OPTIONS"])
+def admin_sync_payments():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        if not caller_email:
+            return jsonify({"error": "caller_email requis"}), 400
+        rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not rows or not (rows[0].get("is_admin") or rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        expired_users = supa_get("user_accounts", {
+            "payment_status": "eq.active",
+            "subscription_end": f"lt.{now}",
+            "select": "email"
+        }) or []
+        updated = []
+        for u in expired_users:
+            supa_patch("user_accounts", {"payment_status": "expired"}, f"email=eq.{u['email']}&payment_status=eq.active")
+            updated.append(u["email"])
+        return jsonify({"status": "ok", "created_or_updated": updated, "message": f"{len(updated)} abonnement(s) expire(s) mis a jour."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/activate-user", methods=["POST", "OPTIONS"])
+def admin_activate_user():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        target_email = data.get("target_email", "").strip()
+        role = data.get("role", "directeur")
+        analyses_remaining = int(data.get("analyses_remaining", 20))
+        nb_juristes_max = int(data.get("nb_juristes_max", 5))
+        if not caller_email or not target_email:
+            return jsonify({"error": "caller_email et target_email requis"}), 400
+        caller_rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not caller_rows or not (caller_rows[0].get("is_admin") or caller_rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
+        existing = supa_get("user_accounts", {"email": f"eq.{target_email}", "limit": "1"})
+        if existing:
+            supa_patch("user_accounts", {
+                "payment_status": "active",
+                "analyses_remaining": analyses_remaining,
+                "subscription_end": sub_end,
+                "role": role,
+                "nb_juristes_max": nb_juristes_max
+            }, f"email=eq.{target_email}")
+            return jsonify({"status": "ok", "message": f"Abonnement active pour {target_email} (30 jours)."})
+        else:
+            supa_insert("user_accounts", {
+                "email": target_email,
+                "role": role,
+                "payment_status": "active",
+                "analyses_remaining": analyses_remaining,
+                "subscription_end": sub_end,
+                "nb_juristes_max": nb_juristes_max
+            })
+            return jsonify({"status": "ok", "message": f"Compte cree et active pour {target_email}."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/save-director/<analysis_id>", methods=["POST", "OPTIONS"])
+def save_director_analysis(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        modifications = data.get("modifications", [])
+        director_notes = (data.get("director_notes") or "").strip()
+        patch = {
+            "modifications": modifications,
+            "director_notes": director_notes,
+            "status": "director_review"
+        }
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     rag = load_rag()
