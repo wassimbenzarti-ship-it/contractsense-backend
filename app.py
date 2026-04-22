@@ -2440,6 +2440,30 @@ def rag_upload():
         filename = file.filename.lower()
         if filename.endswith(".docx") or filename.endswith(".doc"):
             content = extract_text_from_docx(file_bytes)
+        elif filename.endswith(".pdf"):
+            # Try pdfplumber first, then PyPDF2
+            content = None
+            try:
+                import pdfplumber, io as _io
+                with pdfplumber.open(_io.BytesIO(file_bytes)) as pdf:
+                    content = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            except Exception:
+                pass
+            if not content:
+                try:
+                    import PyPDF2, io as _io
+                    reader = PyPDF2.PdfReader(_io.BytesIO(file_bytes))
+                    if reader.is_encrypted:
+                        return jsonify({"error": "PDF chiffré/protégé — déverrouillez-le d'abord (ex: qpdf --decrypt input.pdf output.pdf)"}), 400
+                    content = "\n".join(p.extract_text() or "" for p in reader.pages)
+                except Exception:
+                    pass
+            # Detect binary garbage (encrypted PDF extracted as garbage)
+            if content:
+                sample = content[:2000]
+                printable = sum(1 for c in sample if c.isprintable() or c in '\n\r\t')
+                if printable / max(len(sample), 1) < 0.70:
+                    return jsonify({"error": "PDF illisible — le fichier est probablement chiffré ou corrompu. Déverrouillez-le avec: qpdf --decrypt input.pdf output.pdf"}), 400
         else:
             content = file_bytes.decode("utf-8", errors="ignore")
 
