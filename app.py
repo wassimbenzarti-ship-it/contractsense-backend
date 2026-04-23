@@ -1106,7 +1106,6 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"type":"modification|nouvelle_clause",'
         '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
-        '"type":"modification|nouvelle_clause",'
         '"insertion_after":"para_idx après lequel insérer ou null si modification",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
@@ -1231,7 +1230,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             ids = re.findall(r'"id"\s*:\s*(\d+)', raw)
             names = re.findall(r'"clause_name"\s*:\s*"([^"]+)"', raw)
             risks = re.findall(r'"risk"\s*:\s*"([^"]+)"', raw)
-            originals = re.findall(r'"original"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            originals_raw = re.findall(r'"original"\s*:\s*(null|"(?:[^"\\]|\\.)*")', raw)
+            originals = [None if o == 'null' else o[1:-1] for o in originals_raw]
             proposeds = re.findall(r'"proposed"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             reasons = re.findall(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
             rag_sources = re.findall(r'"rag_source"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
@@ -1244,7 +1244,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "risk": risks[i] if i < len(risks) else "medium",
                     "type": types[i] if i < len(types) else "modification",
                     "reason": reasons[i] if i < len(reasons) else "",
-                    "original": originals[i] if i < len(originals) else "",
+                    "original": originals[i] if i < len(originals) else None,
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
                     "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None
@@ -1255,8 +1255,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         else:
             raise ValueError("Impossible d'extraire les modifications")
 
-    # Add confidence score based on RAG usage
+    # Enforce: nouvelle_clause must have original=null (Claude sometimes copies paragraph
+    # text into original for nouvelle_clause, which cascades and shifts all originals after it)
     mods = result.get("modifications", [])
+    for mod in mods:
+        if mod.get("type") == "nouvelle_clause" and mod.get("original"):
+            mod["original"] = None
+
+    # Add confidence score based on RAG usage
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
     result["_paragraphs"] = paragraphs
@@ -1887,6 +1893,124 @@ def admin_create_user():
         return jsonify({"status": "ok", "message": "Compte cree avec succes", "auth_created": True, "user_id": auth_user.get("id")})
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/admin/users", methods=["GET", "OPTIONS"])
+def admin_list_users():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        caller_email = request.args.get("caller_email", "").strip()
+        if not caller_email:
+            return jsonify({"error": "caller_email requis"}), 400
+        rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not rows or not (rows[0].get("is_admin") or rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        users = supa_get("user_accounts", {
+            "select": "id,email,role,is_admin,parent_email,created_at,payment_status,analyses_remaining,subscription_end,nb_juristes_max",
+            "order": "created_at.desc",
+            "limit": "1000"
+        })
+        return jsonify({"users": users or []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/sync-payments", methods=["POST", "OPTIONS"])
+def admin_sync_payments():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        if not caller_email:
+            return jsonify({"error": "caller_email requis"}), 400
+        rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not rows or not (rows[0].get("is_admin") or rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        expired_users = supa_get("user_accounts", {
+            "payment_status": "eq.active",
+            "subscription_end": f"lt.{now}",
+            "select": "email"
+        }) or []
+        updated = []
+        for u in expired_users:
+            supa_patch("user_accounts", {"payment_status": "expired"}, f"email=eq.{u['email']}&payment_status=eq.active")
+            updated.append(u["email"])
+        return jsonify({"status": "ok", "created_or_updated": updated, "message": f"{len(updated)} abonnement(s) expire(s) mis a jour."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/activate-user", methods=["POST", "OPTIONS"])
+def admin_activate_user():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        caller_email = data.get("caller_email", "").strip()
+        target_email = data.get("target_email", "").strip()
+        role = data.get("role", "directeur")
+        analyses_remaining = int(data.get("analyses_remaining", 20))
+        nb_juristes_max = int(data.get("nb_juristes_max", 5))
+        if not caller_email or not target_email:
+            return jsonify({"error": "caller_email et target_email requis"}), 400
+        caller_rows = supa_get("user_accounts", {"email": f"eq.{caller_email}", "limit": "1"})
+        if not caller_rows or not (caller_rows[0].get("is_admin") or caller_rows[0].get("role") == "admin"):
+            return jsonify({"error": "Acces reserve aux administrateurs"}), 403
+        sub_end = (datetime.datetime.now() + datetime.timedelta(days=30)).isoformat()
+        existing = supa_get("user_accounts", {"email": f"eq.{target_email}", "limit": "1"})
+        if existing:
+            supa_patch("user_accounts", {
+                "payment_status": "active",
+                "analyses_remaining": analyses_remaining,
+                "subscription_end": sub_end,
+                "role": role,
+                "nb_juristes_max": nb_juristes_max
+            }, f"email=eq.{target_email}")
+            return jsonify({"status": "ok", "message": f"Abonnement active pour {target_email} (30 jours)."})
+        else:
+            supa_insert("user_accounts", {
+                "email": target_email,
+                "role": role,
+                "payment_status": "active",
+                "analyses_remaining": analyses_remaining,
+                "subscription_end": sub_end,
+                "nb_juristes_max": nb_juristes_max
+            })
+            return jsonify({"status": "ok", "message": f"Compte cree et active pour {target_email}."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyses/save-director/<analysis_id>", methods=["POST", "OPTIONS"])
+def save_director_analysis(analysis_id):
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        modifications = data.get("modifications", [])
+        director_notes = (data.get("director_notes") or "").strip()
+        patch = {
+            "modifications": modifications,
+            "director_notes": director_notes,
+            "status": "director_review"
+        }
+        patch_url = SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -2609,18 +2733,26 @@ def rag_upload():
             content = content[:200000]
 
         # Smart chunking: split at article/clause boundaries first, fallback to 400-word chunks
-        def _split_into_clauses(text, max_chunks=80):
-            # Try to split at article markers: Article X, Art. X, ARTICLE X, §X, numbered sections
+        def _split_into_clauses(text, max_chunks=500):
             import re as _re
+            # Strip table-of-contents lines (e.g. "Article 2 ........ 8") before splitting
+            toc_line = _re.compile(r'(?m)^[^\n]*\.{5,}[^\n]*\d+\s*$\n?')
+            text_clean = toc_line.sub('', text).strip()
+            # If stripping TOC removed too much content, use original
+            if len(text_clean) < 200:
+                text_clean = text
+
+            # Split at article/clause headers that are followed by real content
             article_pat = _re.compile(
                 r'(?=\n\s*(?:Article|Art\.?|ARTICLE|§|Section|Clause|CLAUSE)\s+\d+[\.\-\s])',
                 _re.IGNORECASE
             )
-            parts = article_pat.split(text)
-            # Filter out empty/too-short fragments
-            parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 80]
+            parts = article_pat.split(text_clean)
+            # Filter out TOC-like fragments: must have real content (no chunk that's just a reference line)
+            parts = [p.strip() for p in parts
+                     if p.strip() and len(p.strip()) > 80
+                     and not _re.match(r'^(Article|Art\.?|§)\s+\d+[^\n]{0,5}$', p.strip(), _re.IGNORECASE)]
             if len(parts) >= 3:
-                # Merge very short adjacent parts (< 100 chars) with the next
                 merged = []
                 buf = ""
                 for p in parts:
@@ -2630,13 +2762,11 @@ def rag_upload():
                         buf = ""
                 if buf:
                     merged.append(buf)
-                # Cap at max_chunks, each chunk max 1200 chars
                 result = []
                 for part in merged[:max_chunks]:
                     if len(part) <= 1200:
                         result.append(part)
                     else:
-                        # Sub-chunk oversized parts at word boundaries
                         words_p = part.split()
                         for j in range(0, len(words_p), 200):
                             result.append(" ".join(words_p[j:j+200]))
@@ -2647,7 +2777,7 @@ def rag_upload():
                 if result:
                     return result
             # Fallback: 400-word chunks
-            words = text.split()
+            words = text_clean.split()
             chunk_size = 400
             return [" ".join(words[i:i+chunk_size])
                     for i in range(0, min(len(words), chunk_size * max_chunks), chunk_size)]

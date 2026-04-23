@@ -285,22 +285,80 @@ def extract_text(filepath):
     return None
 
 
+def _is_binary_garbage(text, sample_size=2000):
+    """Retourne True si le texte extrait ressemble à du binaire (PDF crypté)."""
+    if not text:
+        return True
+    sample = text[:sample_size]
+    printable = sum(1 for c in sample if c.isprintable() or c in '\n\r\t')
+    ratio = printable / max(len(sample), 1)
+    # Moins de 70% de caractères imprimables = binaire
+    if ratio < 0.70:
+        return True
+    # Beaucoup de caractères non-ASCII suspects (hors accents français)
+    weird = sum(1 for c in sample if ord(c) > 127 and c not in 'àâäéèêëîïôöùûüçœæÀÂÄÉÈÊËÎÏÔÖÙÛÜÇŒÆ°«»€–—…')
+    if weird / max(len(sample), 1) > 0.15:
+        return True
+    return False
+
+
+def _unlock_pdf_bytes(fp):
+    """
+    Tente de déverrouiller un PDF protégé avec pikepdf.
+    Retourne les bytes du PDF déverrouillé, ou None si impossible.
+    """
+    try:
+        import pikepdf, io
+        with pikepdf.open(str(fp), password="") as pdf:
+            buf = io.BytesIO()
+            pdf.save(buf)
+            return buf.getvalue()
+    except Exception:
+        return None
+
+
 def _load_pdf_plumber(fp):
     try:
-        import pdfplumber
-        with pdfplumber.open(str(fp)) as pdf:
-            return "\n".join(p.extract_text() or "" for p in pdf.pages)
-    except ImportError:
+        import pdfplumber, io
+        # Essai direct
+        try:
+            with pdfplumber.open(str(fp)) as pdf:
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+        except Exception:
+            text = ""
+        # Si binaire ou vide → tenter déverrouillage automatique
+        if _is_binary_garbage(text):
+            print("  🔓 PDF protégé détecté, déverrouillage automatique...")
+            unlocked = _unlock_pdf_bytes(fp)
+            if unlocked:
+                with pdfplumber.open(io.BytesIO(unlocked)) as pdf:
+                    text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            else:
+                return None
+        if _is_binary_garbage(text):
+            return None
+        return text
+    except Exception:
         return None
 
 
 def _load_pdf_pypdf2(fp):
     try:
-        import PyPDF2
+        import PyPDF2, io
         with open(fp, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            return "\n".join(p.extract_text() or "" for p in reader.pages)
-    except ImportError:
+        if reader.is_encrypted:
+            print("  🔓 PDF protégé détecté, déverrouillage automatique...")
+            unlocked = _unlock_pdf_bytes(fp)
+            if not unlocked:
+                print("  ✗ Impossible de déverrouiller (mot de passe requis ?)")
+                return None
+            reader = PyPDF2.PdfReader(io.BytesIO(unlocked))
+        text = "\n".join(p.extract_text() or "" for p in reader.pages)
+        if _is_binary_garbage(text):
+            return None
+        return text
+    except Exception:
         return None
 
 
