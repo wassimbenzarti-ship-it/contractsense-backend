@@ -1438,7 +1438,7 @@ async function checkRole(){
   if(!_cu)return;
   try{
     // Utilise la clé anon pour contourner la RLS utilisateur (même approche que loadJuristes)
-    var r=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=role,parent_email',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
+    var r=await fetch(_su+'/rest/v1/user_accounts?email=eq.'+encodeURIComponent(_cu.email)+'&select=role,parent_email,is_admin,payment_status',{headers:{'apikey':_sk,'Authorization':'Bearer '+_sk,'Content-Type':'application/json'}});
     if(r.ok){
       var d=await r.json();
       if(d[0]){_userRole=d[0].role;_userParentEmail=d[0].parent_email;_isAdmin=!!d[0].is_admin;window._dirPayStatus=d[0].payment_status;}
@@ -1547,7 +1547,7 @@ async function loadDash(){
   }
   var STATUS_LABELS={'draft':'Brouillon','pending_review':'En attente directeur','in_review':'En cours de révision','revision_requested':'Renvoyé pour révision par le directeur juridique','validated':'Validé par directeur','final_validated':'Validé — dans le RAG'};
   var STATUS_COLORS={'draft':'#4a5470','pending_review':'#f59e0b','in_review':'#5b7cfa','revision_requested':'#ef4444','validated':'#10b981','final_validated':'#10b981'};
-  window._renderAnalyses=function(list){
+  window._renderAnalyses=async function(list){
     // Trier : analyses normales par date, [ADVERSE] insérées juste après leur originale
     var sorted=[];
     var normals=list.filter(function(x){return !x.filename||x.filename.indexOf('[ADVERSE]')<0;});
@@ -1558,6 +1558,7 @@ async function loadDash(){
     });
     // Ajouter les [ADVERSE] orphelines non encore insérées
     list.filter(function(x){return x.filename&&x.filename.indexOf('[ADVERSE]')===0&&sorted.indexOf(x)<0;}).forEach(function(x){sorted.push(x);});
+    await new Promise(function(r){ setTimeout(r, 0); });
     document.getElementById('alist').innerHTML=sorted.length===0
       ?'<p style="color:#6b7280;font-size:13px;padding:20px 0">Aucune analyse</p>'
       :sorted.map(function(x){
@@ -1592,7 +1593,7 @@ async function loadDash(){
           +'</div>';
       }).join('');
   };
-  window._renderAnalyses(a);
+  await window._renderAnalyses(a);
   window.filterAnalysesByJuriste=function(val){
     if(!val) return window._renderAnalyses(window._userAnalyses);
     if(val==='__own__') return window._renderAnalyses(window._userAnalyses.filter(function(x){return !x._juristeEmail;}));
@@ -1656,56 +1657,35 @@ async function loadDash(){
   if(_userRole==='directeur'||_isAdmin)loadJuristes();
 }
 async function upMdl(inp){
+  console.log('[upMdl] triggered, _cu=', _cu ? _cu.email : 'null');
   if(!_cu){showAuth();return;}
   if(!_userRole) await checkRole();
-  var f=inp.files[0];if(!f)return;
-  var r=await sf('/rest/v1/user_models',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify({user_id:_cu.id,user_email:_cu.email,filename:f.name,category:'contract',is_public:false})});
-  if(r.ok){
-    var alertMsg='Modele uploade';
-    try{
-      var fd=new FormData();
-      fd.append('file',f);
-      fd.append('source',f.name);
-      fd.append('category','contract');
-      fd.append('suggested_by',_cu.email);
-      if(_userRole==='juriste' && _userParentEmail){
-        // Juriste -> soumet au directeur pour validation
-        fd.append('target_email',_userParentEmail);
-        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
-        var sd=await r2.json();
-        if(!r2.ok) throw new Error(sd.error||'Erreur suggest-to-director');
-        alertMsg='Modele soumis au directeur juridique pour validation';
-      } else {
-        // Directeur -> approche avant/après pour trouver l'ID créé et le forwarder à l'admin
-        var dirEmail=encodeURIComponent(_cu.email);
-        // 1. Snapshot des IDs existants dans la boite directeur
-        var idsBefore=[];
-        try{var rlB=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);if(rlB.ok){var lb=await rlB.json();idsBefore=(lb.suggestions||[]).map(function(s){return s.id;});}}catch(e){}
-        // 2. Créer la suggestion (directeur se soumet à lui-même)
-        fd.append('target_email',_cu.email);
-        var r2=await fetch(BACKEND+'/rag/suggest-to-director',{method:'POST',body:fd});
-        var r2txt=await r2.text();
-        if(!r2.ok) throw new Error('suggest-to-director: '+r2.status+' '+r2txt);
-        // 3. Récupérer la liste après et trouver la nouvelle suggestion (diff des IDs)
-        var rlA=await fetch(BACKEND+'/suggestions/list-for-director?director_email='+dirEmail);
-        if(rlA.ok){
-          var la=await rlA.json();
-          var newSuggs=(la.suggestions||[]).filter(function(s){return idsBefore.indexOf(s.id)<0;});
-          if(newSuggs.length>0){
-            var sid=newSuggs[0].id;
-            await fetch(BACKEND+'/suggestions/forward-to-admin/'+sid,{method:'POST'});
-            alertMsg='Modele soumis pour validation admin';
-          } else {
-            alertMsg='Modele soumis pour validation admin';
-          }
-        } else {
-          alertMsg='Modele soumis pour validation admin';
-        }
-      }
-    }catch(e2){console.log('Suggest error:',e2);alertMsg='Modele uploade (erreur soumission: '+e2.message+')';}
-    alert(alertMsg);
+  console.log('[upMdl] role=', _userRole, 'files=', inp.files.length);
+  var f=inp.files[0];
+  if(!f){alert('Aucun fichier sélectionné.');return;}
+  var lbl=document.querySelector('label[for="minp"]');
+  var origLbl=lbl?lbl.textContent:'';
+  if(lbl)lbl.textContent='Upload en cours...';
+  var fd=new FormData();
+  fd.append('file',f);
+  fd.append('user_email',_cu.email);
+  console.log('[upMdl] posting to', BACKEND+'/models/upload', 'file=', f.name, 'email=', _cu.email);
+  try{
+    var r=await fetch(BACKEND+'/models/upload',{method:'POST',body:fd});
+    console.log('[upMdl] response status=', r.status);
+    var d=await r.json();
+    console.log('[upMdl] response body=', d);
+    if(!r.ok) throw new Error(d.error||'Erreur upload ('+r.status+')');
+    if(lbl)lbl.textContent=origLbl;
+    inp.value='';
+    alert('Modèle personnel enregistré (' + d.chars + ' caractères). Il sera utilisé en priorité dans vos analyses.');
     loadDash();
-  }else alert('Erreur upload');
+  }catch(e){
+    console.error('[upMdl] error:', e);
+    if(lbl)lbl.textContent=origLbl;
+    inp.value='';
+    alert('Erreur upload : '+e.message);
+  }
 }
 
 async function _decrementAnalyses(){
@@ -1919,6 +1899,7 @@ async function showAnaDetail(idx) {
   // Rendre inline dans la carte
   var inlineDiv = document.getElementById('ana-detail-inline-'+idx);
   if(inlineDiv) {
+    await new Promise(function(r){ setTimeout(r, 0); });
     inlineDiv.innerHTML = html;
     inlineDiv.style.display = 'block';
     inlineDiv.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -2343,6 +2324,7 @@ async function loadJuristes(){
           +'</div></div>';
       }).join('')+'</div>';
     }
+    await new Promise(function(r){ setTimeout(r, 0); });
     el.innerHTML=html;
 
     // Admin: sync payments button

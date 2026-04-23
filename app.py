@@ -335,7 +335,8 @@ def save_rag_doc(doc):
             except Exception:
                 emb = None
         if emb and isinstance(emb, list) and len(emb) == 1024:
-            doc_copy["embedding_vector"] = emb  # pgvector column
+            # pgvector requires string format "[x,y,...]" — NOT a JSON array
+            doc_copy["embedding_vector"] = "[" + ",".join(str(x) for x in emb) + "]"
             doc_copy["embedding"] = json.dumps(emb)  # legacy JSON column
             print("save_rag_doc: embedding 1024 dims OK")
         elif emb and isinstance(emb, list):
@@ -558,11 +559,69 @@ def extract_text_from_docx(file_bytes):
         except Exception as e2:
             raise ValueError("Impossible de lire le fichier Word: " + str(e2))
 
+def extract_text_from_pdf(file_bytes):
+    """Extract plain text from a PDF. Uses pypdf for text PDFs, falls back to
+    Claude Vision (Haiku) for scanned PDFs where pypdf returns little/no text."""
+    text = ""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(file_bytes))
+        pages = []
+        for page in reader.pages:
+            t = page.extract_text() or ""
+            if t.strip():
+                pages.append(t)
+        text = "\n".join(pages)
+    except Exception as e:
+        print("pypdf error: " + str(e))
+
+    # If pypdf extracted enough text, use it
+    if len(text.strip()) > 200:
+        return text
+
+    # Scanned PDF fallback: send to Claude Vision via Anthropic API
+    print("PDF semble scanné (pypdf < 200 chars) — fallback Claude Vision OCR")
+    try:
+        _ak = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not _ak:
+            return text
+        _client = anthropic.Anthropic(api_key=_ak)
+        _pdf_b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
+        _resp = _client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": _pdf_b64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": "Extrait tout le texte de ce document. Retourne uniquement le texte brut, sans commentaires ni formatage markdown."
+                    }
+                ]
+            }]
+        )
+        ocr_text = _resp.content[0].text if _resp.content else ""
+        print(f"Claude Vision OCR: {len(ocr_text)} chars extraits")
+        return ocr_text
+    except Exception as e:
+        print("Claude Vision PDF OCR error: " + str(e))
+        return text
+
 def read_file(file):
     file_bytes = file.read()
     filename = file.filename.lower()
     if filename.endswith(".docx") or filename.endswith(".doc"):
         text = extract_text_from_docx(file_bytes)
+    elif filename.endswith(".pdf"):
+        text = extract_text_from_pdf(file_bytes)
     else:
         text = file_bytes.decode("utf-8", errors="ignore")
     # Remove null bytes
@@ -605,7 +664,7 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("Clé API manquante")
@@ -626,17 +685,46 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     legal_context = ""
     _rag_contract_count = 0
     _rag_legal_count = 0
+    _rag_debug_contract = []
+    _rag_debug_legal = []
     LEGAL_CATS = {"loi", "law", "law_employment", "law_commercial", "law_civil",
                   "doctrine", "jurisprudence", "legal", "legislation"}
     # Quick jurisdiction detection for boosting relevant docs
+    # Returns (jurisdiction_tag, is_foreign_unsupported)
     def _detect_jur(text):
         s = text[:3000].lower()
-        if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "maroc"]):
-            return "droit_marocain"
-        if any(k in s for k in ["droit français", "loi française", "france", "code civil français"]):
-            return "droit_francais"
-        return "universel"
-    _jurisdiction = _detect_jur(contract_text)
+        if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "royaume du maroc", "maroc"]):
+            return "droit_marocain", False
+        if any(k in s for k in ["droit français", "loi française", "france", "code civil français", "droit de la france"]):
+            return "droit_francais", False
+        # Detect foreign jurisdictions we have no RAG for — don't inject wrong-law docs
+        _foreign_kw = [
+            "estonian law", "droit estonien", "estonia", "estonie",
+            "german law", "droit allemand", "deutsches recht",
+            "english law", "droit anglais", "laws of england",
+            "us law", "droit américain", "new york law", "delaware law",
+            "dutch law", "droit néerlandais", "netherlands",
+            "swiss law", "droit suisse", "switzerland",
+            "belgian law", "droit belge", "belgique",
+            "luxembourg law", "droit luxembourgeois",
+            "spanish law", "droit espagnol",
+            "italian law", "droit italien",
+            "portuguese law", "droit portugais",
+            "polish law", "droit polonais",
+            "czech law", "droit tchèque",
+            "hungarian law", "droit hongrois",
+            "romanian law", "droit roumain",
+            "bulgarian law", "droit bulgare",
+            "greek law", "droit grec",
+            "swedish law", "droit suédois",
+            "danish law", "droit danois",
+            "finnish law", "droit finlandais",
+            "norwegian law", "droit norvégien",
+        ]
+        if any(k in s for k in _foreign_kw):
+            return "foreign_unsupported", True
+        return "universel", False
+    _jurisdiction, _is_foreign_jurisdiction = _detect_jur(contract_text)
     try:
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
         search_query = contract_type + " " + partie + " " + contract_text[:500]
@@ -693,8 +781,48 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             all_docs = search_rag_keyword(search_query, contract_type=contract_type, top_k=10)
             print(f"Keyword RAG fallback: {len(all_docs)} docs")
 
+        # 4. Supplement: user-uploaded docs (non-ailovecontracts) via source/title ilike
+        # Prevents protected-source dominance from burying user docs in hybrid BM25 ranking
+        try:
+            _protected_pfx = ["ailovecontracts", "lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit"]
+            _kw_terms = list(dict.fromkeys(
+                w for w in re.findall(r'[a-zA-ZÀ-ÿ]{5,}', (contract_type + " " + contract_text[:300]).lower())
+                if w not in {"cette","avec","dans","pour","les","des","une","par","sur","que","qui","leur","leurs","dont","mais","aussi","entre","comme","plus","sans","tout","tous","toute","toutes","selon","vers","sous"}
+            ))[:4]
+            _existing_ids = {d.get("id") for d in all_docs}
+            _suppl_key = SUPA_SERVICE_KEY or SUPA_KEY
+            _added = 0
+            for _kw in _kw_terms:
+                _sr = requests.get(
+                    SUPA_URL + "/rest/v1/rag_documents",
+                    headers={"apikey": _suppl_key, "Authorization": "Bearer " + _suppl_key},
+                    params={"select": "id,title,content,source,category,party_label,jurisdiction",
+                            "or": f"(source.ilike.*{_kw}*,title.ilike.*{_kw}*)",
+                            "limit": "30"},
+                    timeout=8
+                )
+                if _sr.ok:
+                    for _d in (_sr.json() or []):
+                        if _d.get("id") not in _existing_ids and not any(p in (_d.get("source","")).lower() for p in _protected_pfx):
+                            all_docs.insert(0, _d)  # prepend — higher priority than protected sources
+                            _existing_ids.add(_d.get("id"))
+                            _added += 1
+            if _added:
+                print(f"Supplementary user-doc search: +{_added} non-protected docs added")
+        except Exception as _se:
+            print("Supplementary search error: " + str(_se))
+
         # Jurisdiction boost
         all_docs.sort(key=lambda d: 0 if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto") else 1)
+
+        # Director priority boost: docs tagged with this director's org come first (2x priority)
+        if director_email:
+            _dir_prefix = "org:" + director_email + "§"
+            _dir_docs   = [d for d in all_docs if (d.get("source") or "").startswith(_dir_prefix)]
+            _other_docs = [d for d in all_docs if not (d.get("source") or "").startswith(_dir_prefix)]
+            all_docs = _dir_docs + _other_docs
+            if _dir_docs:
+                print(f"Director RAG boost: {len(_dir_docs)} docs prioritized for {director_email}")
 
         # Separate contract models from legal references
         contract_docs = [d for d in all_docs if d.get("category", "").lower() not in LEGAL_CATS]
@@ -703,6 +831,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Domain filter: keep only contract models relevant to this contract type
         # Docs tagged contract_{type} are domain-specific; docs tagged "contract" are generic (allowed for all)
         # This prevents NDA clauses from appearing in employment contracts, etc.
+        _ct_lower = (contract_type or "").lower()
         _CT_DOMAINS = {
             "employment": "contract_employment",
             "cdi": "contract_employment", "cdd": "contract_employment",
@@ -722,8 +851,21 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             contract_docs = [d for d in contract_docs if _domain_ok(d)]
             print(f"Domain filter ({_ct_lower}→{_domain_cat}): {_n_before_domain} → {len(contract_docs)} contract docs")
 
+        # Filter legal docs for foreign/unsupported jurisdictions — avoid injecting wrong-law doctrine
+        if _is_foreign_jurisdiction:
+            _n_before_jur = len(legal_docs)
+            legal_docs = []  # No legal RAG for this jurisdiction — let AI use its own knowledge
+            print(f"Foreign jurisdiction detected: suppressed {_n_before_jur} legal docs to avoid wrong-law injection")
+
+        # Filter by jurisdiction match for supported jurisdictions
+        elif _jurisdiction not in ("universel", "auto"):
+            _n_before_jur = len(legal_docs)
+            legal_docs = [d for d in legal_docs
+                          if (d.get("jurisdiction") or "universel") in (_jurisdiction, "universel", "auto", None)]
+            if len(legal_docs) < _n_before_jur:
+                print(f"Jurisdiction filter ({_jurisdiction}): {_n_before_jur} → {len(legal_docs)} legal docs")
+
         # Filter employment law docs for non-employment contracts
-        _ct_lower = (contract_type or "").lower()
         _is_employment = _ct_lower in ("employment", "cdi", "cdd") or any(k in _ct_lower for k in ["travail", "emploi"])
         if not _is_employment:
             _emp_kw = ["code du travail", "loi 65-99", "licenciement", "preavis", "heures supplementaires", "conge annuel"]
@@ -738,31 +880,72 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         protected_kw = ["lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit", "pdf-free", "lexis",
                         "ailovecontracts"]  # modèles de clauses tierces — inspiration silencieuse, jamais citées
 
-        # Context 1: contract models → split between director policy (validated) and generic protective models
+        # Build debug info — tracks which docs the model actually receives
+        _rag_debug_contract = []
+        _rag_debug_legal = []
+        model_context = ""
+        legal_context = ""
+
+        # Context 0: Director's own cabinet models — always injected, highest priority, citeable
+        if user_models_extra:
+            model_context = "\n\n=== MODÈLES CABINET (RÉFÉRENCE PRIORITAIRE — TOUJOURS CITER) ===\n"
+            for um in user_models_extra[:8]:
+                title_um = um.get("filename", "Modele cabinet")
+                content_um = str(um.get("content", ""))[:6000]
+                if content_um.strip():
+                    model_context += "\n=== " + title_um + " ===\n"
+                    model_context += content_um + "\n"
+                    model_context += "→ rag_source: " + title_um + "\n"
+                    _rag_debug_contract.insert(0, {
+                        "title": title_um,
+                        "source": "cabinet-model",
+                        "category": "modele",
+                        "protected": False
+                    })
+
+        # Context 1: contract models → split between director policy (NIVEAU 1) and generic protective (NIVEAU 2)
+        # Rule: admin_validated_clause = NIVEAU 1 for everyone
+        #       modele/director_model = NIVEAU 1 only for the originating director's org; NIVEAU 2 for others
         if contract_docs:
+            _dir_org_prefix = ("org:" + director_email + "§") if director_email else None
             def _is_director_model(doc):
                 source = doc.get("source", "")
                 cat = doc.get("category", "")
-                return ("validated_clause" in source or "cabinet-model" in source
-                        or cat in ("modele", "director_model"))
+                if "validated_clause" in source:
+                    return True  # admin_validated_clause → NIVEAU 1 for all
+                if "cabinet-model" in source:
+                    return True  # user_models injected as Context 0 → always NIVEAU 1
+                if cat in ("modele", "director_model"):
+                    # NIVEAU 1 only for the originating director's org
+                    if _dir_org_prefix and source.startswith(_dir_org_prefix):
+                        return True
+                    if not source.startswith("org:"):
+                        return True  # No org prefix (admin direct upload) → NIVEAU 1
+                    return False  # Different director's model → NIVEAU 2 for this user
+                return False
             validated = [d for d in contract_docs if _is_director_model(d)]
             reference = [d for d in contract_docs if not _is_director_model(d)]
 
-            def _fmt_doc(doc, model_context_str):
+            def _fmt_doc(doc, ctx):
                 title_doc = doc.get("title", "") or doc.get("source", "modele")
                 content_doc = str(doc.get("content", ""))[:1400]
                 is_prot = any(p in (title_doc + doc.get("source", "")).lower() for p in protected_kw)
                 arts = extract_article_refs(content_doc, title_doc)
-                model_context_str += "\n--- " + title_doc + " ---\n"
+                ctx += "\n--- " + title_doc + " ---\n"
                 if arts:
-                    model_context_str += "→ Articles cités: " + ", ".join(arts) + "\n"
-                model_context_str += content_doc + "\n"
-                model_context_str += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
+                    ctx += "→ Articles cités: " + ", ".join(arts) + "\n"
+                ctx += content_doc + "\n"
+                ctx += "→ rag_source: " + ("null (protege)" if is_prot else title_doc) + "\n"
                 if doc.get("party_label"):
-                    model_context_str += "[PARTIE PROTEGEE: " + str(doc.get("party_label", "")) + "]\n"
-                return model_context_str
+                    ctx += "[PARTIE PROTEGEE: " + str(doc.get("party_label", "")) + "]\n"
+                _rag_debug_contract.append({
+                    "title": title_doc,
+                    "source": doc.get("source", ""),
+                    "category": doc.get("category", ""),
+                    "protected": is_prot
+                })
+                return ctx
 
-            model_context = ""
             if validated:
                 model_context += "\n\n=== POLITIQUE JURIDIQUE DU DIRECTEUR (CLAUSES VALIDÉES) ===\n"
                 for doc in validated[:8]:
@@ -785,6 +968,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     legal_context += "→ Articles disponibles: " + ", ".join(arts) + "\n"
                 legal_context += content_doc + "\n"
                 legal_context += "→ rag_source: " + title_doc + "\n"
+                _rag_debug_legal.append({
+                    "title": title_doc,
+                    "source": doc.get("source", ""),
+                    "category": doc.get("category", "")
+                })
 
         _rag_contract_count = len(contract_docs)
         _rag_legal_count = len(legal_docs)
@@ -887,21 +1075,29 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         + rag_context
         + legal_context
         + "\n\n=== HIÉRARCHIE DES SOURCES — RÈGLE D'UTILISATION ===\n"
-        "NIVEAU 1 — POLITIQUE JURIDIQUE DU DIRECTEUR (section ci-dessus) — AUTORITÉ ABSOLUE :\n"
-        "   Ce sont les clauses validées par le directeur = la politique juridique du cabinet.\n"
-        "   Si une clause validée couvre le même article ou sujet ET est favorable à " + partie + " :\n"
-        "   → ton proposed DOIT reprendre ses termes EXACTS (délais, montants, mécanismes).\n"
-        "   → INTERDIT d'inventer tes propres termes si la politique du directeur en prévoit.\n"
-        "   → Adapte uniquement les noms des parties et l'objet — conserve la substance.\n"
-        "   Si la clause validée favorise l'autre partie → ignore-la, rédige librement.\n\n"
-        "NIVEAU 2 — CLAUSES PROTECTRICES DE RÉFÉRENCE (section ci-dessus) — INSPIRATION PROTECTRICE :\n"
-        "   Ce sont des modèles de contrats et clauses types protectrices.\n"
-        "   Inspire-toi de leur structure et de leurs mécanismes pour rédiger le proposed.\n"
-        "   Si elles sont favorables à " + partie + ", reprends leur logique — sans obligation de reproduire mot pour mot.\n\n"
-        "NIVEAU 3 — RÉFÉRENCES JURIDIQUES (lois / doctrine / jurisprudence) — ANALYSE DE CONFORMITÉ :\n"
-        "   Ces sources servent à identifier et argumenter les risques dans le champ reason :\n"
-        "   → Cite les articles de loi qui rendent la clause litigieuse ou déséquilibrée.\n"
-        "   → Elles légitiment le diagnostic mais n'imposent pas la rédaction du proposed.\n\n"
+        "NIVEAU 0 — MODÈLES CABINET (section MODÈLES CABINET ci-dessus) — PRIORITÉ ABSOLUE :\n"
+        "   Pour chaque modification, vérifie D'ABORD si un modèle cabinet traite du même sujet.\n"
+        "   Si oui : reprendre ses clauses, termes et chiffres EXACTS. Exemples obligatoires :\n"
+        "   · Modèle prévoit préavis 12 mois → proposed dit 12 mois (pas 180 jours)\n"
+        "   · Modèle prévoit CIRDI à Paris → proposed cite CIRDI à Paris (pas CNUDCI)\n"
+        "   · Modèle prévoit indemnité 24 mois → proposed dit 24 mois\n"
+        "   · Modèle prévoit renégociation 30j / résolution 90j → proposed reprend ces délais\n"
+        "   INTERDIT d'inventer quand le modèle cabinet traite du même sujet.\n"
+        "   Cite rag_source avec le nom du fichier modèle cabinet.\n\n"
+        "NIVEAU 1 — POLITIQUE JURIDIQUE DU DIRECTEUR (section POLITIQUE JURIDIQUE DU DIRECTEUR ci-dessus) — AUTORITÉ ABSOLUE :\n"
+        "   Ce sont les clauses officielles du cabinet. PROCESSUS OBLIGATOIRE pour chaque modification :\n"
+        "   → Lis d'abord la section POLITIQUE JURIDIQUE DU DIRECTEUR.\n"
+        "   → Si une clause y couvre le même sujet ET est favorable à " + partie + " :\n"
+        "      (1) proposed = reprend ses termes EXACTS (délais, montants, mécanismes)\n"
+        "      (2) rag_source = titre exact de cette clause du directeur\n"
+        "      (3) INTERDIT de regarder NIVEAU 2 pour ce sujet — le directeur a tranché\n"
+        "   → Si la clause du directeur est défavorable à " + partie + " → ignore-la, passe au NIVEAU 2.\n\n"
+        "NIVEAU 2 — CLAUSES PROTECTRICES DE RÉFÉRENCE (section ci-dessus) — UNIQUEMENT SI NIVEAU 1 NE COUVRE PAS :\n"
+        "   N'utiliser que si aucune clause du directeur ne traite du même sujet.\n"
+        "   Reprends leur logique — sans obligation de reproduire mot pour mot.\n\n"
+        "NIVEAU 3 — RÉFÉRENCES JURIDIQUES (lois / doctrine / jurisprudence) — CONFORMITÉ :\n"
+        "   Sert à argumenter les risques dans reason. Cite les articles pertinents.\n"
+        "   N'impose pas la rédaction du proposed.\n\n"
         "IMPORTANT: Le contrat est numéroté [P0], [P1], etc.\n\n"
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
@@ -917,6 +1113,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- OBLIGATION SUPPLÉMENTAIRE : Si le contrat a un article 'Résiliation' avec des CONSÉQUENCES (restitution, remboursement, pas d'indemnité) → cet article doit être une modification SÉPARÉE avec risk=high\n"
         "- para_idx: numéro entier du paragraphe\n"
         "- original: copie EXACTE sans modification\n"
+        "- RÈGLE UN ORIGINAL = UNE MODIFICATION: Chaque texte original ne peut apparaître QUE DANS UNE SEULE modification."
+        " Si tu identifies plusieurs problèmes dans la même clause (même original), CONSOLIDE-LES tous dans un seul proposed."
+        " Si tu veux traiter un aspect supplémentaire de la même clause → type=nouvelle_clause avec original=null et insertion_after=para_idx de cette clause.\n"
         "- RÈGLE ABSOLUE COHÉRENCE SUJET: Pour type=modification, le proposed DOIT traiter du MÊME sujet juridique que l'original."
         " INTERDIT: prendre une clause de préavis/démission et proposer à la place une clause de restitution, confidentialité, responsabilité ou tout autre sujet différent."
         " Si tu veux ajouter un sujet nouveau non couvert par l'original → type=nouvelle_clause avec original=null."
@@ -1067,6 +1266,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
     result["_paragraphs"] = paragraphs
+    # Debug: what the RAG pipeline actually found and sent to the model
+    _citeable = [d["title"] for d in _rag_debug_contract if not d["protected"]]
+    _protected = [d["title"] for d in _rag_debug_contract if d["protected"]]
+    result["_rag_debug"] = {
+        "contract_docs_in_context": _rag_debug_contract,
+        "legal_docs_in_context": _rag_debug_legal,
+        "citeable_sources": _citeable,
+        "protected_sources_silenced": _protected,
+        "total_found": _rag_contract_count + _rag_legal_count
+    }
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
@@ -1884,11 +2093,14 @@ def analyze_stream():
             if not user_email:
                 q.put({"type": "error", "message": "Connexion requise."})
                 return
-            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+            rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
             remaining = 9999
+            _dir_email_stream = ""
             if rows:
                 acc = rows[0]
                 remaining = 9999 if acc.get("is_admin") else (acc.get("analyses_remaining") or 0)
+                _parent_s = (acc.get("parent_email") or "").strip()
+                _dir_email_stream = _parent_s if _parent_s else (user_email if (acc.get("role") or "") == "directeur" else "")
             if remaining <= 0:
                 q.put({"type": "error", "message": "Quota epuise."})
                 return
@@ -1901,8 +2113,32 @@ def analyze_stream():
                 q.put({"type": "error", "message": "Fichier vide ou illisible."})
                 return
             _cb(f"\U0001f4c4 Document lu ({len(contract_text.split())} mots)...")
+            # Fetch director's personal cabinet models (used as priority RAG context)
+            _user_models_extra = []
+            _models_email = _dir_email_stream or user_email
+            if _models_email:
+                try:
+                    _sk = SUPA_SERVICE_KEY or SUPA_KEY
+                    _um_r = requests.get(
+                        SUPA_URL + "/rest/v1/user_models",
+                        headers={"apikey": _sk, "Authorization": "Bearer " + _sk},
+                        params={"user_email": f"eq.{_models_email}",
+                                "select": "id,filename,content",
+                                "content": "not.is.null",
+                                "limit": "10"},
+                        timeout=5
+                    )
+                    if _um_r.ok:
+                        _user_models_extra = [m for m in (_um_r.json() or [])
+                                              if m.get("content") and len(m.get("content","").strip()) > 50]
+                        if _user_models_extra:
+                            print(f"Cabinet models injected: {len(_user_models_extra)} for {_models_email}")
+                except Exception as _ume:
+                    print("user_models fetch error: " + str(_ume))
             result = analyze_contract(contract_text, lang, contract_type, api_key, partie,
-                                      file_bytes=file_bytes, filename=filename, progress_cb=_cb)
+                                      file_bytes=file_bytes, filename=filename, progress_cb=_cb,
+                                      director_email=_dir_email_stream,
+                                      user_models_extra=_user_models_extra or None)
             # Quota decrement
             if remaining < 9999:
                 supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
@@ -1966,7 +2202,7 @@ def analyze():
             return jsonify({"error": "Connexion requise pour analyser un contrat."}), 401
 
         # Check analyses_remaining — upsert row if missing (3 free analyses by default)
-        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin", "limit": "1"})
+        rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
         if not rows:
             # First time user — create free account with 3 analyses
             import datetime as _dt
@@ -1977,12 +2213,16 @@ def analyze():
                 "subscription_end": reset_date
             })
             remaining = 3
+            director_email = user_email  # new user = directeur by default
         else:
             acc = rows[0]
             if acc.get("is_admin"):
                 remaining = 9999  # admin = unlimited
             else:
                 remaining = acc.get("analyses_remaining", 0) or 0
+            # Director email: juriste → parent_email; directeur → own email
+            _parent = (acc.get("parent_email") or "").strip()
+            director_email = _parent if _parent else (user_email if (acc.get("role") or "") == "directeur" else "")
 
         if remaining <= 0:
             return jsonify({"error": "Quota d'analyses épuisé. Veuillez renouveler votre abonnement."}), 403
@@ -1992,7 +2232,30 @@ def analyze():
         contract_text, file_bytes, filename = read_file(file)
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
-        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename)
+        # Fetch director's personal cabinet models (priority RAG context)
+        _user_models_extra = []
+        _models_email_a = director_email or user_email
+        if _models_email_a:
+            try:
+                _sk_a = SUPA_SERVICE_KEY or SUPA_KEY
+                _um_a = requests.get(
+                    SUPA_URL + "/rest/v1/user_models",
+                    headers={"apikey": _sk_a, "Authorization": "Bearer " + _sk_a},
+                    params={"user_email": f"eq.{_models_email_a}",
+                            "select": "id,filename,content",
+                            "limit": "10"},
+                    timeout=5
+                )
+                if _um_a.ok:
+                    _user_models_extra = [m for m in (_um_a.json() or [])
+                                          if m.get("content") and len(m.get("content", "").strip()) > 50]
+                    if _user_models_extra:
+                        print(f"[/analyze] Cabinet models injected: {len(_user_models_extra)} for {_models_email_a}")
+            except Exception as _ume_a:
+                print("user_models fetch error (analyze): " + str(_ume_a))
+        result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename,
+                                  director_email=director_email,
+                                  user_models_extra=_user_models_extra or None)
 
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
@@ -2348,6 +2611,17 @@ def queue_validate():
         category = admin_category or contract.get("category", "generic")
         party_label = admin_party_label or contract.get("party_label", "")
 
+        # Resolve director_email from submitted_by → parent_email (for RAG priority tagging)
+        _submitted_by = contract.get("submitted_by", "")
+        _dir_email = ""
+        if _submitted_by:
+            _u = supa_get("user_accounts", {"email": f"eq.{_submitted_by}", "select": "parent_email,role", "limit": "1"})
+            if _u:
+                _dir_email = (_u[0].get("parent_email") or "").strip()
+                if not _dir_email and (_u[0].get("role") or "") == "directeur":
+                    _dir_email = _submitted_by
+        _source_prefix = ("org:" + _dir_email + "§") if _dir_email else ""
+
         # Use admin-edited modifications if provided
         edited_mods = body.get("edited_modifications", [])
         if edited_mods:
@@ -2383,7 +2657,7 @@ def queue_validate():
                 "contract_type": category,
                 "content": chunk,
                 "embedding": embedding,
-                "source": title_base,
+                "source": _source_prefix + title_base,
                 "key_clauses": contract.get("key_clauses", []),
                 "score": contract.get("score", 50),
                 "validated_at": datetime.datetime.now().isoformat()
@@ -2406,7 +2680,7 @@ def queue_validate():
                 "contract_type": category,
                 "content": mod_text,
                 "embedding": json.dumps(embedding),
-                "source": "admin_validated_clause",
+                "source": _source_prefix + "admin_validated_clause",
                 "validated_at": datetime.datetime.now().isoformat()
             })
 
@@ -2447,29 +2721,7 @@ def rag_upload():
         if filename.endswith(".docx") or filename.endswith(".doc"):
             content = extract_text_from_docx(file_bytes)
         elif filename.endswith(".pdf"):
-            # Try pdfplumber first, then PyPDF2
-            content = None
-            try:
-                import pdfplumber, io as _io
-                with pdfplumber.open(_io.BytesIO(file_bytes)) as pdf:
-                    content = "\n".join(p.extract_text() or "" for p in pdf.pages)
-            except Exception:
-                pass
-            if not content:
-                try:
-                    import PyPDF2, io as _io
-                    reader = PyPDF2.PdfReader(_io.BytesIO(file_bytes))
-                    if reader.is_encrypted:
-                        return jsonify({"error": "PDF chiffré/protégé — déverrouillez-le d'abord (ex: qpdf --decrypt input.pdf output.pdf)"}), 400
-                    content = "\n".join(p.extract_text() or "" for p in reader.pages)
-                except Exception:
-                    pass
-            # Detect binary garbage (encrypted PDF extracted as garbage)
-            if content:
-                sample = content[:2000]
-                printable = sum(1 for c in sample if c.isprintable() or c in '\n\r\t')
-                if printable / max(len(sample), 1) < 0.70:
-                    return jsonify({"error": "PDF illisible — le fichier est probablement chiffré ou corrompu. Déverrouillez-le avec: qpdf --decrypt input.pdf output.pdf"}), 400
+            content = extract_text_from_pdf(file_bytes)
         else:
             content = file_bytes.decode("utf-8", errors="ignore")
 
@@ -2534,6 +2786,12 @@ def rag_upload():
 
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
+
+        # Upsert: delete existing docs with same source name to avoid duplicates
+        deleted = delete_rag_by_source(title)
+        if deleted:
+            print(f"rag_upload: supprimé {deleted} ancien(s) chunk(s) pour source='{title}'")
+
         for i, chunk in enumerate(chunks):
             embedding = get_embedding(chunk, voyage_key)
             chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
@@ -2549,10 +2807,56 @@ def rag_upload():
             })
 
         total = load_rag()
-        return jsonify({"success": True, "chunks": len(chunks), "source": title, "total_docs": len(total["documents"])})
+        return jsonify({"success": True, "chunks": len(chunks), "source": title,
+                        "replaced": deleted, "total_docs": len(total["documents"])})
 
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+@app.route("/models/upload", methods=["POST", "OPTIONS"])
+def models_upload():
+    """Upload a personal cabinet model for a director — no admin validation needed.
+    Stored in user_models with full text content; injected as priority RAG context
+    into every analysis run by that director."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        user_email = request.form.get("user_email", "").strip()
+        user_id = request.form.get("user_id", "").strip() or None
+        file = request.files.get("file")
+        if not file or not user_email:
+            return jsonify({"error": "Fichier et user_email requis"}), 400
+        file_bytes = file.read()
+        fname = file.filename.lower()
+        if fname.endswith(".docx") or fname.endswith(".doc"):
+            content = extract_text_from_docx(file_bytes)
+        elif fname.endswith(".pdf"):
+            content = extract_text_from_pdf(file_bytes)
+        else:
+            content = file_bytes.decode("utf-8", errors="ignore")
+        content = (content or "").replace("\x00", "")
+        if len(content.strip()) < 20:
+            return jsonify({"error": "Document vide ou illisible"}), 400
+        # Delete any existing record with same user_email + filename — use service key to bypass RLS
+        _sk = SUPA_SERVICE_KEY or SUPA_KEY
+        try:
+            requests.delete(
+                SUPA_URL + "/rest/v1/user_models",
+                headers={"apikey": _sk, "Authorization": "Bearer " + _sk, "Content-Type": "application/json"},
+                params={"user_email": f"eq.{user_email}", "filename": f"eq.{file.filename}"},
+                timeout=10
+            )
+        except Exception:
+            pass
+        doc_id = str(uuid.uuid4())
+        row = {"id": doc_id, "user_email": user_email, "filename": file.filename,
+               "content": content, "category": "modele", "is_public": False}
+        if user_id:
+            row["user_id"] = user_id
+        supa_insert("user_models", row)
+        print(f"models_upload: {file.filename} ({len(content)} chars) → user_models for {user_email}")
+        return jsonify({"success": True, "id": doc_id, "filename": file.filename, "chars": len(content)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/rag/diag", methods=["GET", "POST"])
 def rag_diag():
@@ -2575,17 +2879,29 @@ def rag_diag():
             except Exception as e:
                 diag["voyage_test"] = "error: " + str(e)
 
-        # 3. Count docs in RAG + check embedding_vector coverage
+        # 3. Count docs in RAG using Prefer: count=exact (bypasses 1000-row limit)
         try:
-            all_docs = supa_get("rag_documents", {"select": "id,source,category", "limit": "2000"})
-            diag["total_docs"] = len(all_docs or [])
-            # Check a few for embedding_vector
-            sample = supa_get("rag_documents", {
-                "select": "id,embedding_vector",
-                "limit": "10",
-                "embedding_vector": "not.is.null"
-            })
-            diag["docs_with_embedding_vector"] = len(sample or [])
+            key = SUPA_SERVICE_KEY or SUPA_KEY
+            cnt_r = requests.get(
+                SUPA_URL + "/rest/v1/rag_documents",
+                headers={"apikey": key, "Authorization": "Bearer " + key,
+                         "Prefer": "count=exact"},
+                params={"select": "id,source,category,jurisdiction,embedding_vector",
+                        "limit": "1"},
+                timeout=15
+            )
+            total_count = int(cnt_r.headers.get("content-range", "0/0").split("/")[-1] or 0)
+            diag["total_docs"] = total_count
+            diag["total_docs_note"] = "count exact via Prefer:count=exact"
+            # Sample 1000 for category/missing-vector stats
+            all_docs = supa_get("rag_documents", {"select": "id,source,category,jurisdiction,embedding_vector", "limit": "1000"})
+            with_vec = [d for d in (all_docs or []) if d.get("embedding_vector")]
+            diag["sample_size"] = len(all_docs or [])
+            diag["docs_with_embedding_vector_in_sample"] = len(with_vec)
+            from collections import Counter
+            diag["categories"] = dict(Counter(d.get("category","?") for d in (all_docs or [])))
+            diag["jurisdictions"] = dict(Counter(d.get("jurisdiction") or "null" for d in (all_docs or [])))
+            diag["sample_sources"] = list(set(d.get("source","?") for d in (all_docs or [])))[:10]
         except Exception as e:
             diag["doc_count_error"] = str(e)
 
@@ -2596,6 +2912,7 @@ def rag_diag():
                 vec = get_embedding("contrat de travail CDI licenciement préavis Maroc", voyage_key)
                 if vec and len(vec) == 1024:
                     results = search_rag_pgvector(vec, top_k=5)
+                    results = results if isinstance(results, list) else []
                     diag["pgvector_test"] = "ok"
                     diag["pgvector_results"] = len(results)
                     diag["pgvector_titles"] = [r.get("title","?") for r in results[:3]]
@@ -2659,6 +2976,12 @@ def rag_list():
                 d["warning_msg"] = "Trop peu de chunks"
 
         result = sorted(grouped.values(), key=lambda x: (x.get("type",""), x.get("source","")))
+
+        # Optional keyword filter: /rag/list?q=investissement
+        q = (request.args.get("q") or "").strip().lower()
+        if q:
+            result = [d for d in result if q in d.get("source","").lower()]
+
         return jsonify({
             "documents": result,
             "total": sum(d["chunks"] for d in result),
@@ -2666,6 +2989,40 @@ def rag_list():
         })
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/rag/find", methods=["GET"])
+def rag_find():
+    """Search RAG documents by keyword in source/title. GET /rag/find?q=investissement"""
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"error": "Paramètre q requis"}), 400
+    try:
+        # Use Supabase server-side ilike filter — bypasses the 1000-row client limit
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        headers = {"apikey": key, "Authorization": "Bearer " + key}
+        r = requests.get(
+            SUPA_URL + "/rest/v1/rag_documents",
+            headers=headers,
+            params={
+                "select": "id,title,source,category,jurisdiction",
+                "or": f"(source.ilike.*{q}*,title.ilike.*{q}*)",
+                "limit": "2000"
+            },
+            timeout=15
+        )
+        docs = r.json() if r.ok else []
+        sources = {}
+        for d in (docs or []):
+            src = d.get("source","?")
+            sources[src] = sources.get(src, 0) + 1
+        return jsonify({
+            "query": q,
+            "matching_chunks": len(docs or []),
+            "sources": [{"source": s, "chunks": n} for s, n in sorted(sources.items())]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/rag/retag", methods=["POST", "OPTIONS"])
@@ -2735,10 +3092,14 @@ def rag_reindex():
                         continue
                     # Update embedding_vector and embedding JSON
                     vec_str = "[" + ",".join(str(x) for x in emb) + "]"
-                    supa_patch("rag_documents",
-                               {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
-                               "id=eq." + doc["id"])
-                    fixed += 1
+                    patch_r = supa_patch("rag_documents",
+                                         {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
+                                         "id=eq." + doc["id"])
+                    if patch_r.ok or patch_r.status_code == 204:
+                        fixed += 1
+                    else:
+                        print(f"reindex PATCH failed {patch_r.status_code}: {patch_r.text[:300]}")
+                        errors += 1
                 except Exception as de:
                     print("reindex doc error: " + str(de))
                     errors += 1
@@ -2755,6 +3116,55 @@ def rag_reindex():
         })
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/rag/reindex-all", methods=["POST", "OPTIONS"])
+def rag_reindex_all():
+    """Force re-embed RAG docs in paginated batches. Use ?offset=0&limit=200 per call."""
+    if request.method == "OPTIONS":
+        return "", 204
+    try:
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        if not voyage_key:
+            return jsonify({"error": "VOYAGE_API_KEY manquante"}), 400
+        # Paginated: process only `limit` docs starting at `offset`
+        offset = int(request.args.get("offset", 0))
+        limit = min(int(request.args.get("limit", 200)), 300)
+        fixed = skipped = errors = 0
+        docs = supa_get("rag_documents", {
+            "select": "id,content",
+            "limit": str(limit),
+            "offset": str(offset)
+        })
+        for doc in (docs or []):
+            try:
+                content = (doc.get("content") or "").strip()
+                if not content:
+                    skipped += 1
+                    continue
+                emb = get_embedding(content[:1000], voyage_key)
+                if not emb or len(emb) != 1024:
+                    skipped += 1
+                    continue
+                vec_str = "[" + ",".join(str(x) for x in emb) + "]"
+                patch_r = supa_patch("rag_documents",
+                                    {"embedding_vector": vec_str, "embedding": json.dumps(emb)},
+                                    "id=eq." + doc["id"])
+                if patch_r.ok or patch_r.status_code == 204:
+                    fixed += 1
+                else:
+                    errors += 1
+            except Exception as de:
+                errors += 1
+        next_offset = offset + limit
+        return jsonify({
+            "success": True, "fixed": fixed, "skipped": skipped, "errors": errors,
+            "offset": offset, "limit": limit,
+            "next_call": f"?offset={next_offset}&limit={limit}",
+            "done": len(docs or []) < limit
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/rag/delete/<doc_id>", methods=["DELETE"])
@@ -3093,9 +3503,28 @@ def chat():
         jurisdiction   = (data.get("jurisdiction") or "universel").strip()
         file_cache_id  = (data.get("file_cache_id") or "").strip()
         file_storage_path = (data.get("file_storage_path") or "").strip()
+        user_email_chat = (data.get("user_email") or "").strip()
 
         if not message:
             return jsonify({"error": "message requis"}), 400
+
+        # Chat quota — 15 messages per user (requires chat_remaining column in user_accounts)
+        _chat_is_admin = False
+        _chat_remaining = None
+        if user_email_chat:
+            try:
+                _chat_acc = supa_get("user_accounts", {"email": f"eq.{user_email_chat}", "select": "is_admin,chat_remaining", "limit": "1"})
+                if _chat_acc:
+                    _chat_is_admin = bool(_chat_acc[0].get("is_admin"))
+                    if not _chat_is_admin:
+                        _chat_remaining = _chat_acc[0].get("chat_remaining")
+                        if _chat_remaining is None:
+                            supa_patch("user_accounts", {"chat_remaining": 15}, f"email=eq.{user_email_chat}")
+                            _chat_remaining = 15
+                        if _chat_remaining <= 0:
+                            return jsonify({"error": "Quota de messages épuisé (0/15). Veuillez renouveler votre abonnement.", "chat_remaining": 0}), 403
+            except Exception as _qe:
+                print(f"[/chat] quota check error: {_qe}")
 
         # Try to retrieve contract text from cache / storage if not provided
         if not contract_text and file_cache_id:
@@ -3131,13 +3560,44 @@ def chat():
         # Full contract sent every time — prompt caching makes it cheap after 1st call
         contract_excerpt = contract_text[:80000] if contract_text else ""
 
+        # Search RAG for legal context relevant to the user's question
+        _legal_rag_ctx = ""
+        try:
+            _vkey = os.environ.get("VOYAGE_API_KEY")
+            _qemb = get_embedding(message[:500], voyage_key=_vkey)
+            _rdocs = search_rag_hybrid(message[:300], _qemb, top_k=15)
+            if not _rdocs:
+                _rdocs = search_rag_pgvector(_qemb, top_k=15)
+            if not _rdocs:
+                _rdocs = search_rag_keyword(message, top_k=15)
+            if _rdocs:
+                _legal_rag_ctx = "\n\n=== BASE LÉGALE ET DOCUMENTAIRE (extraits pertinents) ===\n"
+                for _rd in _rdocs[:10]:
+                    _rt = _rd.get("title") or _rd.get("source") or "Document"
+                    _rc = str(_rd.get("content", ""))[:3000]
+                    if _rc.strip():
+                        _legal_rag_ctx += f"\n[{_rt}]\n{_rc}\n"
+                _legal_rag_ctx += "\n=== FIN BASE LÉGALE ===\n"
+                _legal_rag_ctx += "Cite précisément ces sources légales quand tu t'y réfères dans ta réponse.\n"
+                print(f"[/chat] RAG: {len(_rdocs)} docs for: {message[:60]}")
+        except Exception as _re:
+            print(f"[/chat] RAG error: {_re}")
+
         # System prompt
         system_prompt = (
             "Tu es un assistant juridique expert en droit des contrats. "
             "Tu aides un avocat à analyser et améliorer un contrat. "
             "Réponds toujours en français, de manière professionnelle.\n"
+            "RÈGLE ABSOLUE SUR LES SOURCES LÉGALES : tu ne dois JAMAIS prétendre avoir accès "
+            "à une loi ou un document juridique sauf si son contenu figure EXPLICITEMENT dans la section "
+            "BASE LÉGALE ET DOCUMENTAIRE ci-dessous. Si cette section est absente ou ne contient pas "
+            "la loi demandée, réponds : 'Cette loi ne figure pas dans ma base documentaire pour cette session. "
+            "Voici ce que je sais de mémoire générale :' — puis réponds depuis tes connaissances générales "
+            "en précisant que ce n'est pas un extrait de la base. "
+            "INTERDIT : inventer une liste de lois 'disponibles', citer des articles sans les avoir dans le contexte.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+            + _legal_rag_ctx
             + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
             + mods_summary
             + """
@@ -3229,6 +3689,16 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
         result = {"reply": reply_text}
         if mod_list:
             result["modifications"] = mod_list
+        # Decrement chat quota and return remaining count
+        if user_email_chat and _chat_remaining is not None and not _chat_is_admin:
+            try:
+                new_remaining = max(0, _chat_remaining - 1)
+                supa_patch("user_accounts", {"chat_remaining": new_remaining}, f"email=eq.{user_email_chat}")
+                result["chat_remaining"] = new_remaining
+            except Exception:
+                pass
+        elif _chat_is_admin:
+            result["chat_remaining"] = 9999
         return jsonify(result)
 
     except Exception as e:
