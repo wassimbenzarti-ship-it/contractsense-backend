@@ -2481,7 +2481,7 @@ def rag_upload():
             content = content[:200000]
 
         # Smart chunking: split at article/clause boundaries first, fallback to 400-word chunks
-        def _split_into_clauses(text, max_chunks=80):
+        def _split_into_clauses(text, max_chunks=500):
             import re as _re
             # Strip table-of-contents lines (e.g. "Article 2 ........ 8") before splitting
             toc_line = _re.compile(r'(?m)^[^\n]*\.{5,}[^\n]*\d+\s*$\n?')
