@@ -762,7 +762,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
     numbered_text, _anon_mapping = anonymize_contract(numbered_text)
-    print(f"[ANON] {len(_anon_mapping)} valeurs anonymisées: {list(_anon_mapping.keys())}")
+    print(f"[ANON] {len(_anon_mapping)} valeurs anonymisées: {list(_anon_mapping.keys())}", flush=True)
 
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
