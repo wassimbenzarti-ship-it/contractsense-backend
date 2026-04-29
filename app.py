@@ -664,6 +664,87 @@ def build_numbered_paragraphs(file_bytes, filename):
         pass
     return []
 
+def anonymize_contract(text):
+    """Anonymise PII dans le texte avant envoi à Claude. Retourne (texte_anonymisé, mapping)."""
+    mapping = {}
+    counters = {}
+
+    def _ph(val, cat):
+        for ph, orig in mapping.items():
+            if orig.lower() == val.lower():
+                return ph
+        n = counters.get(cat, 0) + 1
+        counters[cat] = n
+        ph = f"[{cat}_{n}]"
+        mapping[ph] = val
+        return ph
+
+    def _sub(cat):
+        return lambda m: _ph(m.group(0), cat)
+
+    result = text
+
+    # Emails
+    result = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', _sub('EMAIL'), result)
+
+    # Téléphones marocains et français
+    result = re.sub(
+        r'\b(?:\+212|00212)?[\s.-]?(?:0[5-7]\d{8}|[5-7]\d{8})\b',
+        _sub('TEL'), result
+    )
+    result = re.sub(r'\b(?:\+33|0033)[\s.-]?[67]\d{8}\b', _sub('TEL'), result)
+
+    # IBAN
+    result = re.sub(r'\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b', _sub('IBAN'), result)
+
+    # ICE Maroc (15 chiffres après mot-clé ICE)
+    result = re.sub(
+        r'(ICE\s*[:/]?\s*)(\d{15})\b',
+        lambda m: m.group(1) + _ph(m.group(2), 'ICE'), result
+    )
+
+    # RC Maroc
+    result = re.sub(
+        r'\bR\.?C\.?\s*(?:N°|n°|No\.?|:)?\s*(\d{3,10})\b',
+        lambda m: m.group(0)[:m.group(0).rindex(m.group(1))] + _ph(m.group(1), 'RC'), result
+    )
+
+    # SIRET / SIREN (seulement après le mot-clé)
+    result = re.sub(
+        r'(SIRET|SIREN)\s*[:/]?\s*(\d{9}(?:[\s]?\d{5})?)\b',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2).replace(' ', ''), 'SIRET'), result
+    )
+
+    # CIN marocain (seulement après le mot-clé)
+    result = re.sub(
+        r'(CIN\s*[:/]?\s*)([A-Z]{1,2}\d{5,6})\b',
+        lambda m: m.group(1) + _ph(m.group(2), 'CIN'), result
+    )
+
+    # Noms de personnes après civilités
+    result = re.sub(
+        r'\b(M\.|Mme\.?|Monsieur|Madame|Mr\.?)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:(?:\s+|-)[A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ-]+){0,3})\b',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2), 'PERSONNE'), result
+    )
+
+    # Sociétés après forme juridique
+    result = re.sub(
+        r'\b(SARL|SA|SAS|SASU|EURL|SCI|GIE|SNC)\s+(?:dénommée?\s+)?"?([A-ZÀ-Ÿ؀-ۿ][A-Za-zÀ-ÿ؀-ۿ\s&,.-]{2,40}?)"?(?=\s*,|\s*\(|\s+dont|\s+au\s+capital|\s+inscrite|\s+immatriculée|\s*$)',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2).strip(), 'SOCIETE'), result
+    )
+
+    return result, mapping
+
+
+def deanonymize_text(text, mapping):
+    """Restitue les valeurs originales dans le texte anonymisé."""
+    if not mapping or not text:
+        return text
+    for placeholder, original in mapping.items():
+        text = text.replace(placeholder, original)
+    return text
+
+
 def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -678,6 +759,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:300])
     else:
         numbered_text = contract_text[:40000]
+
+    # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
+    numbered_text, _anon_mapping = anonymize_contract(numbered_text)
 
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
@@ -1261,6 +1345,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     for mod in mods:
         if mod.get("type") == "nouvelle_clause" and mod.get("original"):
             mod["original"] = None
+
+    # Restitue les valeurs PII dans les champs texte des modifications
+    if _anon_mapping:
+        for mod in mods:
+            for field in ("original", "proposed", "reason", "clause_name"):
+                if mod.get(field):
+                    mod[field] = deanonymize_text(mod[field], _anon_mapping)
 
     # Add confidence score based on RAG usage
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
