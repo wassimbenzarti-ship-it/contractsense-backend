@@ -1419,17 +1419,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
-    """Check if original text roughly matches para_text"""
+    """Check if original text roughly matches para_text (Latin + Arabic)"""
     original_lower = original.lower().strip()
     para_lower = para_text.lower().strip()
-    # Exact match
     if original_lower in para_lower:
         return True
-    # Extract meaningful words (ignore short words)
-    orig_words = [w for w in re.findall(r"[a-zA-ZÀ-ÿ]{3,}", original_lower)]
-    para_words_set = set(re.findall(r"[a-zA-ZÀ-ÿ]{3,}", para_lower))
-    orig_words_set = set(orig_words)
-    if len(orig_words_set) < 4:
+    # Extract meaningful words — Latin and Arabic scripts
+    _word_re = r"[؀-ۿ]{2,}|[a-zA-ZÀ-ÿ]{3,}"
+    orig_words_set = set(re.findall(_word_re, original_lower))
+    para_words_set = set(re.findall(_word_re, para_lower))
+    if len(orig_words_set) < 3:
         return False
     overlap = len(orig_words_set & para_words_set) / len(orig_words_set)
     return overlap >= threshold
@@ -2617,8 +2616,12 @@ def export_translation():
         if not contract_text or len(contract_text) < 20:
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
 
-        # Split contract into sections first (non-empty blocks separated by blank lines)
-        sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
+        # Split contract into sections — prefer [Px] markers (always present after analysis),
+        # fall back to blank-line splitting then line-by-line.
+        if re.search(r'\[P\d+\]', contract_text):
+            sections = [s.strip() for s in re.split(r'\[P\d+\]\s*', contract_text) if s.strip()]
+        else:
+            sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
         if not sections:
             sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
 
