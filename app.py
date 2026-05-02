@@ -1094,16 +1094,27 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "employeur": "maximiser la flexibilité opérationnelle, minimiser les obligations et coûts, renforcer le pouvoir de direction et de contrôle, faciliter la résiliation, protéger les intérêts commerciaux",
         "employe": "garantir la stabilité de l'emploi, maximiser les protections et indemnités, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
         "prestataire": "garantir le paiement, limiter la responsabilité, protéger la propriété intellectuelle, encadrer les modifications de scope",
-        "client": "garantir la qualité et les délais, maximiser les pénalités, faciliter la résiliation, protéger les données",
+        "client": "garantir la qualité et les délais de livraison, maintenir les pénalités contractuelles, faciliter la résiliation pour faute, protéger les données, maintenir le prix forfaitaire ferme",
+        "maitre": "maintenir le prix forfaitaire et éviter toute révision au profit du prestataire, renforcer les pénalités de retard, faciliter la résiliation et le retrait du marché, imposer des garanties bancaires et assurances, protéger les délais de réception et la qualité des ouvrages",
+        "commanditaire": "maintenir le prix forfaitaire et éviter toute révision au profit du prestataire, renforcer les pénalités de retard, faciliter la résiliation et le retrait du marché, imposer des garanties bancaires et assurances, protéger les délais de réception et la qualité des ouvrages",
         "acheteur": "garantir la conformité, maximiser les garanties, faciliter les recours",
         "vendeur": "garantir le paiement, limiter les garanties et responsabilités",
+        "الطرف الأول": "الحفاظ على السعر الجزافي النهائي ومنع أي مطالبة بزيادة من الطرف الثاني، تعزيز غرامات التأخير، تسهيل سحب العمل وفسخ العقد، فرض ضمانات بنكية وتأمينات كافية، حماية آجال الاستلام وجودة الأشغال",
+        "الطرف الثاني": "ضمان الأداء في الآجال المتفق عليها، تحديد نطاق الأشغال بدقة، تأمين حماية من القوة القاهرة، ضمان آليات تعديل السعر عند الاقتضاء",
     }
-    # Extract role from partie label
+    # Extract role from partie label — check Arabic keys first, then French
     role_key = "employeur"
+    partie_lower = partie.lower()
     for key in role_objectives:
-        if key in partie.lower():
+        if key in partie_lower or key in partie:
             role_key = key
             break
+    # Construction/BTP fallback: maître d'ouvrage keywords
+    if role_key == "employeur":
+        _btp_kw = ["maître", "maitre", "maitrise", "maîtrise", "btp", "construction",
+                   "donneur", "commanditaire", "مكتب", "مالك", "صاحب", "الأول", "أول"]
+        if any(k in partie_lower or k in partie for k in _btp_kw):
+            role_key = "maitre"
     role_obj = role_objectives.get(role_key, "protéger ses intérêts")
 
     # Coalition detection: "A et B" means defend A and B together against third party
@@ -1115,6 +1126,17 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
         "OBLIGATION D'EXHAUSTIVITÉ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
         "FAVORISER: " + partie + "\n\n"
+        "RÈGLE FONDAMENTALE — UNILATÉRALITÉ STRICTE:\n"
+        "Tu représentes EXCLUSIVEMENT " + partie + ". Toute modification doit AVANTAGER " + partie + " et seulement " + partie + ".\n"
+        "INTERDIT ABSOLU: Ne propose JAMAIS une modification qui réduit les obligations de la CONTREPARTIE envers " + partie + ".\n"
+        "- Une clause qui IMPOSE des obligations à la CONTREPARTIE est FAVORABLE pour " + partie + " → NE PAS l'affaiblir.\n"
+        "- Une clause qui IMPOSE des obligations ou risques à " + partie + " est DÉFAVORABLE → la modifier en faveur de " + partie + ".\n"
+        "EXEMPLES CONCRETS (contrat de construction, Partie 1 = maître d'ouvrage):\n"
+        "  → Prix forfaitaire fixe imposé à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS proposer de révision de prix pour l'entrepreneur\n"
+        "  → Pénalités de retard imposées à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS les atténuer ni créer des exceptions\n"
+        "  → Délais stricts imposés à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS réduire la responsabilité de l'entrepreneur\n"
+        "  → Garantie bancaire imposée à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS la supprimer ni la réduire\n"
+        "Cette règle s'applique à TOUS les types de contrats dans les deux langues.\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "RÈGLE ABSOLUE: Tu DOIS répondre dans LA MÊME LANGUE QUE LE CONTRAT.\n"
         "- Contrat en ANGLAIS → tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
