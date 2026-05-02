@@ -663,7 +663,7 @@ def build_numbered_paragraphs(file_bytes, filename):
             for child in body.iter():
                 tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
                 if tag == 'p':
-                    text = "".join(r.text for r in child.iter() if r.tag.split('}')[-1] == 't').strip()
+                    text = "".join(r.text or '' for r in child.iter() if r.tag.split('}')[-1] == 't').strip()
                     if text:
                         items.append({"idx": idx, "text": text})
                         idx += 1
