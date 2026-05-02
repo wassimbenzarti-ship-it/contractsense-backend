@@ -2607,31 +2607,59 @@ def export_translation():
         if not contract_text or len(contract_text) < 20:
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
 
-        # Apply non-rejected modifications to produce the modified contract text
-        modified_text = contract_text
+        # Split contract into sections first (non-empty blocks separated by blank lines)
+        sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
+        if not sections:
+            sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
+
+        def _strip_px(t):
+            """Remove [Px] paragraph markers Claude includes in original copies."""
+            return re.sub(r'^\[P\d+\]\s*', '', t.strip())
+
+        def _match_score(query, section):
+            """Word-overlap ratio between query and section (works for any script)."""
+            q_words = set(w for w in query.split() if len(w) >= 3)
+            s_words = set(w for w in section.split() if len(w) >= 3)
+            if len(q_words) < 3:
+                return 0.0
+            return len(q_words & s_words) / len(q_words)
+
+        # Apply non-rejected modifications using fuzzy section matching
+        modified_sections = list(sections)
+        section_mods = {}  # section_idx -> {'original': str, 'proposed': str}
         applied_count = 0
         for i, mod in enumerate(mods):
             mod_id = str(mod.get("id") if mod.get("id") is not None else i)
             decision = decisions.get(mod_id, "proposed")
             if decision == "rejected":
                 continue
-            orig_clause  = (mod.get("original") or "").strip()
-            prop_clause  = (mod.get("proposed") or "").strip()
-            if orig_clause and prop_clause and orig_clause in modified_text:
-                modified_text = modified_text.replace(orig_clause, prop_clause, 1)
+            orig = _strip_px((mod.get("original") or "").strip())
+            prop = (mod.get("proposed") or "").strip()
+            if not orig or not prop:
+                continue
+            matched_idx = None
+            best_score = 0.0
+            for j, sec in enumerate(modified_sections):
+                if j in section_mods:
+                    continue
+                if orig in sec or sec in orig:
+                    matched_idx = j
+                    break
+                score = _match_score(orig, sec)
+                if score > best_score and score >= 0.40:
+                    best_score = score
+                    matched_idx = j
+            if matched_idx is not None:
+                section_mods[matched_idx] = {'original': sections[matched_idx], 'proposed': prop}
+                modified_sections[matched_idx] = prop
                 applied_count += 1
 
         lang_label = {"en": "English", "fr": "Français", "ar": "العربية"}.get(target_lang, target_lang)
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         client = anthropic.Anthropic(api_key=api_key)
 
-        # Split modified contract into sections (non-empty blocks separated by blank lines)
-        orig_sections = [s.strip() for s in re.split(r'\n{2,}', modified_text) if s.strip()]
-        if not orig_sections:
-            orig_sections = [l.strip() for l in modified_text.split('\n') if l.strip()]
-
         # Ask Claude to translate section by section using numbered markers
-        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(orig_sections[:150]))
+        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:150]))
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=16000,
@@ -2698,15 +2726,30 @@ def export_translation():
             shd.set(_qn('w:val'), 'clear')
             tcPr.append(shd)
 
-        # Content rows
-        for i, orig in enumerate(orig_sections[:150]):
+        # Content rows — show strikethrough+green markup for modified sections
+        for i, sec in enumerate(modified_sections[:150]):
             trans = trans_map.get(i + 1, "")
             row = tbl.add_row()
-            row.cells[0].text = orig
+            left_cell = row.cells[0]
+            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec[:20])
+
+            if i in section_mods:
+                mod_info = section_mods[i]
+                left_cell.text = ""
+                para = left_cell.paragraphs[0]
+                run_del = para.add_run(mod_info['original'])
+                run_del.font.strike = True
+                run_del.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+                para.add_run("\n")
+                run_ins = para.add_run(mod_info['proposed'])
+                run_ins.font.color.rgb = RGBColor(0x00, 0x7F, 0x00)
+                run_ins.bold = True
+            else:
+                left_cell.text = sec
+
             row.cells[1].text = trans
-            # Right-to-left for Arabic original
-            if any(0x0600 <= ord(c) <= 0x06FF for c in orig[:20]):
-                pPr = row.cells[0].paragraphs[0]._p.get_or_add_pPr()
+            if is_arabic:
+                pPr = left_cell.paragraphs[0]._p.get_or_add_pPr()
                 bidi = _OE('w:bidi')
                 pPr.append(bidi)
 
