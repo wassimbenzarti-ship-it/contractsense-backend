@@ -3276,14 +3276,17 @@ def chat():
                 except Exception:
                     pass
 
-        # Build accepted modifications summary
+        # Build accepted modifications summary — include original+proposed so chatbot sees full clause text
         accepted_mods = [m for m in modifications if decisions.get(str(m.get("id") or "")) == "accepted"]
         mods_summary = ""
         if accepted_mods:
             lines = []
-            for m in accepted_mods[:10]:
-                lines.append(f"- {m.get('clause_name','?')}: {(m.get('proposed') or '')[:120]}")
-            mods_summary = "\nMODIFICATIONS DÉJÀ ACCEPTÉES PAR LE CLIENT:\n" + "\n".join(lines)
+            for m in accepted_mods[:15]:
+                cname    = m.get('clause_name') or '?'
+                original = (m.get('original') or '').strip()
+                proposed = (m.get('proposed') or '').strip()
+                lines.append(f"### {cname}\nORIGINAL: {original[:600]}\nPROPOSÉ: {proposed[:600]}")
+            mods_summary = "\nCLAUSES DU CONTRAT (texte original + modification acceptée):\n" + "\n\n".join(lines)
 
         # Full contract sent every time — prompt caching makes it cheap after 1st call
         contract_excerpt = contract_text[:80000] if contract_text else ""
