@@ -1513,7 +1513,19 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
     applied = set()
-    paragraphs = list(doc.paragraphs)
+
+    # Walk full XML body (including table cells) — same index as build_numbered_paragraphs
+    from docx.text.paragraph import Paragraph as _DocxPara
+    _body = doc.element.body
+    _p_elems = []
+    for _child in _body.iter():
+        _ctag = _child.tag.split('}')[-1] if '}' in _child.tag else _child.tag
+        if _ctag == 'p':
+            _ctext = "".join(r.text or '' for r in _child.iter()
+                             if r.tag.split('}')[-1] == 't').strip()
+            if _ctext:
+                _p_elems.append(_child)
+    paragraphs = [_DocxPara(_pe, doc) for _pe in _p_elems]
 
     for mod in accepted:
         mod_id = mod.get("id")
