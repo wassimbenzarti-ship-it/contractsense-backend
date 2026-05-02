@@ -650,16 +650,24 @@ Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON
     return json.loads(match.group(0))
 
 def build_numbered_paragraphs(file_bytes, filename):
-    """Build a numbered paragraph index from DOCX for precise matching"""
+    """Build a numbered paragraph index from DOCX for precise matching.
+    Includes both regular paragraphs and table cells (Arabic contracts often use tables)."""
     try:
         if filename.endswith('.docx') or filename.endswith('.doc'):
             doc = Document(io.BytesIO(file_bytes))
-            paragraphs = []
-            for i, para in enumerate(doc.paragraphs):
-                text = para.text.strip()
-                if text:
-                    paragraphs.append({"idx": i, "text": text})
-            return paragraphs
+            from docx.oxml.ns import qn as _qn
+            # Walk document body in XML order to preserve reading sequence
+            items = []
+            body = doc.element.body
+            idx = 0
+            for child in body.iter():
+                tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                if tag == 'p':
+                    text = "".join(r.text for r in child.iter() if r.tag.split('}')[-1] == 't').strip()
+                    if text:
+                        items.append({"idx": idx, "text": text})
+                        idx += 1
+            return items
     except:
         pass
     return []
@@ -1142,7 +1150,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "  REMBOURSEMENT/RESTITUTION : Verifier toute obligation de rembourser avances, subventions ou benefices fiscaux. Quantifier le montant max que " + partie + " pourrait devoir rembourser en cas de manquement ou resiliation.\n\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) — CECI EST OBLIGATOIRE SANS EXCEPTION (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Identifie les protections RÉELLEMENT absentes du contrat — une clause est manquante uniquement si ni le contrat ni aucun document expressément annexé ou référencé ne la couvre. Si le contrat couvre un sujet par renvoi explicite à une annexe, un cahier des charges ou un devis, ce sujet N'EST PAS manquant. Tu DOIS proposer ENTRE 2 ET 5 nouvelles clauses (type=nouvelle_clause) pour les protections réellement absentes. Cherche parmi: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "5. RAG — RÈGLE DE CITATION STRICTE: Cite une source dans rag_source UNIQUEMENT si elle fonde DIRECTEMENT la modification proposée — c'est-à-dire si elle traite précisément du même aspect juridique que la clause originale modifiée."
         " INTERDIT: citer un article qui parle d'un aspect connexe mais différent (ex: Art.255 traite des conséquences du non-respect du préavis → NE PAS le citer pour une clause qui définit la durée du préavis)."
