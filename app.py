@@ -2211,6 +2211,74 @@ def delete_queue_item(item_id):
     except Exception as e:
         print("delete_queue_item error: " + str(e))
 
+@app.route("/export-translation", methods=["POST", "OPTIONS"])
+def export_translation():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data          = request.get_json() or {}
+        contract_text = (data.get("contract_text") or "").strip()
+        target_lang   = (data.get("target_lang") or "en").strip()
+        filename      = (data.get("filename") or "contrat").strip()
+
+        if not contract_text or len(contract_text) < 20:
+            return jsonify({"error": "contract_text manquant ou trop court"}), 400
+
+        lang_label = {"en": "English", "fr": "Français", "ar": "العربية"}.get(target_lang, target_lang)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        client = anthropic.Anthropic(api_key=api_key)
+
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=16000,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Translate the following contract entirely into {lang_label}. "
+                    "Preserve the exact structure: article numbers, headings, clause numbering, blank lines. "
+                    "Output ONLY the translated text — no commentary, no introduction, no summary.\n\n"
+                    + contract_text[:60000]
+                )
+            }]
+        )
+        translated = response.content[0].text
+
+        # Build DOCX
+        from docx import Document as _Doc
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        doc = _Doc()
+        style = doc.styles['Normal']
+        style.font.name = 'Calibri'
+        style.font.size = Pt(11)
+
+        title = doc.add_heading(f"Translation ({lang_label}) — {filename}", level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        for line in translated.split('\n'):
+            stripped = line.strip()
+            if not stripped:
+                doc.add_paragraph('')
+                continue
+            # Detect headings (all-caps short lines or lines starting with Article/ARTICLE)
+            if (stripped.isupper() and len(stripped) < 80) or stripped.lower().startswith(('article ', 'chapter ', 'section ')):
+                p = doc.add_heading(stripped, level=2)
+            else:
+                p = doc.add_paragraph(stripped)
+
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        dl_name = f"{filename}_translation_{target_lang}.docx"
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=dl_name,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        print(f"[/export-translation] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
     """Auto-queue full contract with AI scoring for admin validation"""
@@ -3298,6 +3366,12 @@ def chat():
             "Tu es un assistant juridique expert en droit des contrats. "
             "Tu aides un avocat à analyser et améliorer un contrat. "
             "Réponds toujours en français, de manière professionnelle.\n"
+            "CAPACITÉ TRADUCTION WORD : si l'utilisateur demande une traduction du contrat en Word/DOCX "
+            "(en anglais, français, arabe, etc.), réponds en expliquant brièvement ce que tu vas faire, "
+            "puis termine ta réponse par exactement ce marqueur sur sa propre ligne : "
+            "[EXPORT_TRANSLATION:en] pour anglais, [EXPORT_TRANSLATION:fr] pour français, "
+            "[EXPORT_TRANSLATION:ar] pour arabe. "
+            "Ce marqueur déclenchera automatiquement la génération et le téléchargement du fichier Word.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
             + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
