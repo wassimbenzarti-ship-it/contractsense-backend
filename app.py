@@ -541,9 +541,27 @@ def extract_text_from_docx(file_bytes):
     try:
         doc = Document(io.BytesIO(file_bytes))
         text = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                text.append(para.text)
+        # Walk the body in document order: paragraphs AND table cells
+        for element in doc.element.body:
+            tag = element.tag.split('}')[-1] if '}' in element.tag else element.tag
+            if tag == 'p':
+                from docx.text.paragraph import Paragraph as _Para
+                para = _Para(element, doc)
+                if para.text.strip():
+                    text.append(para.text)
+            elif tag == 'tbl':
+                from docx.table import Table as _Tbl
+                table = _Tbl(element, doc)
+                for row in table.rows:
+                    row_texts = []
+                    for cell in row.cells:
+                        cell_text = " ".join(p.text.strip() for p in cell.paragraphs if p.text.strip())
+                        if cell_text:
+                            row_texts.append(cell_text)
+                    if row_texts:
+                        text.append(" | ".join(row_texts))
+        if not text:
+            text = [p.text for p in doc.paragraphs if p.text.strip()]
         return "\n".join(text)
     except Exception:
         # Try OLE for old .doc format
@@ -2591,43 +2609,83 @@ def export_translation():
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         client = anthropic.Anthropic(api_key=api_key)
 
+        # Split original into sections (non-empty blocks separated by blank lines)
+        orig_sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
+        if not orig_sections:
+            orig_sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
+
+        # Ask Claude to translate section by section using numbered markers
+        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(orig_sections[:150]))
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=16000,
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Translate the following contract entirely into {lang_label}. "
-                    "Preserve the exact structure: article numbers, headings, clause numbering, blank lines. "
-                    "Output ONLY the translated text — no commentary, no introduction, no summary.\n\n"
-                    + contract_text[:60000]
+                    f"Translate each numbered section [§N] into {lang_label}. "
+                    "Output ONLY the translated sections in the exact same numbered format — "
+                    "no commentary, no preamble, no extra text.\n\n"
+                    "FORMAT:\n[§1]\ntranslation of section 1\n\n[§2]\ntranslation of section 2\n\n...\n\n"
+                    "ORIGINAL CONTRACT:\n" + numbered_orig
                 )
             }]
         )
-        translated = response.content[0].text
+        translated_raw = response.content[0].text
 
-        # Build DOCX
+        # Parse translated sections
+        trans_map = {}
+        for m in re.finditer(r'\[§(\d+)\]\n(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
+            trans_map[int(m.group(1))] = m.group(2).strip()
+
+        # Build side-by-side DOCX with a two-column table
         from docx import Document as _Doc
-        from docx.shared import Pt, RGBColor
+        from docx.shared import Pt, Cm, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn as _qn
+        from docx.oxml import OxmlElement as _OE
+
         doc = _Doc()
+        section = doc.sections[0]
+        section.page_width  = Cm(29.7)  # A4 landscape
+        section.page_height = Cm(21.0)
+        section.left_margin = section.right_margin = Cm(1.5)
+        section.top_margin  = section.bottom_margin = Cm(1.5)
+
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
-        style.font.size = Pt(11)
+        style.font.size = Pt(10)
 
-        title = doc.add_heading(f"Translation ({lang_label}) — {filename}", level=1)
+        title = doc.add_heading(f"{filename}  —  Original | {lang_label}", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        for line in translated.split('\n'):
-            stripped = line.strip()
-            if not stripped:
-                doc.add_paragraph('')
-                continue
-            # Detect headings (all-caps short lines or lines starting with Article/ARTICLE)
-            if (stripped.isupper() and len(stripped) < 80) or stripped.lower().startswith(('article ', 'chapter ', 'section ')):
-                p = doc.add_heading(stripped, level=2)
-            else:
-                p = doc.add_paragraph(stripped)
+        # Header row
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.style = 'Table Grid'
+        hdr = tbl.rows[0].cells
+        for cell, txt, color in [(hdr[0], "ORIGINAL", "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
+            cell.text = txt
+            run = cell.paragraphs[0].runs[0]
+            run.bold = True
+            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            shd = _OE('w:shd')
+            shd.set(_qn('w:fill'), color)
+            shd.set(_qn('w:color'), 'auto')
+            shd.set(_qn('w:val'), 'clear')
+            tcPr.append(shd)
+
+        # Content rows
+        for i, orig in enumerate(orig_sections[:150]):
+            trans = trans_map.get(i + 1, "")
+            row = tbl.add_row()
+            row.cells[0].text = orig
+            row.cells[1].text = trans
+            # Right-to-left for Arabic original
+            if any(0x0600 <= ord(c) <= 0x06FF for c in orig[:20]):
+                pPr = row.cells[0].paragraphs[0]._p.get_or_add_pPr()
+                bidi = _OE('w:bidi')
+                pPr.append(bidi)
 
         buf = io.BytesIO()
         doc.save(buf)
