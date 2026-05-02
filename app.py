@@ -1514,18 +1514,21 @@ def apply_track_changes(file_bytes, modifications, decisions):
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
     applied = set()
 
-    # Walk full XML body (including table cells) — same index as build_numbered_paragraphs
-    from docx.text.paragraph import Paragraph as _DocxPara
+    # Walk full XML body (includes table cells) — same index as build_numbered_paragraphs
+    # Use raw XML elements + iter-based text to handle <w:sdt>, hyperlinks, table cells, etc.
+    _WNS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    _wt_tag = _WNS + 't'
+    _wr_tag = _WNS + 'r'
+
+    def _p_text(elem):
+        return "".join(t.text or '' for t in elem.iter(_wt_tag)).strip()
+
     _body = doc.element.body
-    _p_elems = []
+    paragraphs = []  # raw lxml <w:p> elements
     for _child in _body.iter():
         _ctag = _child.tag.split('}')[-1] if '}' in _child.tag else _child.tag
-        if _ctag == 'p':
-            _ctext = "".join(r.text or '' for r in _child.iter()
-                             if r.tag.split('}')[-1] == 't').strip()
-            if _ctext:
-                _p_elems.append(_child)
-    paragraphs = [_DocxPara(_pe, doc) for _pe in _p_elems]
+        if _ctag == 'p' and _p_text(_child):
+            paragraphs.append(_child)
 
     for mod in accepted:
         mod_id = mod.get("id")
@@ -1539,15 +1542,16 @@ def apply_track_changes(file_bytes, modifications, decisions):
         para_idx = mod.get("para_idx")
         if para_idx is not None and para_idx < len(paragraphs):
             candidate = paragraphs[para_idx]
-            if candidate.text.strip():
+            if _p_text(candidate):
                 para = candidate
 
         # Method 2: Fuzzy match fallback
         if para is None:
             original = mod.get("original", "").strip()
-            for p in paragraphs:
-                if p.text.strip() and fuzzy_match(original, p.text.strip()):
-                    para = p
+            for _pe in paragraphs:
+                _pt = _p_text(_pe)
+                if _pt and fuzzy_match(original, _pt):
+                    para = _pe
                     break
 
         # Handle new clauses (type=nouvelle_clause) — insert as new paragraph
@@ -1556,33 +1560,28 @@ def apply_track_changes(file_bytes, modifications, decisions):
             insert_para = None
             MIN_INSERT_IDX = 5
 
-            # Find insertion point — use insertion_after directly
             if insertion_after is not None:
                 safe_idx = max(int(insertion_after), MIN_INSERT_IDX)
                 if safe_idx < len(paragraphs):
                     insert_para = paragraphs[safe_idx]
 
-            # Fallback: insert before last paragraph
             if insert_para is None:
-                for p in reversed(paragraphs):
-                    if p.text.strip() and len(p.text.strip()) > 10:
-                        insert_para = p
+                for _pe in reversed(paragraphs):
+                    _pt = _p_text(_pe)
+                    if _pt and len(_pt) > 10:
+                        insert_para = _pe
                         break
 
             if insert_para is not None:
-                # Copy formatting from insert_para run
-                ref_rpr = None
-                if insert_para.runs:
-                    ref_rpr = insert_para.runs[0]._r.find(qn('w:rPr'))
+                _direct_runs = [r for r in insert_para if r.tag == _wr_tag]
+                ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
 
-                # Build new paragraph with Track Changes ins
                 new_p = OxmlElement('w:p')
 
-                # Copy paragraph properties if available
-                if insert_para._p.find(qn('w:pPr')) is not None:
+                _ppr = insert_para.find(qn('w:pPr'))
+                if _ppr is not None:
                     import copy
-                    new_ppr = copy.deepcopy(insert_para._p.find(qn('w:pPr')))
-                    new_p.append(new_ppr)
+                    new_p.append(copy.deepcopy(_ppr))
 
                 ins_elem = OxmlElement('w:ins')
                 ins_elem.set(qn('w:id'), str(rev_id))
@@ -1591,7 +1590,6 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 rev_id += 1
 
                 new_r = OxmlElement('w:r')
-                # Copy run formatting
                 if ref_rpr is not None:
                     import copy
                     new_r.append(copy.deepcopy(ref_rpr))
@@ -1602,16 +1600,14 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 ins_elem.append(new_r)
                 new_p.append(ins_elem)
 
-                # Insert AFTER target paragraph
-                # addnext inserts before in lxml — get next sibling and insert before it
-                next_sib = insert_para._p.getnext()
+                next_sib = insert_para.getnext()
                 if next_sib is not None:
-                    insert_para._p.getparent().insert(
-                        list(insert_para._p.getparent()).index(next_sib),
+                    insert_para.getparent().insert(
+                        list(insert_para.getparent()).index(next_sib),
                         new_p
                     )
                 else:
-                    insert_para._p.getparent().append(new_p)
+                    insert_para.getparent().append(new_p)
                 applied.add(mod_id)
                 print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
             else:
@@ -1622,12 +1618,14 @@ def apply_track_changes(file_bytes, modifications, decisions):
             print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
             continue
 
-        para_text = para.text.strip()
+        para_text = _p_text(para)
 
-        # Clear all runs
-        for run in para.runs:
-            run.text = ""
-        p = para._p
+        # Clear text in all <w:t> descendants of direct <w:r> children
+        for _r in list(para):
+            if _r.tag == _wr_tag:
+                for _t in _r.iter(_wt_tag):
+                    _t.text = ''
+        p = para
 
         # Del element
         del_elem = OxmlElement('w:del')
