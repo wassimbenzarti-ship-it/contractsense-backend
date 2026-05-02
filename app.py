@@ -2601,18 +2601,34 @@ def export_translation():
         contract_text = (data.get("contract_text") or "").strip()
         target_lang   = (data.get("target_lang") or "en").strip()
         filename      = (data.get("filename") or "contrat").strip()
+        mods          = data.get("modifications") or []
+        decisions     = data.get("decisions") or {}
 
         if not contract_text or len(contract_text) < 20:
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
+
+        # Apply non-rejected modifications to produce the modified contract text
+        modified_text = contract_text
+        applied_count = 0
+        for i, mod in enumerate(mods):
+            mod_id = str(mod.get("id") if mod.get("id") is not None else i)
+            decision = decisions.get(mod_id, "proposed")
+            if decision == "rejected":
+                continue
+            orig_clause  = (mod.get("original") or "").strip()
+            prop_clause  = (mod.get("proposed") or "").strip()
+            if orig_clause and prop_clause and orig_clause in modified_text:
+                modified_text = modified_text.replace(orig_clause, prop_clause, 1)
+                applied_count += 1
 
         lang_label = {"en": "English", "fr": "Français", "ar": "العربية"}.get(target_lang, target_lang)
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         client = anthropic.Anthropic(api_key=api_key)
 
-        # Split original into sections (non-empty blocks separated by blank lines)
-        orig_sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
+        # Split modified contract into sections (non-empty blocks separated by blank lines)
+        orig_sections = [s.strip() for s in re.split(r'\n{2,}', modified_text) if s.strip()]
         if not orig_sections:
-            orig_sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
+            orig_sections = [l.strip() for l in modified_text.split('\n') if l.strip()]
 
         # Ask Claude to translate section by section using numbered markers
         numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(orig_sections[:150]))
@@ -2626,7 +2642,7 @@ def export_translation():
                     "Output ONLY the translated sections in the exact same numbered format — "
                     "no commentary, no preamble, no extra text.\n\n"
                     "FORMAT:\n[§1]\ntranslation of section 1\n\n[§2]\ntranslation of section 2\n\n...\n\n"
-                    "ORIGINAL CONTRACT:\n" + numbered_orig
+                    "CONTRACT TO TRANSLATE:\n" + numbered_orig
                 )
             }]
         )
@@ -2655,14 +2671,21 @@ def export_translation():
         style.font.name = 'Calibri'
         style.font.size = Pt(10)
 
-        title = doc.add_heading(f"{filename}  —  Original | {lang_label}", level=1)
+        left_col_label = "CONTRAT MODIFIÉ" if applied_count > 0 else "ORIGINAL"
+        title = doc.add_heading(f"{filename}  —  {left_col_label} | {lang_label}", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        if applied_count > 0:
+            info_p = doc.add_paragraph(f"Modifications appliquées : {applied_count} / {len(mods)}")
+            info_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            info_p.runs[0].bold = True
+            info_p.runs[0].font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
 
         # Header row
         tbl = doc.add_table(rows=1, cols=2)
         tbl.style = 'Table Grid'
         hdr = tbl.rows[0].cells
-        for cell, txt, color in [(hdr[0], "ORIGINAL", "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
+        for cell, txt, color in [(hdr[0], left_col_label, "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
             cell.text = txt
             run = cell.paragraphs[0].runs[0]
             run.bold = True
