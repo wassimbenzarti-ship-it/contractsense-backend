@@ -2768,7 +2768,7 @@ def export_translation():
         style.font.size = Pt(10)
 
         tbl = doc.add_table(rows=0, cols=2)
-        tbl.style = 'Table Normal'
+        tbl.style = 'Normal Table'
 
         # Remove all table borders (transparent)
         tblPr = tbl._tbl.get_or_add_tblPr()
