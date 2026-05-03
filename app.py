@@ -2807,14 +2807,21 @@ def export_translation():
         if tblPr is None:
             tblPr = _OE('w:tblPr')
             tbl_xml.insert(0, tblPr)
+        # Table borders: outer frame + vertical separator, no horizontal row lines
         tblBorders = _OE('w:tblBorders')
-        for bn in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        for bn in ('top', 'left', 'bottom', 'right', 'insideV'):
             b = _OE(f'w:{bn}')
-            b.set(_qn('w:val'), 'none')
-            b.set(_qn('w:sz'), '0')
+            b.set(_qn('w:val'), 'single')
+            b.set(_qn('w:sz'), '6')
             b.set(_qn('w:space'), '0')
-            b.set(_qn('w:color'), 'auto')
+            b.set(_qn('w:color'), 'CCCCCC')
             tblBorders.append(b)
+        insH = _OE('w:insideH')
+        insH.set(_qn('w:val'), 'none')
+        insH.set(_qn('w:sz'), '0')
+        insH.set(_qn('w:space'), '0')
+        insH.set(_qn('w:color'), 'auto')
+        tblBorders.append(insH)
         tblPr.append(tblBorders)
 
         # Subtle header row: light gray, small bold labels, thin bottom border
@@ -2843,7 +2850,11 @@ def export_translation():
             tcBorders.append(bot)
             tcPr.append(tcBorders)
 
-        # Content rows — strikethrough+green for modified sections
+        # Content rows — Word track-change markup (w:del/w:ins) for modified sections
+        _tc_author = "WestField Avocats"
+        _tc_date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        _tc_rev = 1
+
         for i, sec_text in enumerate(modified_sections[:150]):
             if not sec_text.strip() or len(sec_text.strip()) < 5:
                 continue
@@ -2855,14 +2866,35 @@ def export_translation():
             if i in section_mods:
                 mod_info = section_mods[i]
                 left_cell.text = ""
-                lp = left_cell.paragraphs[0]
-                run_del = lp.add_run(mod_info['original'])
-                run_del.font.strike = True
-                run_del.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-                lp.add_run("  ")
-                run_ins = lp.add_run(mod_info['proposed'])
-                run_ins.font.color.rgb = RGBColor(0x00, 0x70, 0x00)
-                run_ins.bold = True
+                lp_el = left_cell.paragraphs[0]._p
+
+                # w:del — deleted original text
+                del_elem = _OE('w:del')
+                del_elem.set(_qn('w:id'), str(_tc_rev))
+                del_elem.set(_qn('w:author'), _tc_author)
+                del_elem.set(_qn('w:date'), _tc_date)
+                del_run = _OE('w:r')
+                del_t = _OE('w:delText')
+                del_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                del_t.text = mod_info['original']
+                del_run.append(del_t)
+                del_elem.append(del_run)
+                lp_el.append(del_elem)
+                _tc_rev += 1
+
+                # w:ins — inserted proposed text
+                ins_elem = _OE('w:ins')
+                ins_elem.set(_qn('w:id'), str(_tc_rev))
+                ins_elem.set(_qn('w:author'), _tc_author)
+                ins_elem.set(_qn('w:date'), _tc_date)
+                ins_run = _OE('w:r')
+                ins_t = _OE('w:t')
+                ins_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                ins_t.text = mod_info['proposed']
+                ins_run.append(ins_t)
+                ins_elem.append(ins_run)
+                lp_el.append(ins_elem)
+                _tc_rev += 1
             else:
                 left_cell.text = sec_text
 
