@@ -1616,16 +1616,23 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
         para = None
 
-        # Method 1: Use para_idx if available (precise)
+        # Method 1: Use para_idx if available (precise), with length sanity check.
+        # In Arabic table contracts, Claude sometimes assigns para_idx to a short
+        # header cell (e.g. "الطرف الثاني") instead of the adjacent clause cell.
+        # If the candidate is much shorter than original, fall through to fuzzy match.
+        original = mod.get("original", "").strip()
         para_idx = mod.get("para_idx")
         if para_idx is not None and para_idx < len(paragraphs):
             candidate = paragraphs[para_idx]
-            if _p_text(candidate):
-                para = candidate
+            cand_text = _p_text(candidate)
+            if cand_text:
+                if original and len(original) > 60 and len(cand_text) < len(original) * 0.25:
+                    pass  # candidate is likely a header cell; fall through to Method 2
+                else:
+                    para = candidate
 
         # Method 2: Fuzzy match fallback
         if para is None:
-            original = mod.get("original", "").strip()
             for _pe in paragraphs:
                 _pt = _p_text(_pe)
                 if _pt and fuzzy_match(original, _pt):
@@ -2805,30 +2812,38 @@ def export_translation():
 
         # Content rows — show strikethrough+green markup for modified sections
         for i, sec in enumerate(modified_sections[:150]):
+            if not sec.strip() or len(sec.strip()) < 5:
+                continue  # skip empty/trivial sections (no table row)
             trans = trans_map.get(i + 1, "")
+            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec[:50])
             row = tbl.add_row()
             left_cell = row.cells[0]
-            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec[:20])
 
             if i in section_mods:
                 mod_info = section_mods[i]
                 left_cell.text = ""
-                para = left_cell.paragraphs[0]
-                run_del = para.add_run(mod_info['original'])
+                lp = left_cell.paragraphs[0]
+                run_del = lp.add_run(mod_info['original'])
                 run_del.font.strike = True
                 run_del.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-                para.add_run("\n")
-                run_ins = para.add_run(mod_info['proposed'])
+                lp.add_run("\n")
+                run_ins = lp.add_run(mod_info['proposed'])
                 run_ins.font.color.rgb = RGBColor(0x00, 0x7F, 0x00)
                 run_ins.bold = True
             else:
                 left_cell.text = sec
 
-            row.cells[1].text = trans
+            lp = left_cell.paragraphs[0]
             if is_arabic:
-                pPr = left_cell.paragraphs[0]._p.get_or_add_pPr()
+                lp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                pPr = lp._p.get_or_add_pPr()
                 bidi = _OE('w:bidi')
                 pPr.append(bidi)
+            else:
+                lp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+            row.cells[1].text = trans
+            row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
         buf = io.BytesIO()
         doc.save(buf)
