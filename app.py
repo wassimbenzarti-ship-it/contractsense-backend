@@ -2767,8 +2767,7 @@ def export_translation():
         style.font.name = 'Calibri'
         style.font.size = Pt(10)
 
-        # Header row
-        tbl = doc.add_table(rows=1, cols=2)
+        tbl = doc.add_table(rows=0, cols=2)
         tbl.style = 'Table Normal'
 
         # Remove all table borders (transparent)
@@ -2783,20 +2782,6 @@ def export_translation():
             tblBorders.append(b)
         tblPr.append(tblBorders)
 
-        left_col_label = "CONTRAT MODIFIÉ" if applied_count > 0 else "ORIGINAL"
-        hdr = tbl.rows[0].cells
-        for cell, txt, color in [(hdr[0], left_col_label, "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
-            cell.text = txt
-            run = cell.paragraphs[0].runs[0]
-            run.bold = True
-            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-            tc = cell._tc
-            tcPr = tc.get_or_add_tcPr()
-            shd = _OE('w:shd')
-            shd.set(_qn('w:fill'), color)
-            shd.set(_qn('w:color'), 'auto')
-            shd.set(_qn('w:val'), 'clear')
-            tcPr.append(shd)
 
         # Content rows — show strikethrough+green markup for modified sections
         for i, sec in enumerate(modified_sections[:150]):
