@@ -2729,7 +2729,12 @@ def export_translation():
             for j, sec in enumerate(modified_sections):
                 if j in section_mods:
                     continue
-                if orig in sec or sec in orig:
+                if orig in sec:
+                    matched_idx = j
+                    break
+                # sec in orig only valid if sec is substantial (≥50 chars) —
+                # short header cells like "الطرف الثاني" are substrings of many clauses
+                if sec in orig and len(sec) >= 50:
                     matched_idx = j
                     break
                 score = _match_score(orig, sec)
@@ -2769,7 +2774,7 @@ def export_translation():
         for m in re.finditer(r'\[§(\d+)\]\n(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
             trans_map[int(m.group(1))] = m.group(2).strip()
 
-        # Build side-by-side DOCX with a two-column table
+        # Build side-by-side DOCX — A4 portrait, transparent table, professional look
         from docx import Document as _Doc
         from docx.shared import Pt, Cm, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -2777,28 +2782,34 @@ def export_translation():
         from docx.oxml import OxmlElement as _OE
 
         doc = _Doc()
-        section = doc.sections[0]
-        section.page_width  = Cm(21.0)   # A4 portrait
-        section.page_height = Cm(29.7)
-        section.left_margin = section.right_margin = Cm(2.0)
-        section.top_margin  = section.bottom_margin = Cm(2.0)
-
-        style = doc.styles['Normal']
-        style.font.name = 'Calibri'
-        style.font.size = Pt(10)
+        _sec = doc.sections[0]
+        _sec.page_width   = Cm(21.0)
+        _sec.page_height  = Cm(29.7)
+        _sec.left_margin  = _sec.right_margin  = Cm(2.0)
+        _sec.top_margin   = _sec.bottom_margin = Cm(2.0)
+        doc.styles['Normal'].font.name = 'Calibri'
+        doc.styles['Normal'].font.size = Pt(10)
 
         tbl = doc.add_table(rows=0, cols=2)
         tbl.style = 'Normal Table'
-
-        # Remove all table borders (transparent) — direct XML manipulation
         tbl_xml = tbl._tbl
+
+        # Equal column widths (17 cm usable → 8.5 cm each → 4819 twips)
+        tblGrid = _OE('w:tblGrid')
+        for _ in range(2):
+            gc = _OE('w:gridCol')
+            gc.set(_qn('w:w'), '4819')
+            tblGrid.append(gc)
+        tbl_xml.insert(1, tblGrid)
+
+        # Transparent borders
         tblPr = tbl_xml.find(_qn('w:tblPr'))
         if tblPr is None:
             tblPr = _OE('w:tblPr')
             tbl_xml.insert(0, tblPr)
         tblBorders = _OE('w:tblBorders')
-        for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
-            b = _OE(f'w:{border_name}')
+        for bn in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+            b = _OE(f'w:{bn}')
             b.set(_qn('w:val'), 'none')
             b.set(_qn('w:sz'), '0')
             b.set(_qn('w:space'), '0')
@@ -2806,13 +2817,38 @@ def export_translation():
             tblBorders.append(b)
         tblPr.append(tblBorders)
 
+        # Subtle header row: light gray, small bold labels, thin bottom border
+        lang_hdr = {"en": "English Translation", "fr": "Traduction française", "ar": "الترجمة العربية"}.get(target_lang, target_lang)
+        hdr_row = tbl.add_row()
+        for cell, txt, align in [(hdr_row.cells[0], "النص الأصلي", WD_ALIGN_PARAGRAPH.RIGHT),
+                                   (hdr_row.cells[1], lang_hdr, WD_ALIGN_PARAGRAPH.LEFT)]:
+            cell.text = txt
+            hp = cell.paragraphs[0]
+            hp.alignment = align
+            hr = hp.runs[0]
+            hr.bold = True
+            hr.font.size = Pt(9)
+            hr.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+            tcPr = cell._tc.get_or_add_tcPr()
+            shd = _OE('w:shd')
+            shd.set(_qn('w:fill'), 'F2F2F2')
+            shd.set(_qn('w:val'), 'clear')
+            tcPr.append(shd)
+            tcBorders = _OE('w:tcBorders')
+            bot = _OE('w:bottom')
+            bot.set(_qn('w:val'), 'single')
+            bot.set(_qn('w:sz'), '4')
+            bot.set(_qn('w:space'), '0')
+            bot.set(_qn('w:color'), 'BBBBBB')
+            tcBorders.append(bot)
+            tcPr.append(tcBorders)
 
-        # Content rows — show strikethrough+green markup for modified sections
-        for i, sec in enumerate(modified_sections[:150]):
-            if not sec.strip() or len(sec.strip()) < 5:
-                continue  # skip empty/trivial sections (no table row)
+        # Content rows — strikethrough+green for modified sections
+        for i, sec_text in enumerate(modified_sections[:150]):
+            if not sec_text.strip() or len(sec_text.strip()) < 5:
+                continue
             trans = trans_map.get(i + 1, "")
-            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec[:50])
+            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec_text[:50])
             row = tbl.add_row()
             left_cell = row.cells[0]
 
@@ -2823,12 +2859,12 @@ def export_translation():
                 run_del = lp.add_run(mod_info['original'])
                 run_del.font.strike = True
                 run_del.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-                lp.add_run("\n")
+                lp.add_run("  ")
                 run_ins = lp.add_run(mod_info['proposed'])
-                run_ins.font.color.rgb = RGBColor(0x00, 0x7F, 0x00)
+                run_ins.font.color.rgb = RGBColor(0x00, 0x70, 0x00)
                 run_ins.bold = True
             else:
-                left_cell.text = sec
+                left_cell.text = sec_text
 
             lp = left_cell.paragraphs[0]
             if is_arabic:
