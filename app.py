@@ -1509,13 +1509,8 @@ def create_docx_with_changes(contract_text, modifications, decisions):
         section.left_margin   = Cm(2.5)
         section.right_margin  = Cm(2.5)
 
-    title = doc.add_heading("Rapport de modifications — ContractSense", 0)
+    title = doc.add_heading("Rapport d'analyse contractuelle", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    dp = doc.add_paragraph()
-    dp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    dr = dp.add_run("Genere le " + datetime.datetime.now().strftime("%d/%m/%Y a %H:%M"))
-    dr.font.size = Pt(9)
-    dr.font.color.rgb = RGBColor(0x70, 0x70, 0x70)
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
     if not accepted:
@@ -2613,7 +2608,9 @@ def export():
             try:
                 output = apply_track_changes(file_bytes, modifications, decisions)
             except Exception as zip_err:
-                # File is not a valid DOCX (e.g. text content with .docx extension)
+                import traceback
+                print(f"[/export] apply_track_changes failed: {zip_err}", flush=True)
+                traceback.print_exc()
                 text_content = file_bytes.decode("utf-8", errors="ignore")
                 output = create_docx_with_changes(text_content, modifications, decisions)
         elif filename.endswith(".doc"):
@@ -2622,7 +2619,7 @@ def export():
             output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
-            doc.add_heading('ContractSense - Modifications acceptées', 0)
+            doc.add_heading("Modifications contractuelles acceptées", 0)
             accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
             for i, m in enumerate(accepted):
                 doc.add_heading(f"{i+1}. {m.get('clause_name', '')}", level=2)
