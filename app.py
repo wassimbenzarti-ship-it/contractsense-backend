@@ -2742,7 +2742,14 @@ def export_translation():
                     best_score = score
                     matched_idx = j
             if matched_idx is not None:
-                section_mods[matched_idx] = {'original': sections[matched_idx], 'proposed': prop}
+                # Store orig_mod (clause content only, no article prefix) + full_section
+                # so the del element uses only the clause text, and any article title
+                # prefix ("البند (N): ...") is preserved as plain text in front.
+                section_mods[matched_idx] = {
+                    'orig_mod': orig,
+                    'full_section': sections[matched_idx],
+                    'proposed': prop
+                }
                 modified_sections[matched_idx] = prop
                 applied_count += 1
 
@@ -2751,8 +2758,8 @@ def export_translation():
         client = anthropic.Anthropic(api_key=api_key)
 
         # Ask Claude to translate section by section using numbered markers
-        # Haiku: 5x faster than Sonnet for pure translation (no legal reasoning needed)
-        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:150]))
+        _TRANS_LIMIT = 250
+        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:_TRANS_LIMIT]))
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=32000,
@@ -2855,7 +2862,7 @@ def export_translation():
         _tc_date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         _tc_rev = 1
 
-        for i, sec_text in enumerate(modified_sections[:150]):
+        for i, sec_text in enumerate(modified_sections[:_TRANS_LIMIT]):
             if not sec_text.strip() or len(sec_text.strip()) < 5:
                 continue
             trans = trans_map.get(i + 1, "")
@@ -2865,10 +2872,24 @@ def export_translation():
 
             if i in section_mods:
                 mod_info = section_mods[i]
+                orig_clause = mod_info['orig_mod']   # clause content only (no title)
+                full_sec    = mod_info['full_section']  # may start with "البند (N):"
                 left_cell.text = ""
                 lp_el = left_cell.paragraphs[0]._p
 
-                # w:del — deleted original text
+                # Preserve article title prefix (e.g. "البند (6): ..." before clause body)
+                prefix = ""
+                if orig_clause and orig_clause in full_sec:
+                    prefix = full_sec[:full_sec.index(orig_clause)]
+                if prefix.strip():
+                    pfx_r = _OE('w:r')
+                    pfx_t = _OE('w:t')
+                    pfx_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                    pfx_t.text = prefix.rstrip('\n') + ' '
+                    pfx_r.append(pfx_t)
+                    lp_el.append(pfx_r)
+
+                # w:del — clause content that was replaced
                 del_elem = _OE('w:del')
                 del_elem.set(_qn('w:id'), str(_tc_rev))
                 del_elem.set(_qn('w:author'), _tc_author)
@@ -2876,13 +2897,13 @@ def export_translation():
                 del_run = _OE('w:r')
                 del_t = _OE('w:delText')
                 del_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                del_t.text = mod_info['original']
+                del_t.text = orig_clause or full_sec
                 del_run.append(del_t)
                 del_elem.append(del_run)
                 lp_el.append(del_elem)
                 _tc_rev += 1
 
-                # w:ins — inserted proposed text
+                # w:ins — proposed replacement text
                 ins_elem = _OE('w:ins')
                 ins_elem.set(_qn('w:id'), str(_tc_rev))
                 ins_elem.set(_qn('w:author'), _tc_author)
