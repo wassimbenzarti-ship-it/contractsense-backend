@@ -1325,11 +1325,21 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     _clause_buf = ""
     _law_buf = ""
     import re as _re
+    # Prompt caching: system (règles + RAG) + contrat tous deux marqués ephemeral.
+    # Cache TTL 5 min. Sur un re-analyse du même contrat (autre partie) :
+    # system ~15k tokens + contrat ~10k tokens × $2.70 économie/MTok = ~$0.067 économisé.
+    _system_blocks = [
+        {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+    ]
+    _user_content = [
+        {"type": "text", "text": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON.",
+         "cache_control": {"type": "ephemeral"}}
+    ]
     with client.messages.stream(
         model="claude-sonnet-4-6",
-        max_tokens=10000,
-        system=system,
-        messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
+        max_tokens=14000,
+        system=_system_blocks,
+        messages=[{"role": "user", "content": _user_content}]
     ) as _stream:
         for _tok in _stream.text_stream:
             raw += _tok
