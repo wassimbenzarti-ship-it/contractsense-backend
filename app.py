@@ -2727,9 +2727,10 @@ def export_translation():
         client = anthropic.Anthropic(api_key=api_key)
 
         # Ask Claude to translate section by section using numbered markers
+        # Haiku: 5x faster than Sonnet for pure translation (no legal reasoning needed)
         numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:150]))
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=32000,
             messages=[{
                 "role": "user",
