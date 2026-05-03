@@ -771,7 +771,7 @@ def deanonymize_text(text, mapping):
     return text
 
 
-def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None):
+def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None, interface_lang="fr"):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("Clé API manquante")
@@ -1177,13 +1177,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "CORRECT: renforcer le mécanisme d'application, ajouter des sanctions en cas de violation, préciser la mise en demeure.\n"
         "INTERDIT: ajouter des exceptions qui contredisent la protection absolue expressément choisie par les parties.\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
+        "LANGUE DE L'INTERFACE (langue de travail de l'avocat): " + interface_lang + "\n"
         "RÈGLE ABSOLUE DE LANGUE — BILINGUE OBLIGATOIRE:\n"
-        "• Le champ 'reason' → TOUJOURS en FRANÇAIS (c'est la langue de travail de l'avocat)\n"
-        "• Les champs 'proposed' et 'clause_name' → dans LA LANGUE DU CONTRAT\n"
+        "• Le champ 'reason' → TOUJOURS dans la langue de l'interface (" + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + ")\n"
+        "• Les champs 'proposed' et 'clause_name' → dans LA LANGUE DU CONTRAT (" + detected_lang + ")\n"
         "  - Contrat en ARABE → proposed et clause_name en ARABE\n"
         "  - Contrat en ANGLAIS → proposed et clause_name en ANGLAIS\n"
         "  - Contrat en FRANÇAIS → proposed et clause_name en FRANÇAIS\n"
-        "INTERDIT: mettre le reason en arabe ou en anglais. INTERDIT: mettre le proposed en français si le contrat est en arabe.\n"
+        "INTERDIT: mettre le reason dans la langue du contrat si elle diffère de la langue de l'interface.\n"
+        "INTERDIT: mettre le proposed dans la langue de l'interface si le contrat est dans une autre langue.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
@@ -2391,6 +2393,7 @@ def analyze():
     try:
         file = request.files.get("file")
         lang = request.form.get("lang", "fr")
+        interface_lang = request.form.get("interface_lang", "fr")
         contract_type = request.form.get("type", "generic")
         api_key = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
         partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
@@ -2454,7 +2457,8 @@ def analyze():
                 print("user_models fetch error (analyze): " + str(_ume_a))
         result = analyze_contract(contract_text, lang, contract_type, api_key, partie, file_bytes, filename,
                                   director_email=director_email,
-                                  user_models_extra=_user_models_extra or None)
+                                  user_models_extra=_user_models_extra or None,
+                                  interface_lang=interface_lang)
 
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
