@@ -2617,12 +2617,13 @@ def export_translation():
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
 
         # Split contract into sections — prefer [Px] markers (always present after analysis),
-        # fall back to blank-line splitting then line-by-line.
+        # then blank-line splitting. If that yields ≤3 sections (table DOCX where rows are
+        # separated by single \n only), fall back to line-by-line splitting.
         if re.search(r'\[P\d+\]', contract_text):
             sections = [s.strip() for s in re.split(r'\[P\d+\]\s*', contract_text) if s.strip()]
         else:
             sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
-        if not sections:
+        if len(sections) <= 3:
             sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
 
         def _strip_px(t):
@@ -2675,7 +2676,7 @@ def export_translation():
         numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:150]))
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=16000,
+            max_tokens=32000,
             messages=[{
                 "role": "user",
                 "content": (
