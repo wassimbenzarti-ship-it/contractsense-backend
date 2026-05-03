@@ -541,9 +541,27 @@ def extract_text_from_docx(file_bytes):
     try:
         doc = Document(io.BytesIO(file_bytes))
         text = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                text.append(para.text)
+        # Walk the body in document order: paragraphs AND table cells
+        for element in doc.element.body:
+            tag = element.tag.split('}')[-1] if '}' in element.tag else element.tag
+            if tag == 'p':
+                from docx.text.paragraph import Paragraph as _Para
+                para = _Para(element, doc)
+                if para.text.strip():
+                    text.append(para.text)
+            elif tag == 'tbl':
+                from docx.table import Table as _Tbl
+                table = _Tbl(element, doc)
+                for row in table.rows:
+                    row_texts = []
+                    for cell in row.cells:
+                        cell_text = " ".join(p.text.strip() for p in cell.paragraphs if p.text.strip())
+                        if cell_text:
+                            row_texts.append(cell_text)
+                    if row_texts:
+                        text.append(" | ".join(row_texts))
+        if not text:
+            text = [p.text for p in doc.paragraphs if p.text.strip()]
         return "\n".join(text)
     except Exception:
         # Try OLE for old .doc format
@@ -650,19 +668,108 @@ Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON
     return json.loads(match.group(0))
 
 def build_numbered_paragraphs(file_bytes, filename):
-    """Build a numbered paragraph index from DOCX for precise matching"""
+    """Build a numbered paragraph index from DOCX for precise matching.
+    Includes both regular paragraphs and table cells (Arabic contracts often use tables)."""
     try:
         if filename.endswith('.docx') or filename.endswith('.doc'):
             doc = Document(io.BytesIO(file_bytes))
-            paragraphs = []
-            for i, para in enumerate(doc.paragraphs):
-                text = para.text.strip()
-                if text:
-                    paragraphs.append({"idx": i, "text": text})
-            return paragraphs
+            from docx.oxml.ns import qn as _qn
+            # Walk document body in XML order to preserve reading sequence
+            items = []
+            body = doc.element.body
+            idx = 0
+            for child in body.iter():
+                tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                if tag == 'p':
+                    text = "".join(r.text or '' for r in child.iter() if r.tag.split('}')[-1] == 't').strip()
+                    if text:
+                        items.append({"idx": idx, "text": text})
+                        idx += 1
+            return items
     except:
         pass
     return []
+
+def anonymize_contract(text):
+    """Anonymise PII dans le texte avant envoi à Claude. Retourne (texte_anonymisé, mapping)."""
+    mapping = {}
+    counters = {}
+
+    def _ph(val, cat):
+        for ph, orig in mapping.items():
+            if orig.lower() == val.lower():
+                return ph
+        n = counters.get(cat, 0) + 1
+        counters[cat] = n
+        ph = f"[{cat}_{n}]"
+        mapping[ph] = val
+        return ph
+
+    def _sub(cat):
+        return lambda m: _ph(m.group(0), cat)
+
+    result = text
+
+    # Emails
+    result = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', _sub('EMAIL'), result)
+
+    # Téléphones marocains et français
+    result = re.sub(
+        r'\b(?:\+212|00212)?[\s.-]?(?:0[5-7]\d{8}|[5-7]\d{8})\b',
+        _sub('TEL'), result
+    )
+    result = re.sub(r'\b(?:\+33|0033)[\s.-]?[67]\d{8}\b', _sub('TEL'), result)
+
+    # IBAN
+    result = re.sub(r'\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b', _sub('IBAN'), result)
+
+    # ICE Maroc (15 chiffres après mot-clé ICE)
+    result = re.sub(
+        r'(ICE\s*[:/]?\s*)(\d{15})\b',
+        lambda m: m.group(1) + _ph(m.group(2), 'ICE'), result
+    )
+
+    # RC Maroc
+    result = re.sub(
+        r'\bR\.?C\.?\s*(?:N°|n°|No\.?|:)?\s*(\d{3,10})\b',
+        lambda m: m.group(0)[:m.group(0).rindex(m.group(1))] + _ph(m.group(1), 'RC'), result
+    )
+
+    # SIRET / SIREN (seulement après le mot-clé)
+    result = re.sub(
+        r'(SIRET|SIREN)\s*[:/]?\s*(\d{9}(?:[\s]?\d{5})?)\b',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2).replace(' ', ''), 'SIRET'), result
+    )
+
+    # CIN marocain (seulement après le mot-clé)
+    result = re.sub(
+        r'(CIN\s*[:/]?\s*)([A-Z]{1,2}\d{5,6})\b',
+        lambda m: m.group(1) + _ph(m.group(2), 'CIN'), result
+    )
+
+    # Noms de personnes après civilités
+    result = re.sub(
+        r'\b(M\.|Mme\.?|Monsieur|Madame|Mr\.?)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:(?:\s+|-)[A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ-]+){0,3})\b',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2), 'PERSONNE'), result
+    )
+
+    # Sociétés après forme juridique
+    result = re.sub(
+        r'\b(SARL|SA|SAS|SASU|EURL|SCI|GIE|SNC)\s+(?:dénommée?\s+)?"?([A-ZÀ-Ÿ؀-ۿ][A-Za-zÀ-ÿ؀-ۿ\s&,.-]{2,40}?)"?(?=\s*,|\s*\(|\s+dont|\s+au\s+capital|\s+inscrite|\s+immatriculée|\s*$)',
+        lambda m: m.group(1) + ' ' + _ph(m.group(2).strip(), 'SOCIETE'), result
+    )
+
+    return result, mapping
+
+
+def deanonymize_text(text, mapping):
+    """Restitue les valeurs originales dans le texte anonymisé."""
+    if not mapping or not text:
+        return text
+    for placeholder, original in mapping.items():
+        text = text.replace(placeholder, original)
+    return text
+
 
 def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -679,6 +786,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     else:
         numbered_text = contract_text[:40000]
 
+    # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
+    numbered_text, _anon_mapping = anonymize_contract(numbered_text)
+    print(f"[ANON] {len(_anon_mapping)} valeurs anonymisées: {list(_anon_mapping.keys())}", flush=True)
+
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
     model_context = ""
@@ -693,6 +804,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Returns (jurisdiction_tag, is_foreign_unsupported)
     def _detect_jur(text):
         s = text[:3000].lower()
+        _arabic_morocco = ["المملكة المغربية", "الظهير الملكي", "القانون المغربي",
+                           "المحاكم المغربية", "المحاكم المختصة بالمملكة", "دفاتر الشروط الإدارية",
+                           "ccag-t", "المغرب", "درهم مغربي", "الدراهم المغربية"]
+        if any(k in text[:3000] for k in _arabic_morocco):
+            return "droit_marocain", False
         if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "royaume du maroc", "maroc"]):
             return "droit_marocain", False
         if any(k in s for k in ["droit français", "loi française", "france", "code civil français", "droit de la france"]):
@@ -1001,16 +1117,27 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "employeur": "maximiser la flexibilité opérationnelle, minimiser les obligations et coûts, renforcer le pouvoir de direction et de contrôle, faciliter la résiliation, protéger les intérêts commerciaux",
         "employe": "garantir la stabilité de l'emploi, maximiser les protections et indemnités, limiter les obligations post-contrat, encadrer les heures et conditions de travail",
         "prestataire": "garantir le paiement, limiter la responsabilité, protéger la propriété intellectuelle, encadrer les modifications de scope",
-        "client": "garantir la qualité et les délais, maximiser les pénalités, faciliter la résiliation, protéger les données",
+        "client": "garantir la qualité et les délais de livraison, maintenir les pénalités contractuelles, faciliter la résiliation pour faute, protéger les données, maintenir le prix forfaitaire ferme",
+        "maitre": "maintenir le prix forfaitaire et éviter toute révision au profit du prestataire, renforcer les pénalités de retard, faciliter la résiliation et le retrait du marché, imposer des garanties bancaires et assurances, protéger les délais de réception et la qualité des ouvrages",
+        "commanditaire": "maintenir le prix forfaitaire et éviter toute révision au profit du prestataire, renforcer les pénalités de retard, faciliter la résiliation et le retrait du marché, imposer des garanties bancaires et assurances, protéger les délais de réception et la qualité des ouvrages",
         "acheteur": "garantir la conformité, maximiser les garanties, faciliter les recours",
         "vendeur": "garantir le paiement, limiter les garanties et responsabilités",
+        "الطرف الأول": "الحفاظ على السعر الجزافي النهائي ومنع أي مطالبة بزيادة من الطرف الثاني، تعزيز غرامات التأخير، تسهيل سحب العمل وفسخ العقد، فرض ضمانات بنكية وتأمينات كافية، حماية آجال الاستلام وجودة الأشغال",
+        "الطرف الثاني": "ضمان الأداء في الآجال المتفق عليها، تحديد نطاق الأشغال بدقة، تأمين حماية من القوة القاهرة، ضمان آليات تعديل السعر عند الاقتضاء",
     }
-    # Extract role from partie label
+    # Extract role from partie label — check Arabic keys first, then French
     role_key = "employeur"
+    partie_lower = partie.lower()
     for key in role_objectives:
-        if key in partie.lower():
+        if key in partie_lower or key in partie:
             role_key = key
             break
+    # Construction/BTP fallback: maître d'ouvrage keywords
+    if role_key == "employeur":
+        _btp_kw = ["maître", "maitre", "maitrise", "maîtrise", "btp", "construction",
+                   "donneur", "commanditaire", "مكتب", "مالك", "صاحب", "الأول", "أول"]
+        if any(k in partie_lower or k in partie for k in _btp_kw):
+            role_key = "maitre"
     role_obj = role_objectives.get(role_key, "protéger ses intérêts")
 
     # Coalition detection: "A et B" means defend A and B together against third party
@@ -1022,6 +1149,26 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
         "OBLIGATION D'EXHAUSTIVITÉ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
         "FAVORISER: " + partie + "\n\n"
+        "RÈGLE FONDAMENTALE — UNILATÉRALITÉ STRICTE:\n"
+        "Tu représentes EXCLUSIVEMENT " + partie + ". Toute modification doit AVANTAGER " + partie + " et seulement " + partie + ".\n"
+        "INTERDIT ABSOLU: Ne propose JAMAIS une modification qui réduit les obligations de la CONTREPARTIE envers " + partie + ".\n"
+        "- Une clause qui IMPOSE des obligations à la CONTREPARTIE est FAVORABLE pour " + partie + " → NE PAS l'affaiblir.\n"
+        "- Une clause qui IMPOSE des obligations ou risques à " + partie + " est DÉFAVORABLE → la modifier en faveur de " + partie + ".\n"
+        "EXEMPLES CONCRETS (contrat de construction, Partie 1 = maître d'ouvrage):\n"
+        "  → Prix forfaitaire fixe imposé à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS proposer de révision de prix pour l'entrepreneur\n"
+        "  → Pénalités de retard imposées à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS les atténuer ni créer des exceptions\n"
+        "  → Délais stricts imposés à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS réduire la responsabilité de l'entrepreneur\n"
+        "  → Garantie bancaire imposée à l'entrepreneur = FAVORABLE pour Partie 1 → NE PAS la supprimer ni la réduire\n"
+        "Cette règle s'applique à TOUS les types de contrats dans les deux langues.\n\n"
+        "RÈGLE ABSOLUE — NE JAMAIS MODIFIER LES VALEURS NUMÉRIQUES DU CONTRAT:\n"
+        "Les chiffres, pourcentages, montants, délais et seuils déjà définis dans le contrat sont INTANGIBLES.\n"
+        "INTERDIT ABSOLU de changer: taux de pénalité (ex: 3%/jour → garder 3%/jour), plafond de pénalité (ex: 10% → garder 10%), "
+        "montants forfaitaires, délais en jours/mois, taux d'intérêt, seuils de déclenchement.\n"
+        "Les modifications proposées doivent être de nature JURIDIQUE uniquement: ajouter des protections manquantes, "
+        "clarifier des mécanismes contractuels ambigus, corriger des asymétries de droits, ajouter des recours légaux, "
+        "renforcer des garanties, préciser des conditions de résiliation — jamais renégocier les valeurs chiffrées.\n"
+        "EXEMPLE: pénalité de retard de 18 200 DH/jour → NE PAS proposer 20 000 DH/jour. Proposer à la place: "
+        "préciser le mécanisme de déclenchement, ajouter une clause de mise en demeure, clarifier les cas d'exonération.\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "RÈGLE ABSOLUE: Tu DOIS répondre dans LA MÊME LANGUE QUE LE CONTRAT.\n"
         "- Contrat en ANGLAIS → tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
@@ -1057,8 +1204,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "  REMBOURSEMENT/RESTITUTION : Verifier toute obligation de rembourser avances, subventions ou benefices fiscaux. Quantifier le montant max que " + partie + " pourrait devoir rembourser en cas de manquement ou resiliation.\n\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
         "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES OBLIGATOIRES: Tu DOIS proposer ENTRE 4 ET 5 nouvelles clauses (type=nouvelle_clause) — CECI EST OBLIGATOIRE SANS EXCEPTION (type=nouvelle_clause) pour les protections absentes du contrat. Cherche systématiquement: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Identifie les protections RÉELLEMENT absentes du contrat — une clause est manquante uniquement si ni le contrat ni aucun document expressément annexé ou référencé ne la couvre. Si le contrat couvre un sujet par renvoi explicite à une annexe, un cahier des charges ou un devis, ce sujet N'EST PAS manquant. Tu DOIS proposer ENTRE 2 ET 5 nouvelles clauses (type=nouvelle_clause) pour les protections réellement absentes. Cherche parmi: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
+        "   RÈGLE TYPOGRAPHIQUE ABSOLUE: INTERDIT d'utiliser des symboles mathématiques (+, -, ×, /) dans le texte juridique rédigé.\n"
+        "   Écrire en toutes lettres: 'augmenté de' au lieu de '+', 'diminué de' au lieu de '-', 'ainsi que' au lieu de '+', etc.\n"
+        "   En arabe: 'إضافة إلى' ou 'بالإضافة إلى' au lieu de '+', jamais '25/08/2026 + أيام' mais 'يوم 25/08/2026 مضافاً إليه عدد أيام'.\n"
         "5. RAG — RÈGLE DE CITATION STRICTE: Cite une source dans rag_source UNIQUEMENT si elle fonde DIRECTEMENT la modification proposée — c'est-à-dire si elle traite précisément du même aspect juridique que la clause originale modifiée."
         " INTERDIT: citer un article qui parle d'un aspect connexe mais différent (ex: Art.255 traite des conséquences du non-respect du préavis → NE PAS le citer pour une clause qui définit la durée du préavis)."
         " Si la source est seulement thématiquement proche mais ne fonde pas directement le proposed → rag_source: null."
@@ -1262,6 +1412,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         if mod.get("type") == "nouvelle_clause" and mod.get("original"):
             mod["original"] = None
 
+    # Restitue les valeurs PII dans les champs texte des modifications
+    if _anon_mapping:
+        for mod in mods:
+            for field in ("original", "proposed", "reason", "clause_name"):
+                if mod.get(field):
+                    mod[field] = deanonymize_text(mod[field], _anon_mapping)
+
     # Add confidence score based on RAG usage
     rag_backed = sum(1 for m in mods if m.get("rag_source"))
     result["_rag_coverage"] = str(rag_backed) + "/" + str(len(mods)) + " modifications basées sur le RAG"
@@ -1279,17 +1436,16 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     return result
 
 def fuzzy_match(original, para_text, threshold=0.60):
-    """Check if original text roughly matches para_text"""
+    """Check if original text roughly matches para_text (Latin + Arabic)"""
     original_lower = original.lower().strip()
     para_lower = para_text.lower().strip()
-    # Exact match
     if original_lower in para_lower:
         return True
-    # Extract meaningful words (ignore short words)
-    orig_words = [w for w in re.findall(r"[a-zA-ZÀ-ÿ]{3,}", original_lower)]
-    para_words_set = set(re.findall(r"[a-zA-ZÀ-ÿ]{3,}", para_lower))
-    orig_words_set = set(orig_words)
-    if len(orig_words_set) < 4:
+    # Extract meaningful words — Latin and Arabic scripts
+    _word_re = r"[؀-ۿ]{2,}|[a-zA-ZÀ-ÿ]{3,}"
+    orig_words_set = set(re.findall(_word_re, original_lower))
+    para_words_set = set(re.findall(_word_re, para_lower))
+    if len(orig_words_set) < 3:
         return False
     overlap = len(orig_words_set & para_words_set) / len(orig_words_set)
     return overlap >= threshold
@@ -1391,7 +1547,22 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
     accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
     applied = set()
-    paragraphs = list(doc.paragraphs)
+
+    # Walk full XML body (includes table cells) — same index as build_numbered_paragraphs
+    # Use raw XML elements + iter-based text to handle <w:sdt>, hyperlinks, table cells, etc.
+    _WNS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    _wt_tag = _WNS + 't'
+    _wr_tag = _WNS + 'r'
+
+    def _p_text(elem):
+        return "".join(t.text or '' for t in elem.iter(_wt_tag)).strip()
+
+    _body = doc.element.body
+    paragraphs = []  # raw lxml <w:p> elements
+    for _child in _body.iter():
+        _ctag = _child.tag.split('}')[-1] if '}' in _child.tag else _child.tag
+        if _ctag == 'p' and _p_text(_child):
+            paragraphs.append(_child)
 
     for mod in accepted:
         mod_id = mod.get("id")
@@ -1405,15 +1576,16 @@ def apply_track_changes(file_bytes, modifications, decisions):
         para_idx = mod.get("para_idx")
         if para_idx is not None and para_idx < len(paragraphs):
             candidate = paragraphs[para_idx]
-            if candidate.text.strip():
+            if _p_text(candidate):
                 para = candidate
 
         # Method 2: Fuzzy match fallback
         if para is None:
             original = mod.get("original", "").strip()
-            for p in paragraphs:
-                if p.text.strip() and fuzzy_match(original, p.text.strip()):
-                    para = p
+            for _pe in paragraphs:
+                _pt = _p_text(_pe)
+                if _pt and fuzzy_match(original, _pt):
+                    para = _pe
                     break
 
         # Handle new clauses (type=nouvelle_clause) — insert as new paragraph
@@ -1422,33 +1594,28 @@ def apply_track_changes(file_bytes, modifications, decisions):
             insert_para = None
             MIN_INSERT_IDX = 5
 
-            # Find insertion point — use insertion_after directly
             if insertion_after is not None:
                 safe_idx = max(int(insertion_after), MIN_INSERT_IDX)
                 if safe_idx < len(paragraphs):
                     insert_para = paragraphs[safe_idx]
 
-            # Fallback: insert before last paragraph
             if insert_para is None:
-                for p in reversed(paragraphs):
-                    if p.text.strip() and len(p.text.strip()) > 10:
-                        insert_para = p
+                for _pe in reversed(paragraphs):
+                    _pt = _p_text(_pe)
+                    if _pt and len(_pt) > 10:
+                        insert_para = _pe
                         break
 
             if insert_para is not None:
-                # Copy formatting from insert_para run
-                ref_rpr = None
-                if insert_para.runs:
-                    ref_rpr = insert_para.runs[0]._r.find(qn('w:rPr'))
+                _direct_runs = [r for r in insert_para if r.tag == _wr_tag]
+                ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
 
-                # Build new paragraph with Track Changes ins
                 new_p = OxmlElement('w:p')
 
-                # Copy paragraph properties if available
-                if insert_para._p.find(qn('w:pPr')) is not None:
+                _ppr = insert_para.find(qn('w:pPr'))
+                if _ppr is not None:
                     import copy
-                    new_ppr = copy.deepcopy(insert_para._p.find(qn('w:pPr')))
-                    new_p.append(new_ppr)
+                    new_p.append(copy.deepcopy(_ppr))
 
                 ins_elem = OxmlElement('w:ins')
                 ins_elem.set(qn('w:id'), str(rev_id))
@@ -1457,7 +1624,6 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 rev_id += 1
 
                 new_r = OxmlElement('w:r')
-                # Copy run formatting
                 if ref_rpr is not None:
                     import copy
                     new_r.append(copy.deepcopy(ref_rpr))
@@ -1468,16 +1634,14 @@ def apply_track_changes(file_bytes, modifications, decisions):
                 ins_elem.append(new_r)
                 new_p.append(ins_elem)
 
-                # Insert AFTER target paragraph
-                # addnext inserts before in lxml — get next sibling and insert before it
-                next_sib = insert_para._p.getnext()
+                next_sib = insert_para.getnext()
                 if next_sib is not None:
-                    insert_para._p.getparent().insert(
-                        list(insert_para._p.getparent()).index(next_sib),
+                    insert_para.getparent().insert(
+                        list(insert_para.getparent()).index(next_sib),
                         new_p
                     )
                 else:
-                    insert_para._p.getparent().append(new_p)
+                    insert_para.getparent().append(new_p)
                 applied.add(mod_id)
                 print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
             else:
@@ -1488,12 +1652,14 @@ def apply_track_changes(file_bytes, modifications, decisions):
             print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
             continue
 
-        para_text = para.text.strip()
+        para_text = _p_text(para)
 
-        # Clear all runs
-        for run in para.runs:
-            run.text = ""
-        p = para._p
+        # Clear text in all <w:t> descendants of direct <w:r> children
+        for _r in list(para):
+            if _r.tag == _wr_tag:
+                for _t in _r.iter(_wt_tag):
+                    _t.text = ''
+        p = para
 
         # Del element
         del_elem = OxmlElement('w:del')
@@ -2032,6 +2198,12 @@ def detect_jurisdiction():
             return jsonify({"jurisdiction": "universel"})
 
         sample = contract_text[:3000].lower()
+        # Arabic-script Moroccan keywords (case-insensitive irrelevant for Arabic)
+        _arabic_morocco = ["المملكة المغربية", "الظهير الملكي", "القانون المغربي",
+                           "المحاكم المغربية", "المحاكم المختصة بالمملكة", "دفاتر الشروط الإدارية",
+                           "ccag-t", "المغرب", "درهم مغربي", "الدراهم المغربية"]
+        if any(k in contract_text[:3000] for k in _arabic_morocco):
+            return jsonify({"jurisdiction": "droit_marocain"})
         # Rule-based heuristic detection
         if any(k in sample for k in ["code du travail marocain", "dahir", "droit marocain", "maroc", "tribunal de commerce de casablanca", "doc marocain", "droit marocain"]):
             return jsonify({"jurisdiction": "droit_marocain"})
@@ -2452,6 +2624,185 @@ def delete_queue_item(item_id):
         supa_delete("queue_pending", {"id": "eq." + item_id})
     except Exception as e:
         print("delete_queue_item error: " + str(e))
+
+@app.route("/export-translation", methods=["POST", "OPTIONS"])
+def export_translation():
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data          = request.get_json() or {}
+        contract_text = (data.get("contract_text") or "").strip()
+        target_lang   = (data.get("target_lang") or "en").strip()
+        filename      = (data.get("filename") or "contrat").strip()
+        mods          = data.get("modifications") or []
+        decisions     = data.get("decisions") or {}
+
+        if not contract_text or len(contract_text) < 20:
+            return jsonify({"error": "contract_text manquant ou trop court"}), 400
+
+        # Split contract into sections — prefer [Px] markers (always present after analysis),
+        # then blank-line splitting. If that yields ≤3 sections (table DOCX where rows are
+        # separated by single \n only), fall back to line-by-line splitting.
+        if re.search(r'\[P\d+\]', contract_text):
+            sections = [s.strip() for s in re.split(r'\[P\d+\]\s*', contract_text) if s.strip()]
+        else:
+            sections = [s.strip() for s in re.split(r'\n{2,}', contract_text) if s.strip()]
+        if len(sections) <= 3:
+            sections = [l.strip() for l in contract_text.split('\n') if l.strip()]
+
+        def _strip_px(t):
+            """Remove [Px] paragraph markers Claude includes in original copies."""
+            return re.sub(r'^\[P\d+\]\s*', '', t.strip())
+
+        def _match_score(query, section):
+            """Word-overlap ratio between query and section (works for any script)."""
+            q_words = set(w for w in query.split() if len(w) >= 3)
+            s_words = set(w for w in section.split() if len(w) >= 3)
+            if len(q_words) < 3:
+                return 0.0
+            return len(q_words & s_words) / len(q_words)
+
+        # Apply non-rejected modifications using fuzzy section matching
+        modified_sections = list(sections)
+        section_mods = {}  # section_idx -> {'original': str, 'proposed': str}
+        applied_count = 0
+        for i, mod in enumerate(mods):
+            mod_id = str(mod.get("id") if mod.get("id") is not None else i)
+            decision = decisions.get(mod_id, "proposed")
+            if decision == "rejected":
+                continue
+            orig = _strip_px((mod.get("original") or "").strip())
+            prop = (mod.get("proposed") or "").strip()
+            if not orig or not prop:
+                continue
+            matched_idx = None
+            best_score = 0.0
+            for j, sec in enumerate(modified_sections):
+                if j in section_mods:
+                    continue
+                if orig in sec or sec in orig:
+                    matched_idx = j
+                    break
+                score = _match_score(orig, sec)
+                if score > best_score and score >= 0.40:
+                    best_score = score
+                    matched_idx = j
+            if matched_idx is not None:
+                section_mods[matched_idx] = {'original': sections[matched_idx], 'proposed': prop}
+                modified_sections[matched_idx] = prop
+                applied_count += 1
+
+        lang_label = {"en": "English", "fr": "Français", "ar": "العربية"}.get(target_lang, target_lang)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Ask Claude to translate section by section using numbered markers
+        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:150]))
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=32000,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Translate each numbered section [§N] into {lang_label}. "
+                    "Output ONLY the translated sections in the exact same numbered format — "
+                    "no commentary, no preamble, no extra text.\n\n"
+                    "FORMAT:\n[§1]\ntranslation of section 1\n\n[§2]\ntranslation of section 2\n\n...\n\n"
+                    "CONTRACT TO TRANSLATE:\n" + numbered_orig
+                )
+            }]
+        )
+        translated_raw = response.content[0].text
+
+        # Parse translated sections
+        trans_map = {}
+        for m in re.finditer(r'\[§(\d+)\]\n(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
+            trans_map[int(m.group(1))] = m.group(2).strip()
+
+        # Build side-by-side DOCX with a two-column table
+        from docx import Document as _Doc
+        from docx.shared import Pt, Cm, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn as _qn
+        from docx.oxml import OxmlElement as _OE
+
+        doc = _Doc()
+        section = doc.sections[0]
+        section.page_width  = Cm(29.7)  # A4 landscape
+        section.page_height = Cm(21.0)
+        section.left_margin = section.right_margin = Cm(1.5)
+        section.top_margin  = section.bottom_margin = Cm(1.5)
+
+        style = doc.styles['Normal']
+        style.font.name = 'Calibri'
+        style.font.size = Pt(10)
+
+        left_col_label = "CONTRAT MODIFIÉ" if applied_count > 0 else "ORIGINAL"
+        title = doc.add_heading(f"{filename}  —  {left_col_label} | {lang_label}", level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        if applied_count > 0:
+            info_p = doc.add_paragraph(f"Modifications appliquées : {applied_count} / {len(mods)}")
+            info_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            info_p.runs[0].bold = True
+            info_p.runs[0].font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
+
+        # Header row
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.style = 'Table Grid'
+        hdr = tbl.rows[0].cells
+        for cell, txt, color in [(hdr[0], left_col_label, "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
+            cell.text = txt
+            run = cell.paragraphs[0].runs[0]
+            run.bold = True
+            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            shd = _OE('w:shd')
+            shd.set(_qn('w:fill'), color)
+            shd.set(_qn('w:color'), 'auto')
+            shd.set(_qn('w:val'), 'clear')
+            tcPr.append(shd)
+
+        # Content rows — show strikethrough+green markup for modified sections
+        for i, sec in enumerate(modified_sections[:150]):
+            trans = trans_map.get(i + 1, "")
+            row = tbl.add_row()
+            left_cell = row.cells[0]
+            is_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in sec[:20])
+
+            if i in section_mods:
+                mod_info = section_mods[i]
+                left_cell.text = ""
+                para = left_cell.paragraphs[0]
+                run_del = para.add_run(mod_info['original'])
+                run_del.font.strike = True
+                run_del.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+                para.add_run("\n")
+                run_ins = para.add_run(mod_info['proposed'])
+                run_ins.font.color.rgb = RGBColor(0x00, 0x7F, 0x00)
+                run_ins.bold = True
+            else:
+                left_cell.text = sec
+
+            row.cells[1].text = trans
+            if is_arabic:
+                pPr = left_cell.paragraphs[0]._p.get_or_add_pPr()
+                bidi = _OE('w:bidi')
+                pPr.append(bidi)
+
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        dl_name = f"{filename}_translation_{target_lang}.docx"
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=dl_name,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        print(f"[/export-translation] error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
@@ -3548,14 +3899,19 @@ def chat():
                 except Exception:
                     pass
 
-        # Build accepted modifications summary
-        accepted_mods = [m for m in modifications if decisions.get(str(m.get("id") or "")) == "accepted"]
+        # Build modifications summary — toutes les modifications (proposées ET acceptées)
+        # Le statut de chaque modification est indiqué pour que le chatbot sache où en est la révision
         mods_summary = ""
-        if accepted_mods:
+        if modifications:
             lines = []
-            for m in accepted_mods[:10]:
-                lines.append(f"- {m.get('clause_name','?')}: {(m.get('proposed') or '')[:120]}")
-            mods_summary = "\nMODIFICATIONS DÉJÀ ACCEPTÉES PAR LE CLIENT:\n" + "\n".join(lines)
+            for m in modifications[:20]:
+                cname    = m.get('clause_name') or '?'
+                original = (m.get('original') or '').strip()
+                proposed = (m.get('proposed') or '').strip()
+                mid      = str(m.get('id') or '')
+                statut   = decisions.get(mid, 'en attente')
+                lines.append(f"### {cname} [{statut}]\nORIGINAL: {original[:600]}\nPROPOSÉ: {proposed[:600]}")
+            mods_summary = "\nCLAUSES DU CONTRAT (modifications proposées par l'analyse):\n" + "\n\n".join(lines)
 
         # Full contract sent every time — prompt caching makes it cheap after 1st call
         contract_excerpt = contract_text[:80000] if contract_text else ""
@@ -3595,6 +3951,14 @@ def chat():
             "Voici ce que je sais de mémoire générale :' — puis réponds depuis tes connaissances générales "
             "en précisant que ce n'est pas un extrait de la base. "
             "INTERDIT : inventer une liste de lois 'disponibles', citer des articles sans les avoir dans le contexte.\n"
+            "CAPACITÉ TRADUCTION WORD : si l'utilisateur demande une traduction du contrat en Word/DOCX "
+            "(en anglais, français, arabe, etc.), ou confirme vouloir générer le fichier, "
+            "réponds avec UNE SEULE phrase de confirmation puis place IMMÉDIATEMENT le marqueur — "
+            "INTERDIT de demander 'voulez-vous que je génère ?' ou toute confirmation supplémentaire. "
+            "Marqueur à placer seul sur la dernière ligne : "
+            "[EXPORT_TRANSLATION:en] pour anglais, [EXPORT_TRANSLATION:fr] pour français, "
+            "[EXPORT_TRANSLATION:ar] pour arabe. "
+            "Ce marqueur déclenchera automatiquement la génération et le téléchargement du fichier Word.\n"
             + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
             + _legal_rag_ctx
