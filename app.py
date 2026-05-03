@@ -804,6 +804,11 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Returns (jurisdiction_tag, is_foreign_unsupported)
     def _detect_jur(text):
         s = text[:3000].lower()
+        _arabic_morocco = ["المملكة المغربية", "الظهير الملكي", "القانون المغربي",
+                           "المحاكم المغربية", "المحاكم المختصة بالمملكة", "دفاتر الشروط الإدارية",
+                           "ccag-t", "المغرب", "درهم مغربي", "الدراهم المغربية"]
+        if any(k in text[:3000] for k in _arabic_morocco):
+            return "droit_marocain", False
         if any(k in s for k in ["code du travail marocain", "dahir", "droit marocain", "royaume du maroc", "maroc"]):
             return "droit_marocain", False
         if any(k in s for k in ["droit français", "loi française", "france", "code civil français", "droit de la france"]):
@@ -2193,6 +2198,12 @@ def detect_jurisdiction():
             return jsonify({"jurisdiction": "universel"})
 
         sample = contract_text[:3000].lower()
+        # Arabic-script Moroccan keywords (case-insensitive irrelevant for Arabic)
+        _arabic_morocco = ["المملكة المغربية", "الظهير الملكي", "القانون المغربي",
+                           "المحاكم المغربية", "المحاكم المختصة بالمملكة", "دفاتر الشروط الإدارية",
+                           "ccag-t", "المغرب", "درهم مغربي", "الدراهم المغربية"]
+        if any(k in contract_text[:3000] for k in _arabic_morocco):
+            return jsonify({"jurisdiction": "droit_marocain"})
         # Rule-based heuristic detection
         if any(k in sample for k in ["code du travail marocain", "dahir", "droit marocain", "maroc", "tribunal de commerce de casablanca", "doc marocain", "droit marocain"]):
             return jsonify({"jurisdiction": "droit_marocain"})
