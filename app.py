@@ -2771,8 +2771,12 @@ def export_translation():
         tbl = doc.add_table(rows=0, cols=2)
         tbl.style = 'Normal Table'
 
-        # Remove all table borders (transparent)
-        tblPr = tbl._tbl.get_or_add_tblPr()
+        # Remove all table borders (transparent) — direct XML manipulation
+        tbl_xml = tbl._tbl
+        tblPr = tbl_xml.find(_qn('w:tblPr'))
+        if tblPr is None:
+            tblPr = _OE('w:tblPr')
+            tbl_xml.insert(0, tblPr)
         tblBorders = _OE('w:tblBorders')
         for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
             b = _OE(f'w:{border_name}')
