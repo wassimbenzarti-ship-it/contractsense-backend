@@ -1169,6 +1169,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "renforcer des garanties, préciser des conditions de résiliation — jamais renégocier les valeurs chiffrées.\n"
         "EXEMPLE: pénalité de retard de 18 200 DH/jour → NE PAS proposer 20 000 DH/jour. Proposer à la place: "
         "préciser le mécanisme de déclenchement, ajouter une clause de mise en demeure, clarifier les cas d'exonération.\n\n"
+        "RÈGLE ABSOLUE — RESPECTER LES CLAUSES D'EXCLUSION EXPLICITES:\n"
+        "Si le contrat contient une formule d'exclusion absolue telle que 'en aucun cas' / 'بأي حال من الأحوال' / 'under no circumstances' / "
+        "'quelles que soient les circonstances' — NE JAMAIS proposer d'exceptions, de dérogations ou de cas particuliers à cette exclusion.\n"
+        "Ces formules sont des protections intentionnelles et maximales. Les affaiblir en ajoutant des exceptions (a), (b), (c)... "
+        "constitue une modification DÉFAVORABLE pour le client.\n"
+        "CORRECT: renforcer le mécanisme d'application, ajouter des sanctions en cas de violation, préciser la mise en demeure.\n"
+        "INTERDIT: ajouter des exceptions qui contredisent la protection absolue expressément choisie par les parties.\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "RÈGLE ABSOLUE: Tu DOIS répondre dans LA MÊME LANGUE QUE LE CONTRAT.\n"
         "- Contrat en ANGLAIS → tous les champs (reason, proposed, clause_name) en ANGLAIS UNIQUEMENT\n"
@@ -1203,8 +1210,26 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "  RESPONSABILITE/LIABILITY : Verifier systematiquement (1) plafonds de responsabilite, (2) exclusions de garantie, (3) indemnisation asymetrique. Si " + partie + " supporte une responsabilite illimitee ou superieure a celle de la partie adverse = RISQUE CRITIQUE.\n"
         "  REMBOURSEMENT/RESTITUTION : Verifier toute obligation de rembourser avances, subventions ou benefices fiscaux. Quantifier le montant max que " + partie + " pourrait devoir rembourser en cas de manquement ou resiliation.\n\n"
         "1. EXHAUSTIVITÉ TOTALE: Identifie TOUTES les clauses désavantageuses pour " + partie + " — même les clauses en apparence neutres\n"
-        "2. CLAUSES À RISQUE: Cherche spécifiquement: limitation de responsabilité, résiliation unilatérale, pénalités asymétriques, clauses d'exclusivité abusives, délais de paiement défavorables, cessions de droits excessives, clauses de non-concurrence, force majeure restrictive, juridiction défavorable\n"
-        "3. CLAUSES MANQUANTES OBLIGATOIRES: Identifie les protections RÉELLEMENT absentes du contrat — une clause est manquante uniquement si ni le contrat ni aucun document expressément annexé ou référencé ne la couvre. Si le contrat couvre un sujet par renvoi explicite à une annexe, un cahier des charges ou un devis, ce sujet N'EST PAS manquant. Tu DOIS proposer ENTRE 2 ET 5 nouvelles clauses (type=nouvelle_clause) pour les protections réellement absentes. Cherche parmi: limitation de responsabilité, pénalités/clause pénale, confidentialité, force majeure, révision de prix, juridiction compétente, non-sollicitation, garantie, assurance, cession du contrat. Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
+        "2. CHECKLIST THÉMATIQUE OBLIGATOIRE — tu DOIS vérifier CHACUN de ces points, sans exception:\n"
+        "   [PAIEMENT] Conditions de paiement, délais, intérêts de retard, retenues de garantie / retenues à la source — asymétrie ?\n"
+        "   [DÉLAIS] Délais d'exécution, jalons, pénalités de retard — unilatéraux ? plafonnés ? mécanisme de prorogation ?\n"
+        "   [RÉCEPTION] Réception provisoire, réception définitive, levée de réserves — droits et délais de " + partie + " ?\n"
+        "   [GARANTIES] Garantie de parfait achèvement, décennale, vices cachés, garantie de fonctionnement — durée et portée ?\n"
+        "   [TRAVAUX SUPPLÉMENTAIRES] Avenants, ordres de service, travaux hors contrat — qui décide ? rémunération ?\n"
+        "   [SUSPENSION] Droits de suspension, prolongation de délai, indemnisation pendant suspension — prévu pour " + partie + " ?\n"
+        "   [RÉSILIATION] Résiliation pour faute, pour convenance, pour insolvabilité — symétrique ? conséquences ?\n"
+        "   [RESPONSABILITÉ] Plafond, exclusions, responsabilité solidaire, indemnisation — équilibré ?\n"
+        "   [ASSURANCES] Assurances obligatoires (RC, décennale, tous risques chantier) — qui les souscrit ? preuve ?\n"
+        "   [FORCE MAJEURE] Définition précise ? effets sur délais et prix ? obligation de notification ?\n"
+        "   [SOUS-TRAITANCE] Droits de sous-traiter, agrément, responsabilité du sous-traitant — contrôle de " + partie + " ?\n"
+        "   [RÉVISION DE PRIX] Clause de révision ou d'indexation — absente dans un contrat long = risque pour " + partie + " ?\n"
+        "   [CONFIDENTIALITÉ] Données techniques, financières, commerciales — protégées après fin du contrat ?\n"
+        "   [CESSION] Cession du contrat ou des droits à un tiers — accord requis ?\n"
+        "   [RÈGLEMENT DES LITIGES] Médiation, arbitrage, juridiction compétente — favorable à " + partie + " ?\n"
+        "   [DOCUMENTS CONTRACTUELS] Hiérarchie des pièces, conflits entre documents — favorable à " + partie + " ?\n"
+        "   [NOTIFICATIONS] Formes et délais des mises en demeure et notifications — contraintes excessives ?\n"
+        "   [PROPRIÉTÉ INTELLECTUELLE] Plans, études, brevets — qui en garde la propriété ?\n"
+        "3. CLAUSES MANQUANTES OBLIGATOIRES: Identifie les protections RÉELLEMENT absentes du contrat — une clause est manquante uniquement si ni le contrat ni aucun document expressément annexé ou référencé ne la couvre. Si le contrat couvre un sujet par renvoi explicite à une annexe, un cahier des charges ou un devis, ce sujet N'EST PAS manquant. Propose AU MOINS 2 nouvelles clauses (type=nouvelle_clause), sans limite maximum — autant qu'il en faut pour protéger exhaustivement " + partie + ". Pour chaque clause manquante: (1) rédige-la complète dans proposed dans la même langue que le contrat, (2) numérote-la en suivant la numérotation existante, (3) indique insertion_after=para_idx du dernier article existant avant l'endroit logique d'insertion, (4) original=null.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "   RÈGLE TYPOGRAPHIQUE ABSOLUE: INTERDIT d'utiliser des symboles mathématiques (+, -, ×, /) dans le texte juridique rédigé.\n"
         "   Écrire en toutes lettres: 'augmenté de' au lieu de '+', 'diminué de' au lieu de '-', 'ainsi que' au lieu de '+', etc.\n"
@@ -1214,12 +1239,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         " Si la source est seulement thématiquement proche mais ne fonde pas directement le proposed → rag_source: null."
         " NE JAMAIS inventer de source. NE JAMAIS citer LexisNexis/ouvrages payants. Sources marquées 'null (protege)' → rag_source: null.\n"
         "6. LÉGALITÉ: Toutes les modifications doivent respecter le droit applicable — jamais de clauses illégales\n\n"
-        "PROCESSUS D'ANALYSE:\n"
-        "Étape 1: Lis tout le contrat\n"
-        "Étape 2: Pour chaque paragraphe, demande-toi: Cette clause est-elle favorable, neutre ou défavorable à " + partie + " ?\n"
-        "Étape 3: Pour chaque clause défavorable ou neutre améliorable → propose une modification\n"
-        "Étape 4: Vérifie les protections manquantes → propose des clauses additionnelles\n"
-        "Étape 5: Vérifie chaque modification contre le RAG pour citer les sources\n\n"
+        "PROCESSUS D'ANALYSE EN 6 ÉTAPES OBLIGATOIRES:\n"
+        "Étape 1: Lis l'intégralité du contrat sans rien sauter\n"
+        "Étape 2: Pour CHAQUE article numéroté, détermine: Favorable / Neutre / Défavorable à " + partie + " — note chaque article\n"
+        "Étape 3: Pour chaque article Défavorable ou Neutre améliorable → crée une modification\n"
+        "Étape 4: Parcours la CHECKLIST THÉMATIQUE ci-dessus point par point — pour chaque thème non couvert ou mal couvert → crée une modification ou une nouvelle clause\n"
+        "Étape 5: Vérifie chaque modification contre le RAG pour citer les sources pertinentes\n"
+        "Étape 6: VÉRIFICATION FINALE — relis ta liste de modifications et demande-toi: 'Ai-je laissé passer une clause qui désavantage " + partie + " ?' Si oui → ajoute-la maintenant\n\n"
         + get_legal_framework(contract_type) +
         "\n\n"
         + rag_context
@@ -1292,8 +1318,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     _law_buf = ""
     import re as _re
     with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=6000,
+        model="claude-sonnet-4-6",
+        max_tokens=16000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     ) as _stream:
