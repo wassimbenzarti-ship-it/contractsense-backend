@@ -2689,6 +2689,11 @@ def export_translation():
         if not contract_text or len(contract_text) < 20:
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
 
+        # extract_text_from_docx joins table cells with " | " (e.g. "البند (1): title | content").
+        # Replace " | " with "\n" so each cell becomes its own section and gets its own
+        # translation row — otherwise the article title gets silently dropped by the model.
+        contract_text = contract_text.replace(' | ', '\n')
+
         # Split contract into sections — prefer [Px] markers (always present after analysis),
         # then blank-line splitting. If that yields ≤3 sections (table DOCX where rows are
         # separated by single \n only), fall back to line-by-line splitting.
