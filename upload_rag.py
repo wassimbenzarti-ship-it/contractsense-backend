@@ -410,9 +410,10 @@ def process_file(filepath, jurisdiction_hint, category_hint, dry_run, overwrite=
     print(f"  Fichier : {filepath.name}")
 
     text = extract_text(filepath)
-    if not text or len(text.strip()) < 50:
-        print("  Ignore (texte vide ou trop court)")
-        return 0, 0
+    is_scanned = not text or len(text.strip()) < 50
+    if is_scanned:
+        print("  PDF scanné détecté — envoi au backend pour OCR Claude Vision")
+        text = ""  # le backend fera l'OCR
 
     # Classification automatique
     jur, jur_conf = detect_jurisdiction(text, filepath.stem)
