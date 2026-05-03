@@ -2758,28 +2758,32 @@ def export_translation():
 
         doc = _Doc()
         section = doc.sections[0]
-        section.page_width  = Cm(29.7)  # A4 landscape
-        section.page_height = Cm(21.0)
-        section.left_margin = section.right_margin = Cm(1.5)
-        section.top_margin  = section.bottom_margin = Cm(1.5)
+        section.page_width  = Cm(21.0)   # A4 portrait
+        section.page_height = Cm(29.7)
+        section.left_margin = section.right_margin = Cm(2.0)
+        section.top_margin  = section.bottom_margin = Cm(2.0)
 
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
         style.font.size = Pt(10)
 
-        left_col_label = "CONTRAT MODIFIÉ" if applied_count > 0 else "ORIGINAL"
-        title = doc.add_heading(f"{filename}  —  {left_col_label} | {lang_label}", level=1)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        if applied_count > 0:
-            info_p = doc.add_paragraph(f"Modifications appliquées : {applied_count} / {len(mods)}")
-            info_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            info_p.runs[0].bold = True
-            info_p.runs[0].font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
-
         # Header row
         tbl = doc.add_table(rows=1, cols=2)
-        tbl.style = 'Table Grid'
+        tbl.style = 'Table Normal'
+
+        # Remove all table borders (transparent)
+        tblPr = tbl._tbl.get_or_add_tblPr()
+        tblBorders = _OE('w:tblBorders')
+        for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+            b = _OE(f'w:{border_name}')
+            b.set(_qn('w:val'), 'none')
+            b.set(_qn('w:sz'), '0')
+            b.set(_qn('w:space'), '0')
+            b.set(_qn('w:color'), 'auto')
+            tblBorders.append(b)
+        tblPr.append(tblBorders)
+
+        left_col_label = "CONTRAT MODIFIÉ" if applied_count > 0 else "ORIGINAL"
         hdr = tbl.rows[0].cells
         for cell, txt, color in [(hdr[0], left_col_label, "1F3864"), (hdr[1], lang_label.upper(), "1F3864")]:
             cell.text = txt
