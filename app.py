@@ -2742,9 +2742,20 @@ def export_translation():
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         client = anthropic.Anthropic(api_key=api_key)
 
-        # Ask Claude to translate section by section using numbered markers
+        # Ask Claude to translate section by section.
+        # For modified sections, send BOTH original and proposed using [BEFORE]/[AFTER]
+        # markers so the right (English) column gets del/ins markup too.
         _TRANS_LIMIT = 250
-        numbered_orig = "\n\n".join(f"[§{i+1}]\n{s}" for i, s in enumerate(modified_sections[:_TRANS_LIMIT]))
+        _trans_entries = []
+        for _i, _s in enumerate(modified_sections[:_TRANS_LIMIT]):
+            if _i in section_mods:
+                _mi = section_mods[_i]
+                _orig = (_mi.get('orig_mod') or _mi.get('full_section') or _s).strip()
+                _trans_entries.append(f"[§{_i+1}]\n[BEFORE]\n{_orig}\n[AFTER]\n{_s}")
+            else:
+                _trans_entries.append(f"[§{_i+1}]\n{_s}")
+        numbered_orig = "\n\n".join(_trans_entries)
+
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=32000,
@@ -2752,22 +2763,26 @@ def export_translation():
                 "role": "user",
                 "content": (
                     f"Translate each numbered section [§N] into {lang_label}. "
-                    "CRITICAL: Translate EVERY word in each section without omission. "
-                    "Sections may start with an article title like 'البند (N): title' — "
-                    "translate it too, e.g. 'البند (6): برنامج تنفيذ الاعمال' → 'Article (6): Work Execution Schedule'. "
-                    "Output ONLY the translated sections in the exact same numbered format — "
-                    "no commentary, no preamble, no extra text.\n\n"
-                    "FORMAT:\n[§1]\ntranslation of section 1\n\n[§2]\ntranslation of section 2\n\n...\n\n"
+                    "CRITICAL: Translate EVERY word without omission, including article titles "
+                    "like 'البند (N): title' → 'Article (N): title'.\n"
+                    "Sections marked [BEFORE]/[AFTER] contain original and proposed versions — "
+                    "translate BOTH parts, keeping the [BEFORE]/[AFTER] markers in your output.\n"
+                    "Output ONLY the translated sections — no commentary, no extra text.\n\n"
+                    "FORMAT (regular):\n[§1]\ntranslation\n\n"
+                    "FORMAT (modified):\n[§2]\n[BEFORE]\ntranslation of original\n[AFTER]\ntranslation of proposed\n\n"
                     "CONTRACT TO TRANSLATE:\n" + numbered_orig
                 )
             }]
         )
         translated_raw = response.content[0].text
 
-        # Parse translated sections
+        # Parse translated sections — value is str (plain) or (before_str, after_str) tuple
         trans_map = {}
         for m in re.finditer(r'\[§(\d+)\]\n(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
-            trans_map[int(m.group(1))] = m.group(2).strip()
+            idx  = int(m.group(1))
+            body = m.group(2).strip()
+            ba   = re.search(r'\[BEFORE\]\n(.*?)\n\[AFTER\]\n(.*)', body, re.DOTALL)
+            trans_map[idx] = (ba.group(1).strip(), ba.group(2).strip()) if ba else body
 
         # Build side-by-side DOCX — A4 portrait, transparent table, professional look
         from docx import Document as _Doc
@@ -2916,8 +2931,35 @@ def export_translation():
             else:
                 lp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-            row.cells[1].text = trans
-            row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            # Right cell: if trans is a (before, after) tuple, mirror del/ins markup in English
+            trans = trans_map.get(i + 1, "")
+            right_cell = row.cells[1]
+            if isinstance(trans, tuple):
+                eng_before, eng_after = trans
+                right_cell.text = ""
+                rp_el = right_cell.paragraphs[0]._p
+                r_del = _OE('w:del')
+                r_del.set(_qn('w:id'), str(_tc_rev))
+                r_del.set(_qn('w:author'), _tc_author)
+                r_del.set(_qn('w:date'), _tc_date)
+                r_dr = _OE('w:r'); r_dt = _OE('w:delText')
+                r_dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                r_dt.text = eng_before
+                r_dr.append(r_dt); r_del.append(r_dr); rp_el.append(r_del)
+                _tc_rev += 1
+                r_ins = _OE('w:ins')
+                r_ins.set(_qn('w:id'), str(_tc_rev))
+                r_ins.set(_qn('w:author'), _tc_author)
+                r_ins.set(_qn('w:date'), _tc_date)
+                r_ir = _OE('w:r'); r_it = _OE('w:t')
+                r_it.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                r_it.text = eng_after
+                r_ir.append(r_it); r_ins.append(r_ir); rp_el.append(r_ins)
+                _tc_rev += 1
+                right_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            else:
+                right_cell.text = trans
+                right_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
         buf = io.BytesIO()
         doc.save(buf)
