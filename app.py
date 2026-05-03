@@ -656,7 +656,7 @@ Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON
 - Maximum 3 parties, description max 10 mots"""
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         max_tokens=500,
         system=system,
         messages=[{"role": "user", "content": f"Contrat:\n\n{contract_text[:20000]}\n\nIdentifie les parties."}]
@@ -850,9 +850,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
         # 1. Primary: hybrid BM25 + vector (best quality)
         if is_voyage:
-            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=25, jurisdiction=_jurisdiction)
+            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=15, jurisdiction=_jurisdiction)
             if not all_docs:
-                all_docs = search_rag_pgvector(query_vec, top_k=25)
+                all_docs = search_rag_pgvector(query_vec, top_k=15)
             print(f"Primary RAG: {len(all_docs)} docs (hybrid={bool(all_docs)})")
 
         # 2. Fallback: fetch all docs with embeddings + cosine similarity
@@ -1327,7 +1327,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     import re as _re
     with client.messages.stream(
         model="claude-sonnet-4-6",
-        max_tokens=16000,
+        max_tokens=10000,
         system=system,
         messages=[{"role": "user", "content": "Contrat:\n\n" + truncated_text + "\n\nRetourne le JSON."}]
     ) as _stream:
