@@ -2767,6 +2767,9 @@ def export_translation():
                 "role": "user",
                 "content": (
                     f"Translate each numbered section [§N] into {lang_label}. "
+                    "CRITICAL: Translate EVERY word in each section without omission. "
+                    "Sections may start with an article title like 'البند (N): title' — "
+                    "translate it too, e.g. 'البند (6): برنامج تنفيذ الاعمال' → 'Article (6): Work Execution Schedule'. "
                     "Output ONLY the translated sections in the exact same numbered format — "
                     "no commentary, no preamble, no extra text.\n\n"
                     "FORMAT:\n[§1]\ntranslation of section 1\n\n[§2]\ntranslation of section 2\n\n...\n\n"
