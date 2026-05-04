@@ -2763,14 +2763,15 @@ def export_translation():
         client = anthropic.Anthropic(api_key=api_key)
 
         # Ask Claude to translate section by section.
-        # For modified sections, send BOTH original and proposed using [BEFORE]/[AFTER]
+        # For modified sections, send BOTH full_section (original) and proposed using [BEFORE]/[AFTER]
         # markers so the right (English) column gets del/ins markup too.
         _TRANS_LIMIT = 250
         _trans_entries = []
         for _i, _s in enumerate(modified_sections[:_TRANS_LIMIT]):
             if _i in section_mods:
                 _mi = section_mods[_i]
-                _orig = (_mi.get('orig_mod') or _mi.get('full_section') or _s).strip()
+                # Use full_section (includes article prefix + clause body) so numbers/amounts aren't lost
+                _orig = (_mi.get('full_section') or _mi.get('orig_mod') or _s).strip()
                 _trans_entries.append(f"[§{_i+1}]\n[BEFORE]\n{_orig}\n[AFTER]\n{_s}")
             else:
                 _trans_entries.append(f"[§{_i+1}]\n{_s}")
@@ -2783,13 +2784,14 @@ def export_translation():
                 "role": "user",
                 "content": (
                     f"Translate each numbered section [§N] into {lang_label}. "
-                    "CRITICAL: Translate EVERY word without omission, including article titles "
-                    "like 'البند (N): title' → 'Article (N): title'.\n"
-                    "Sections marked [BEFORE]/[AFTER] contain original and proposed versions — "
-                    "translate BOTH parts, keeping the [BEFORE]/[AFTER] markers in your output.\n"
+                    "CRITICAL: Translate EVERY word without any omission. "
+                    "NEVER skip amounts, numbers, percentages or dates (e.g. 18,200.00 DH → 18,200.00 MAD). "
+                    "Include article titles like 'البند (N): title' → 'Article (N): title'.\n"
+                    "Sections with [BEFORE]/[AFTER]: [BEFORE] is the ORIGINAL clause, [AFTER] is the REVISED clause. "
+                    "Translate BOTH completely and independently, keeping the [BEFORE] and [AFTER] markers.\n"
                     "Output ONLY the translated sections — no commentary, no extra text.\n\n"
                     "FORMAT (regular):\n[§1]\ntranslation\n\n"
-                    "FORMAT (modified):\n[§2]\n[BEFORE]\ntranslation of original\n[AFTER]\ntranslation of proposed\n\n"
+                    "FORMAT (modified):\n[§2]\n[BEFORE]\nfull translation of original\n[AFTER]\nfull translation of revised\n\n"
                     "CONTRACT TO TRANSLATE:\n" + numbered_orig
                 )
             }]
@@ -2798,10 +2800,10 @@ def export_translation():
 
         # Parse translated sections — value is str (plain) or (before_str, after_str) tuple
         trans_map = {}
-        for m in re.finditer(r'\[§(\d+)\]\n(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
+        for m in re.finditer(r'\[§(\d+)\]\n?(.*?)(?=\n\[§|\Z)', translated_raw, re.DOTALL):
             idx  = int(m.group(1))
             body = m.group(2).strip()
-            ba   = re.search(r'\[BEFORE\]\n(.*?)\n\[AFTER\]\n(.*)', body, re.DOTALL)
+            ba   = re.search(r'\[BEFORE\]\n+(.*?)\n+\[AFTER\]\n+(.*)', body, re.DOTALL)
             trans_map[idx] = (ba.group(1).strip(), ba.group(2).strip()) if ba else body
 
         # Build side-by-side DOCX — A4 portrait, transparent table, professional look
