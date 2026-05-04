@@ -57,7 +57,7 @@ CORS(app, origins=_CORS_ORIGINS, supports_credentials=True)
 def _add_cors(response):
     """Safety net: ensure CORS headers are always present on every response."""
     origin = request.headers.get("Origin", "")
-    if origin in _CORS_ORIGINS:
+    if origin in _CORS_ORIGINS or any(origin.endswith(d) for d in [".westfieldavocats.com", ".contractsense.fr"]):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
@@ -65,6 +65,17 @@ def _add_cors(response):
             "Content-Type, Authorization, X-Requested-With, apikey"
         )
     return response
+
+@app.errorhandler(Exception)
+def _handle_exception(e):
+    """Ensure CORS headers are present even on unhandled exceptions."""
+    origin = request.headers.get("Origin", "")
+    resp = jsonify({"error": str(e)})
+    resp.status_code = 500
+    if origin in _CORS_ORIGINS or any(origin.endswith(d) for d in [".westfieldavocats.com", ".contractsense.fr"]):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+    return resp
 
 def get_legal_framework(contract_type):
     """Return mandatory legal constraints per contract type"""
