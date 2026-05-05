@@ -3008,6 +3008,59 @@ def export_translation():
         print(f"[/export-translation] error: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/analyze-adverse-diff", methods=["POST", "OPTIONS"])
+def analyze_adverse_diff():
+    """Haiku-powered diff: find only clauses where adverse version diverges from our validated positions"""
+    if request.method == "OPTIONS":
+        return _add_cors(Response("", 204))
+    try:
+        file = request.files.get("file")
+        our_mods = json.loads(request.form.get("our_modifications", "[]"))
+        partie = request.form.get("partie", "")
+        contract_type = request.form.get("type", "generic")
+
+        if not file:
+            return jsonify({"error": "Fichier adverse manquant"}), 400
+
+        adverse_text, _, _ = read_file(file)
+
+        our_positions = "\n".join([
+            f"[{m.get('clause_name','Clause')}] NOTRE POSITION: {(m.get('proposed') or m.get('original',''))[:400]}"
+            for m in our_mods[:25]
+        ]) if our_mods else "(aucune position validée — analyser toutes les clauses importantes)"
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        prompt = f"""Tu es expert juridique. Compare le document de la partie adverse avec nos positions validées.
+
+NOS POSITIONS VALIDÉES:
+{our_positions}
+
+DOCUMENT ADVERSE (extrait):
+{adverse_text[:9000]}
+
+MISSION: Identifie UNIQUEMENT les clauses où la partie adverse s'écarte significativement de nos positions.
+- Si une clause adverse est conforme (>65% similaire) à notre position → NE PAS l'inclure
+- Si c'est une clause non couverte dans nos positions mais importante → l'inclure avec notre contre-proposition
+- Utilise la langue du document adverse
+
+Réponds UNIQUEMENT en JSON valide (tableau), sans markdown:
+[{{"clause_name":"nom exact","original":"texte exact de la partie adverse","proposed":"notre contre-proposition protégeant {partie or 'nos intérêts'}","risk":"high|medium|low","reason":"explication courte de l'écart"}}]
+
+Si aucun écart: retourne []"""
+
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        match = re.search(r'\[[\s\S]*\]', raw)
+        diffs = json.loads(match.group(0)) if match else []
+        return jsonify({"modifications": diffs})
+    except Exception as e:
+        print(f"[/analyze-adverse-diff] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
     """Auto-queue full contract with AI scoring for admin validation"""
@@ -3101,45 +3154,42 @@ Score eleve = contrat complet avec clauses interessantes a reutiliser."""
 
 @app.route("/queue/list", methods=["GET"])
 def queue_list():
-    """Liste les analyses en attente de validation admin"""
+    """Liste les analyses en attente de validation admin — lit queue_pending (table de rag_contribute)"""
     try:
-        # Try analyses_queue table first
-        docs = supa_get("analyses_queue", {
-            "select": "id,filename,contract_type,partie,submitted_by,score,status,accepted_modifications,decisions,created_at",
-            "status": "eq.pending",
-            "order": "created_at.desc",
-            "limit": "100"
-        })
-        if docs is None:
-            docs = []
-        # Parse modifications
+        queue = load_queue()
+        pending = queue.get("pending", [])
         result = []
-        for d in docs:
-            try:
-                mods = json.loads(d.get("accepted_modifications") or "[]")
-            except:
-                mods = []
-            # Count accepted/rejected
-            accepted = [m for m in mods if not isinstance(m, dict) or m.get("decision") != "rejected"]
-            rejected_mods = [m for m in mods if isinstance(m, dict) and m.get("decision") == "rejected"]
+        for d in pending:
+            key_clauses = d.get("key_clauses", [])
+            if isinstance(key_clauses, str):
+                try:
+                    key_clauses = json.loads(key_clauses)
+                except Exception:
+                    key_clauses = []
+            accepted_mods = d.get("accepted_modifications", [])
+            if isinstance(accepted_mods, str):
+                try:
+                    accepted_mods = json.loads(accepted_mods)
+                except Exception:
+                    accepted_mods = []
             result.append({
                 "id": d.get("id"),
                 "filename": d.get("filename", "Contrat"),
-                "contract_type": d.get("contract_type", ""),
-                "category": d.get("contract_type", "contract"),
+                "contract_type": d.get("contract_type", d.get("category", "")),
+                "category": d.get("category", d.get("contract_type", "generic")),
                 "partie": d.get("partie", ""),
-                "party_label": d.get("partie", ""),
+                "party_label": d.get("party_label", d.get("partie", "")),
                 "submitted_by": d.get("submitted_by", ""),
-                "score": d.get("score", 75),
-                "quality_reason": d.get("quality_reason", "Analyse automatique"),
-                "status": d.get("status", "pending"),
-                "accepted_modifications": mods,
-                "key_clauses": mods,
-                "accepted_count": len(mods),
-                "rejected_count": 0,
-                "decisions": json.loads(d.get("decisions") or "{}"),
-                "submitted_at": d.get("created_at", ""),
-                "created_at": d.get("created_at", "")
+                "score": d.get("score", 50),
+                "quality_reason": d.get("quality_reason", ""),
+                "status": "pending",
+                "accepted_modifications": accepted_mods,
+                "key_clauses": key_clauses,
+                "accepted_count": d.get("accepted_count", len(accepted_mods) if accepted_mods else 0),
+                "rejected_count": d.get("rejected_count", 0),
+                "decisions": {},
+                "submitted_at": d.get("submitted_at", ""),
+                "created_at": d.get("submitted_at", "")
             })
         return jsonify({"pending": result, "total": len(result)})
     except Exception as e:
