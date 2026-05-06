@@ -3024,29 +3024,40 @@ def analyze_adverse_diff():
 
         adverse_text, _, _ = read_file(file)
 
-        our_positions = "\n".join([
-            f"[{m.get('clause_name','Clause')}] NOTRE POSITION: {(m.get('proposed') or m.get('original',''))[:400]}"
-            for m in our_mods[:25]
-        ]) if our_mods else "(aucune position validée — analyser toutes les clauses importantes)"
+        # Only pass clause NAMES (not text) to avoid Haiku copying our text as counter-proposal
+        our_clause_names = [m.get('clause_name', 'Clause') for m in our_mods[:25]] if our_mods else []
+        our_names_list = "\n".join([f"- {n}" for n in our_clause_names]) if our_clause_names else "(aucune clause validée)"
+
+        # Build a lookup of our clause positions for reference (only used in reason, not in proposed)
+        our_positions_map = {}
+        for m in our_mods[:25]:
+            name = m.get('clause_name', '')
+            if name:
+                our_positions_map[name] = (m.get('proposed') or m.get('original', ''))[:300]
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        prompt = f"""Tu es expert juridique. Compare le document de la partie adverse avec nos positions validées.
+        prompt = f"""Tu es expert juridique comparant un contrat de la partie adverse avec nos clauses validées.
 
-NOS POSITIONS VALIDÉES:
-{our_positions}
+NOMS DE NOS CLAUSES VALIDÉES (référence uniquement):
+{our_names_list}
 
 DOCUMENT ADVERSE (extrait):
 {adverse_text[:9000]}
 
-MISSION: Identifie UNIQUEMENT les clauses où la partie adverse s'écarte significativement de nos positions.
-- Si une clause adverse est conforme (>65% similaire) à notre position → NE PAS l'inclure
-- Si c'est une clause non couverte dans nos positions mais importante → l'inclure avec notre contre-proposition
-- Utilise la langue du document adverse
+MISSION: Identifie UNIQUEMENT les clauses adverses qui s'écartent significativement de nos positions, OU les clauses importantes non couvertes.
+
+RÈGLES ABSOLUES pour le champ "proposed" (contre-proposition):
+1. COMMENCE toujours par le texte de la clause adverse (champ "original")
+2. MODIFIE ce texte adverse pour protéger les intérêts de {partie or 'notre client'}
+3. NE JAMAIS copier le texte d'une autre clause
+4. NE JAMAIS inventer un montant ou une référence qui n'est pas dans cette clause adverse
+5. Rédige dans la MÊME LANGUE que le texte adverse original de cette clause
+6. La contre-proposition doit être une version retravaillée du texte adverse, pas un texte générique
 
 Réponds UNIQUEMENT en JSON valide (tableau), sans markdown:
-[{{"clause_name":"nom exact","original":"texte exact de la partie adverse","proposed":"notre contre-proposition protégeant {partie or 'nos intérêts'}","risk":"high|medium|low","reason":"explication courte de l'écart"}}]
+[{{"clause_name":"nom exact de la clause adverse","original":"texte exact tel qu'il apparaît dans le document adverse","proposed":"version modifiée du texte adverse ci-dessus, protégeant {partie or 'nos intérêts'}, dans la même langue","risk":"high|medium|low","reason":"explication courte de pourquoi cette clause adverse est problématique"}}]
 
-Si aucun écart: retourne []"""
+Si aucun écart significatif: retourne []"""
 
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
