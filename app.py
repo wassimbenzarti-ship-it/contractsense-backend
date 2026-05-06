@@ -1523,7 +1523,7 @@ def create_docx_with_changes(contract_text, modifications, decisions):
     title = doc.add_heading("Rapport d'analyse contractuelle", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+    accepted = [m for m in modifications if decisions.get(str(m.get("id", ""))) == "accepted"]
     if not accepted:
         doc.add_paragraph("Aucune modification acceptee.")
         out = io.BytesIO(); doc.save(out); out.seek(0); return out
@@ -1595,7 +1595,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 1
 
-    accepted = [m for m in modifications if decisions.get(str(m["id"])) == "accepted"]
+    accepted = [m for m in modifications if decisions.get(str(m.get("id", ""))) == "accepted"]
     applied = set()
 
     # Walk full XML body (includes table cells) — same index as build_numbered_paragraphs
