@@ -3249,71 +3249,91 @@ def compare_adversary():
         if not changed_articles:
             return jsonify({"modifications": []})
 
-        # ── AI: free-form identification of specific substantive changes ──────
+        # ── AI: Sonnet — precise legal analysis, bilingual-aware ─────────────
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
         articles_for_ai = [
             {
                 "article": a["num"],
                 "notre_version": a["our"],
-                "version_adverse": a["adv_raw"],   # full bilingual so AI can spot English-only additions
+                "version_adverse": a["adv_raw"],
             }
-            for a in changed_articles[:20]
+            for a in changed_articles[:25]
         ]
 
-        prompt = f"""Tu es expert juridique spécialisé en contrats bilingues (arabe/français/anglais).
+        prompt = f"""Tu es un juriste senior spécialisé en droit des contrats (droit marocain, franco-arabe).
 
-MISSION: Identifier les modifications SUBSTANTIELLES entre notre contrat et la version adverse.
+CONTEXTE: Tu compares article par article notre contrat validé (arabe) avec la version adverse (peut être bilingue arabe/anglais/français).
 
-RÈGLES ABSOLUES:
-1. IGNORE les différences qui sont uniquement des traductions (même sens en arabe ET en anglais/français = PAS une modification)
-2. EXTRAIS uniquement le FRAGMENT PRÉCIS qui a changé — pas l'article entier
-3. Un article peut générer PLUSIEURS cartes si plusieurs modifications distinctes
-4. Si une obligation financière, un délai, une pénalité ou une protection est ajouté/modifié/supprimé → inclure
-5. Si le contrat adverse ajoute une clause en anglais absente de la version arabe → inclure (risque élevé)
-6. Si la différence est purement stylistique ou orthographique → ignorer
+━━━ CE QUI EST UNE MODIFICATION SUBSTANTIELLE ━━━
+✓ Montant financier ajouté, supprimé ou modifié
+✓ Pénalité, intérêt, indemnité nouvelle ou modifiée
+✓ Délai contractuel modifié (nombre de jours, conditions)
+✓ Droit ou protection supprimé de notre version
+✓ Nouvelle obligation imposée à notre client
+✓ Condition de résiliation, suspension ou force majeure modifiée
+✓ Clause en langue étrangère sans équivalent dans la version arabe
 
-ARTICLES À ANALYSER (notre version vs version adverse):
+━━━ CE QUI N'EST PAS UNE MODIFICATION ━━━
+✗ Le même texte traduit fidèlement en anglais ou français
+✗ Différences de style, ponctuation, mise en forme
+✗ Contenu de table des matières / en-têtes
+✗ Reformulations stylistiques sans impact sur les droits
+
+━━━ RÈGLE ABSOLUE ━━━
+Extrais UNIQUEMENT le fragment précis qui a changé (1 à 3 phrases max), JAMAIS l'article entier.
+
+ARTICLES À COMPARER:
 {json.dumps(articles_for_ai, ensure_ascii=False)}
 
-Pour chaque modification SUBSTANTIELLE identifiée, retourne:
+Pour chaque modification substantielle identifiée:
 {{
-  "clause_name": "البند X — titre court en français (ex: البند 1 — Hiérarchie documents)",
-  "type": "replace" | "insert" | "delete",
-  "our_text": "le fragment EXACT de notre version (max 250 chars) — vide si insert",
-  "original": "le fragment EXACT de la version adverse (max 250 chars) — vide si delete",
-  "risk": "high" | "medium" | "low",
-  "reason": "impact juridique concret en 1-2 phrases",
-  "proposed": "contre-proposition (reprendre notre texte si supprimé, neutraliser si ajout adverse)"
+  "article": "البند X ou Article X",
+  "titre": "titre court français 4 mots max",
+  "categorie": "financier"|"délai"|"résiliation"|"responsabilité"|"garantie"|"autre",
+  "type": "ajout"|"suppression"|"modification",
+  "notre_fragment": "fragment exact notre version (vide si ajout adverse)",
+  "fragment_adverse": "fragment exact version adverse (vide si suppression)",
+  "impact": "conséquence juridique directe pour {partie or 'notre client'} — 1 phrase",
+  "criticite": "critique"|"important"|"modéré",
+  "contre_proposition": "texte recommandé (reprendre notre position ou compromis)"
 }}
 
-Si aucune modification substantielle → retourner [].
-Retourne UNIQUEMENT un tableau JSON valide, sans texte avant ni après.
-[...]"""
+Trier par criticité décroissante.
+Si aucune modification substantielle → tableau vide [].
+Retourner UNIQUEMENT le tableau JSON, sans texte autour."""
 
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = msg.content[0].text.strip()
         m_json = re.search(r'\[[\s\S]*\]', raw)
-        result = json.loads(m_json.group(0)) if m_json else []
+        items = json.loads(m_json.group(0)) if m_json else []
 
-        # Normalize field names and ensure required keys
+        # Normalize to frontend-compatible structure + add new fields
+        _CRIT_ORDER = {"critique": 0, "important": 1, "modéré": 2, "modere": 2}
         normalized = []
-        for item in result:
+        for item in items:
             if not isinstance(item, dict):
                 continue
+            crit = item.get("criticite", "modéré").lower().replace("é", "e")
+            typ_map = {"ajout": "insert", "suppression": "delete", "modification": "replace"}
             normalized.append({
-                "clause_name": item.get("clause_name", "Modification"),
-                "type":        item.get("type", "replace"),
-                "our_text":    item.get("our_text", ""),
-                "original":    item.get("original", item.get("adverse_text", "")),
-                "proposed":    item.get("proposed", ""),
-                "risk":        item.get("risk", "medium"),
-                "reason":      item.get("reason", ""),
+                "clause_name": item.get("article", "") + (" — " + item.get("titre", "") if item.get("titre") else ""),
+                "type":        typ_map.get(item.get("type", "modification"), "replace"),
+                "categorie":   item.get("categorie", "autre"),
+                "our_text":    item.get("notre_fragment", ""),
+                "original":    item.get("fragment_adverse", ""),
+                "proposed":    item.get("contre_proposition", ""),
+                "risk":        "high" if crit == "critique" else ("medium" if crit == "important" else "low"),
+                "criticite":   item.get("criticite", "modéré"),
+                "reason":      item.get("impact", ""),
             })
+
+        # Sort: critique → important → modéré
+        normalized.sort(key=lambda x: _CRIT_ORDER.get(x["criticite"].lower().replace("é", "e"), 3))
 
         return jsonify({"modifications": normalized})
     except Exception as e:
