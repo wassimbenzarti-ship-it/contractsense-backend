@@ -3250,27 +3250,37 @@ def compare_adversary():
             return jsonify({"modifications": []})
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        _partie_label = partie or "notre client"
         articles_for_ai = [
-            {"article": a["num"], "notre_version": a["our"], "version_adverse": a["adv_raw"]}
+            {
+                "article": a["num"],
+                "notre_version": a["our"],
+                "version_adverse_arabe": a["adv_arabic"],   # Arabic portion only
+                "version_adverse_complete": a["adv_raw"],   # Full bilingual (for English-only clauses)
+            }
             for a in changed_articles[:25]
         ]
 
         # ── Étape 1 : Haiku — identifier les fragments qui ont changé ────────
-        haiku_prompt = f"""Tu compares des articles de contrat (notre version arabe vs version adverse bilingue).
+        haiku_prompt = f"""Tu compares des articles de contrat.
+Notre version: arabe. Version adverse: peut être bilingue (arabe + anglais).
 
-RÈGLES D'IDENTIFICATION:
-- Extrais UNIQUEMENT les fragments qui ont substantiellement changé (1-3 phrases max par modification)
-- IGNORE: traductions fidèles arabe↔anglais/français, différences de style, tables des matières
-- INCLURE: montants financiers, pénalités, délais, droits supprimés, obligations nouvelles, clauses en anglais sans équivalent arabe
+RÈGLES D'EXTRACTION:
+1. Extraire UNIQUEMENT les fragments qui ont substantiellement changé (1-3 phrases max)
+2. IGNORER: traductions fidèles arabe↔anglais, style, tables des matières
+3. INCLURE: montants, pénalités, délais, droits supprimés, obligations nouvelles
+4. Pour "notre_fragment": extraire le texte arabe exact de notre version
+5. Pour "fragment_adverse": préférer le texte arabe de la version adverse si disponible dans "version_adverse_arabe"; sinon utiliser "version_adverse_complete"
 
 ARTICLES:
 {json.dumps(articles_for_ai, ensure_ascii=False)}
 
 Pour chaque modification identifiée:
-{{"article":"البند X","type":"ajout"|"suppression"|"modification","notre_fragment":"texte exact notre version (vide si ajout)","fragment_adverse":"texte exact version adverse (vide si suppression)"}}
+{{"article":"البند X","type":"ajout"|"suppression"|"modification","notre_fragment":"texte exact notre version (vide si ajout)","fragment_adverse":"texte exact version adverse en arabe si possible (vide si suppression)"}}
 
 Retourner UNIQUEMENT le tableau JSON. Si aucune modification substantielle → [].
 """
+
         haiku_msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=2048,
@@ -3286,21 +3296,26 @@ Retourner UNIQUEMENT le tableau JSON. Si aucune modification substantielle → [
         # ── Étape 2 : Sonnet — analyser l'impact juridique ───────────────────
         sonnet_prompt = f"""Tu es juriste senior en droit des contrats (droit marocain).
 
-MODIFICATIONS IDENTIFIÉES entre notre contrat et la version adverse:
+⚠️ TU REPRÉSENTES EXCLUSIVEMENT : {_partie_label}
+Toute ton analyse doit défendre les intérêts de cette partie.
+- Si une modification est défavorable pour {_partie_label} → criticite élevée, contre_proposition qui rétablit notre position
+- Si une modification est favorable pour {_partie_label} → criticite faible, noter que c'est acquis
+- L'impact doit toujours énoncer la conséquence pour {_partie_label}, pas pour l'autre partie
+
+MODIFICATIONS IDENTIFIÉES:
 {json.dumps(identified, ensure_ascii=False)}
 
-Pour chaque modification, fournis l'analyse juridique dans le MÊME ORDRE et avec le MÊME NOMBRE d'éléments:
+Pour chaque modification, même ordre, même nombre d'éléments:
 {{
   "article": "البند X (reprendre de l'entrée)",
   "titre": "titre court français 4 mots max",
   "categorie": "financier"|"délai"|"résiliation"|"responsabilité"|"garantie"|"autre",
-  "impact": "conséquence juridique directe pour {partie or 'notre client'} — 1 phrase précise",
+  "impact": "conséquence pour {_partie_label} — 1 phrase directe et précise",
   "criticite": "critique"|"important"|"modéré",
-  "contre_proposition": "texte recommandé pour protéger notre client"
+  "contre_proposition": "texte qui protège et renforce la position de {_partie_label}"
 }}
 
-IMPORTANT: Même ordre que les modifications reçues, même nombre d'éléments. Ne pas réordonner.
-Retourner UNIQUEMENT le tableau JSON."""
+Ne pas réordonner. Retourner UNIQUEMENT le tableau JSON."""
 
         sonnet_msg = client.messages.create(
             model="claude-sonnet-4-6",
