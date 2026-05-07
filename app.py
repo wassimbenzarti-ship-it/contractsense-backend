@@ -3084,6 +3084,8 @@ def compare_adversary():
 
         adverse_file = request.files.get("file")
         our_text = request.form.get("our_text", "")
+        file_cache_id = request.form.get("file_cache_id", "").strip()
+        file_storage_path = request.form.get("file_storage_path", "").strip()
         our_mods_json = request.form.get("our_modifications", "[]")
         decisions_json = request.form.get("decisions", "{}")
         partie = request.form.get("partie", "")
@@ -3093,6 +3095,34 @@ def compare_adversary():
 
         our_mods = json.loads(our_mods_json)
         decisions = json.loads(decisions_json)
+
+        # If our_text is empty (dashboard context), recover original contract from cache/storage
+        if not our_text.strip():
+            recovered_bytes = None
+            recovered_filename = ""
+            if file_cache_id:
+                recovered_bytes = _cache_get(file_cache_id)
+                recovered_filename = "contrat.docx"
+            if recovered_bytes is None and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+                recovered_bytes = supa_storage_download("contracts", file_storage_path)
+                recovered_filename = file_storage_path.rsplit("/", 1)[-1].lower()
+            if recovered_bytes is not None:
+                try:
+                    if recovered_filename.endswith(".docx"):
+                        our_text = extract_text_from_docx(recovered_bytes)
+                    else:
+                        our_text = recovered_bytes.decode("utf-8", errors="ignore")
+                    print(f"[/compare-adversary] recovered our_text from {'cache' if file_cache_id else 'storage'}: {len(our_text)} chars")
+                except Exception as rec_err:
+                    print(f"[/compare-adversary] recovery error: {rec_err}")
+
+        # Last resort: reconstruct from mods' original text so diff has something to compare
+        if not our_text.strip() and our_mods:
+            our_text = "\n\n".join(
+                ((m.get("clause_name", "") + "\n" if m.get("clause_name") else "") + m.get("original", ""))
+                for m in our_mods if m.get("original")
+            )
+            print(f"[/compare-adversary] using mods fallback: {len(our_text)} chars")
 
         # Apply accepted modifications to reconstruct our validated version
         our_final = our_text
@@ -3108,6 +3138,7 @@ def compare_adversary():
 
         def to_paras(text):
             return [l.strip() for l in text.split("\n") if l.strip()]
+
 
         our_paras = to_paras(our_final)
         adv_paras = to_paras(adverse_text)
