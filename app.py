@@ -3250,7 +3250,12 @@ def compare_adversary():
             return jsonify({"modifications": []})
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        _partie_label = partie or "notre client"
+        # Resolve represented party: use passed param, fallback to party_label in first mod
+        _partie_label = partie.strip() if partie.strip() else ""
+        if not _partie_label and our_mods:
+            _partie_label = our_mods[0].get("party_label", "") or our_mods[0].get("partie", "")
+        if not _partie_label:
+            _partie_label = "notre client"
         articles_for_ai = [
             {
                 "article": a["num"],
