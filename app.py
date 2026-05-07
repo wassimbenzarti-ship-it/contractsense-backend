@@ -3289,7 +3289,7 @@ Retourner UNIQUEMENT le tableau JSON. Si aucune modification substantielle → [
 MODIFICATIONS IDENTIFIÉES entre notre contrat et la version adverse:
 {json.dumps(identified, ensure_ascii=False)}
 
-Pour chaque modification, fournis l'analyse juridique:
+Pour chaque modification, fournis l'analyse juridique dans le MÊME ORDRE et avec le MÊME NOMBRE d'éléments:
 {{
   "article": "البند X (reprendre de l'entrée)",
   "titre": "titre court français 4 mots max",
@@ -3299,7 +3299,7 @@ Pour chaque modification, fournis l'analyse juridique:
   "contre_proposition": "texte recommandé pour protéger notre client"
 }}
 
-Trier par criticité décroissante. Même nombre d'éléments que les modifications, même ordre.
+IMPORTANT: Même ordre que les modifications reçues, même nombre d'éléments. Ne pas réordonner.
 Retourner UNIQUEMENT le tableau JSON."""
 
         sonnet_msg = client.messages.create(
