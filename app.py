@@ -3076,7 +3076,7 @@ Si aucune divergence significative: retourne []"""
 
 @app.route("/compare-adversary", methods=["POST", "OPTIONS"])
 def compare_adversary():
-    """Word-like compare: algorithmic diff between our validated contract and the adverse version, AI analysis per change"""
+    """Article-by-article comparison: identifies specific substantive changes, ignores bilingual translations"""
     if request.method == "OPTIONS":
         return _add_cors(Response("", 204))
     try:
@@ -3096,7 +3096,7 @@ def compare_adversary():
         our_mods = json.loads(our_mods_json)
         decisions = json.loads(decisions_json)
 
-        # If our_text is empty (dashboard context), recover original contract from cache/storage
+        # Recover our_text if empty (dashboard context)
         if not our_text.strip():
             recovered_bytes = None
             recovered_filename = ""
@@ -3112,19 +3112,16 @@ def compare_adversary():
                         our_text = extract_text_from_docx(recovered_bytes)
                     else:
                         our_text = recovered_bytes.decode("utf-8", errors="ignore")
-                    print(f"[/compare-adversary] recovered our_text from {'cache' if file_cache_id else 'storage'}: {len(our_text)} chars")
+                    print(f"[/compare-adversary] recovered our_text: {len(our_text)} chars")
                 except Exception as rec_err:
                     print(f"[/compare-adversary] recovery error: {rec_err}")
 
-        # Last resort: reconstruct from mods' original text so diff has something to compare
         if not our_text.strip() and our_mods:
             our_text = "\n\n".join(
                 ((m.get("clause_name", "") + "\n" if m.get("clause_name") else "") + m.get("original", ""))
                 for m in our_mods if m.get("original")
             )
-            print(f"[/compare-adversary] using mods fallback: {len(our_text)} chars")
 
-        # Apply accepted modifications to reconstruct our validated version
         our_final = our_text
         for m in our_mods:
             mid = str(m.get("id", ""))
@@ -3136,72 +3133,189 @@ def compare_adversary():
 
         adverse_text, _, _ = read_file(adverse_file)
 
-        def to_paras(text):
-            return [l.strip() for l in text.split("\n") if l.strip()]
+        # ── Article splitting ────────────────────────────────────────────────
+        _ART_RE = re.compile(
+            r'(?:البند|المادة|Article|Clause)\s*[\(\[]?\s*(\d+)',
+            re.IGNORECASE
+        )
 
+        def _split_articles(text):
+            """Return {article_number_str: content} — last write wins for duplicate numbers (bilingual docs)."""
+            lines = text.split('\n')
+            articles = {}
+            cur_num = None
+            cur_lines = []
+            for line in lines:
+                m2 = _ART_RE.search(line)
+                if m2:
+                    if cur_num is not None and cur_lines:
+                        prev = articles.get(cur_num, '')
+                        articles[cur_num] = (prev + '\n' + '\n'.join(cur_lines)).strip()
+                    cur_num = m2.group(1)
+                    cur_lines = [line]
+                elif cur_num is not None:
+                    cur_lines.append(line)
+            if cur_num is not None and cur_lines:
+                prev = articles.get(cur_num, '')
+                articles[cur_num] = (prev + '\n' + '\n'.join(cur_lines)).strip()
+            return articles
 
-        our_paras = to_paras(our_final)
-        adv_paras = to_paras(adverse_text)
+        def _is_arabic_dominant(text):
+            arabic = len(re.findall(r'[؀-ۿ]', text))
+            latin  = len(re.findall(r'[a-zA-Z]', text))
+            return arabic > latin
 
-        matcher = difflib.SequenceMatcher(None, our_paras, adv_paras, autojunk=False)
-        raw_diffs = []
-        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-            if tag == "equal":
+        def _first_arabic_block(text):
+            """For bilingual article text, return only the Arabic portion."""
+            # Lines separated by | on the same line: keep Arabic side
+            lines = []
+            for line in text.split('\n'):
+                if '|' in line:
+                    parts = [p.strip() for p in line.split('|') if p.strip()]
+                    arabic = [p for p in parts if _is_arabic_dominant(p)]
+                    lines.append(arabic[0] if arabic else parts[0])
+                else:
+                    lines.append(line)
+            return '\n'.join(lines)
+
+        our_articles  = _split_articles(our_final)
+        adv_articles_raw = _split_articles(adverse_text)
+
+        # For each adverse article keep both the raw (bilingual) and Arabic-only versions
+        adv_articles_arabic = {k: _first_arabic_block(v) for k, v in adv_articles_raw.items()}
+
+        # ── Coarse diff: which articles actually differ? ──────────────────────
+        all_nums = sorted(
+            set(our_articles.keys()) | set(adv_articles_raw.keys()),
+            key=lambda x: int(x) if x.isdigit() else 9999
+        )
+
+        # Obligation keywords: if adverse English contains these but our version doesn't → flag
+        _OBLIGATION_KW = {'pay', 'payment', 'liable', 'liabil', 'penalt', 'penalty', 'interest',
+                          'indemnif', 'compensat', 'terminat', 'forfeit', 'delay', 'waiver', 'forfai'}
+
+        changed_articles = []
+        for num in all_nums:
+            our_art        = our_articles.get(num, '').strip()
+            adv_art_arabic = adv_articles_arabic.get(num, '').strip()
+            adv_art_raw    = adv_articles_raw.get(num, '').strip()
+
+            if not our_art and not adv_art_raw:
                 continue
-            raw_diffs.append({
-                "tag": tag,
-                "our": "\n".join(our_paras[i1:i2]),
-                "adverse": "\n".join(adv_paras[j1:j2]),
-            })
 
-        if not raw_diffs:
+            if not our_art or not adv_art_arabic:
+                # Article entirely added or deleted
+                changed_articles.append({
+                    "num": num,
+                    "our": our_art[:600],
+                    "adv_arabic": adv_art_arabic[:600],
+                    "adv_raw": adv_art_raw[:800],
+                })
+                continue
+
+            # 1. Arabic-only word overlap (catches Arabic content changes)
+            our_arabic_words = set(re.findall(r'[؀-ۿ]{3,}', our_art.lower()))
+            adv_arabic_words = set(re.findall(r'[؀-ۿ]{3,}', adv_art_arabic.lower()))
+            flagged = False
+            if our_arabic_words and adv_arabic_words:
+                overlap = len(our_arabic_words & adv_arabic_words) / max(len(our_arabic_words), len(adv_arabic_words))
+                if overlap < 0.65:
+                    flagged = True
+            else:
+                flagged = True  # can't compare Arabic — be safe
+
+            # 2. New large financial amounts in adverse (catches English-only insertions like 100M penalty)
+            if not flagged:
+                our_big_nums = set(re.findall(r'\b\d{6,}\b', our_art))
+                adv_big_nums = set(re.findall(r'\b\d{6,}\b', adv_art_raw))
+                if adv_big_nums - our_big_nums:
+                    flagged = True
+
+            # 3. New obligation keywords in adverse English portion absent from our version
+            if not flagged:
+                adv_en_stems = set(w[:8] for w in re.findall(r'\b[a-z]{4,}\b', adv_art_raw.lower()))
+                our_en_stems = set(w[:8] for w in re.findall(r'\b[a-z]{4,}\b', our_art.lower()))
+                if (adv_en_stems - our_en_stems) & _OBLIGATION_KW:
+                    flagged = True
+
+            if flagged:
+                changed_articles.append({
+                    "num": num,
+                    "our": our_art[:600],
+                    "adv_arabic": adv_art_arabic[:600],
+                    "adv_raw": adv_art_raw[:800],
+                })
+
+        if not changed_articles:
             return jsonify({"modifications": []})
 
-        diffs_for_ai = [
-            {"type": d["tag"], "notre_version": d["our"][:400], "version_adverse": d["adverse"][:400]}
-            for d in raw_diffs[:20]
+        # ── AI: free-form identification of specific substantive changes ──────
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+        articles_for_ai = [
+            {
+                "article": a["num"],
+                "notre_version": a["our"],
+                "version_adverse": a["adv_raw"],   # full bilingual so AI can spot English-only additions
+            }
+            for a in changed_articles[:20]
         ]
 
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        prompt = f"""Expert juridique: analyse chaque différence entre notre contrat validé et le contrat adverse.
+        prompt = f"""Tu es expert juridique spécialisé en contrats bilingues (arabe/français/anglais).
 
-DIFFÉRENCES DÉTECTÉES (dans l'ordre):
-{json.dumps(diffs_for_ai, ensure_ascii=False)}
+MISSION: Identifier les modifications SUBSTANTIELLES entre notre contrat et la version adverse.
 
-Types: "replace"=texte modifié, "insert"=ajouté par adverse, "delete"=supprimé par adverse.
+RÈGLES ABSOLUES:
+1. IGNORE les différences qui sont uniquement des traductions (même sens en arabe ET en anglais/français = PAS une modification)
+2. EXTRAIS uniquement le FRAGMENT PRÉCIS qui a changé — pas l'article entier
+3. Un article peut générer PLUSIEURS cartes si plusieurs modifications distinctes
+4. Si une obligation financière, un délai, une pénalité ou une protection est ajouté/modifié/supprimé → inclure
+5. Si le contrat adverse ajoute une clause en anglais absente de la version arabe → inclure (risque élevé)
+6. Si la différence est purement stylistique ou orthographique → ignorer
 
-Pour chaque différence retourne:
-- clause_name: nom court de la section concernée (ex: "Délais d'exécution", "Clause pénale")
-- risk: "high" | "medium" | "low" pour {partie or 'notre client'}
-- reason: 1-2 phrases: impact juridique de cette différence
-- proposed: texte conseillé (si défavorable: amélioration du texte adverse; si favorable pour nous: reprendre le texte adverse tel quel)
+ARTICLES À ANALYSER (notre version vs version adverse):
+{json.dumps(articles_for_ai, ensure_ascii=False)}
 
-JSON uniquement, même nombre d'éléments que les différences, même ordre:
-[{{"clause_name":"...","risk":"high|medium|low","reason":"...","proposed":"..."}}]"""
+Pour chaque modification SUBSTANTIELLE identifiée, retourne:
+{{
+  "clause_name": "البند X — titre court en français (ex: البند 1 — Hiérarchie documents)",
+  "type": "replace" | "insert" | "delete",
+  "our_text": "le fragment EXACT de notre version (max 250 chars) — vide si insert",
+  "original": "le fragment EXACT de la version adverse (max 250 chars) — vide si delete",
+  "risk": "high" | "medium" | "low",
+  "reason": "impact juridique concret en 1-2 phrases",
+  "proposed": "contre-proposition (reprendre notre texte si supprimé, neutraliser si ajout adverse)"
+}}
+
+Si aucune modification substantielle → retourner [].
+Retourne UNIQUEMENT un tableau JSON valide, sans texte avant ni après.
+[...]"""
 
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4000,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = msg.content[0].text.strip()
-        m = re.search(r'\[[\s\S]*\]', raw)
-        analyses = json.loads(m.group(0)) if m else []
+        m_json = re.search(r'\[[\s\S]*\]', raw)
+        result = json.loads(m_json.group(0)) if m_json else []
 
-        result = []
-        for i, diff in enumerate(raw_diffs):
-            ana = analyses[i] if i < len(analyses) else {}
-            result.append({
-                "clause_name": ana.get("clause_name", f"Différence {i+1}"),
-                "type": diff["tag"],
-                "original": diff["adverse"],
-                "our_text": diff["our"],
-                "proposed": ana.get("proposed", diff["adverse"]),
-                "risk": ana.get("risk", "medium"),
-                "reason": ana.get("reason", ""),
+        # Normalize field names and ensure required keys
+        normalized = []
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            normalized.append({
+                "clause_name": item.get("clause_name", "Modification"),
+                "type":        item.get("type", "replace"),
+                "our_text":    item.get("our_text", ""),
+                "original":    item.get("original", item.get("adverse_text", "")),
+                "proposed":    item.get("proposed", ""),
+                "risk":        item.get("risk", "medium"),
+                "reason":      item.get("reason", ""),
             })
 
-        return jsonify({"modifications": result})
+        return jsonify({"modifications": normalized})
     except Exception as e:
         print(f"[/compare-adversary] error: {e}")
         return jsonify({"error": str(e)}), 500
