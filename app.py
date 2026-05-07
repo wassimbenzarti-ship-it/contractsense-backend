@@ -3249,87 +3249,87 @@ def compare_adversary():
         if not changed_articles:
             return jsonify({"modifications": []})
 
-        # ── AI: Sonnet — precise legal analysis, bilingual-aware ─────────────
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-
         articles_for_ai = [
-            {
-                "article": a["num"],
-                "notre_version": a["our"],
-                "version_adverse": a["adv_raw"],
-            }
+            {"article": a["num"], "notre_version": a["our"], "version_adverse": a["adv_raw"]}
             for a in changed_articles[:25]
         ]
 
-        prompt = f"""Tu es un juriste senior spécialisé en droit des contrats (droit marocain, franco-arabe).
+        # ── Étape 1 : Haiku — identifier les fragments qui ont changé ────────
+        haiku_prompt = f"""Tu compares des articles de contrat (notre version arabe vs version adverse bilingue).
 
-CONTEXTE: Tu compares article par article notre contrat validé (arabe) avec la version adverse (peut être bilingue arabe/anglais/français).
+RÈGLES D'IDENTIFICATION:
+- Extrais UNIQUEMENT les fragments qui ont substantiellement changé (1-3 phrases max par modification)
+- IGNORE: traductions fidèles arabe↔anglais/français, différences de style, tables des matières
+- INCLURE: montants financiers, pénalités, délais, droits supprimés, obligations nouvelles, clauses en anglais sans équivalent arabe
 
-━━━ CE QUI EST UNE MODIFICATION SUBSTANTIELLE ━━━
-✓ Montant financier ajouté, supprimé ou modifié
-✓ Pénalité, intérêt, indemnité nouvelle ou modifiée
-✓ Délai contractuel modifié (nombre de jours, conditions)
-✓ Droit ou protection supprimé de notre version
-✓ Nouvelle obligation imposée à notre client
-✓ Condition de résiliation, suspension ou force majeure modifiée
-✓ Clause en langue étrangère sans équivalent dans la version arabe
-
-━━━ CE QUI N'EST PAS UNE MODIFICATION ━━━
-✗ Le même texte traduit fidèlement en anglais ou français
-✗ Différences de style, ponctuation, mise en forme
-✗ Contenu de table des matières / en-têtes
-✗ Reformulations stylistiques sans impact sur les droits
-
-━━━ RÈGLE ABSOLUE ━━━
-Extrais UNIQUEMENT le fragment précis qui a changé (1 à 3 phrases max), JAMAIS l'article entier.
-
-ARTICLES À COMPARER:
+ARTICLES:
 {json.dumps(articles_for_ai, ensure_ascii=False)}
 
-Pour chaque modification substantielle identifiée:
+Pour chaque modification identifiée:
+{{"article":"البند X","type":"ajout"|"suppression"|"modification","notre_fragment":"texte exact notre version (vide si ajout)","fragment_adverse":"texte exact version adverse (vide si suppression)"}}
+
+Retourner UNIQUEMENT le tableau JSON. Si aucune modification substantielle → [].
+"""
+        haiku_msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": haiku_prompt}]
+        )
+        raw_h = haiku_msg.content[0].text.strip()
+        m_h = re.search(r'\[[\s\S]*\]', raw_h)
+        identified = json.loads(m_h.group(0)) if m_h else []
+
+        if not identified:
+            return jsonify({"modifications": []})
+
+        # ── Étape 2 : Sonnet — analyser l'impact juridique ───────────────────
+        sonnet_prompt = f"""Tu es juriste senior en droit des contrats (droit marocain).
+
+MODIFICATIONS IDENTIFIÉES entre notre contrat et la version adverse:
+{json.dumps(identified, ensure_ascii=False)}
+
+Pour chaque modification, fournis l'analyse juridique:
 {{
-  "article": "البند X ou Article X",
+  "article": "البند X (reprendre de l'entrée)",
   "titre": "titre court français 4 mots max",
   "categorie": "financier"|"délai"|"résiliation"|"responsabilité"|"garantie"|"autre",
-  "type": "ajout"|"suppression"|"modification",
-  "notre_fragment": "fragment exact notre version (vide si ajout adverse)",
-  "fragment_adverse": "fragment exact version adverse (vide si suppression)",
-  "impact": "conséquence juridique directe pour {partie or 'notre client'} — 1 phrase",
+  "impact": "conséquence juridique directe pour {partie or 'notre client'} — 1 phrase précise",
   "criticite": "critique"|"important"|"modéré",
-  "contre_proposition": "texte recommandé (reprendre notre position ou compromis)"
+  "contre_proposition": "texte recommandé pour protéger notre client"
 }}
 
-Trier par criticité décroissante.
-Si aucune modification substantielle → tableau vide [].
-Retourner UNIQUEMENT le tableau JSON, sans texte autour."""
+Trier par criticité décroissante. Même nombre d'éléments que les modifications, même ordre.
+Retourner UNIQUEMENT le tableau JSON."""
 
-        msg = client.messages.create(
+        sonnet_msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=2048,
+            messages=[{"role": "user", "content": sonnet_prompt}]
         )
-        raw = msg.content[0].text.strip()
-        m_json = re.search(r'\[[\s\S]*\]', raw)
-        items = json.loads(m_json.group(0)) if m_json else []
+        raw_s = sonnet_msg.content[0].text.strip()
+        m_s = re.search(r'\[[\s\S]*\]', raw_s)
+        analyses = json.loads(m_s.group(0)) if m_s else []
 
-        # Normalize to frontend-compatible structure + add new fields
+        # ── Fusionner identification + analyse ───────────────────────────────
         _CRIT_ORDER = {"critique": 0, "important": 1, "modéré": 2, "modere": 2}
+        typ_map = {"ajout": "insert", "suppression": "delete", "modification": "replace"}
         normalized = []
-        for item in items:
-            if not isinstance(item, dict):
+        for i, diff in enumerate(identified):
+            if not isinstance(diff, dict):
                 continue
-            crit = item.get("criticite", "modéré").lower().replace("é", "e")
-            typ_map = {"ajout": "insert", "suppression": "delete", "modification": "replace"}
+            ana = analyses[i] if i < len(analyses) and isinstance(analyses[i], dict) else {}
+            crit = ana.get("criticite", "modéré").lower().replace("é", "e")
             normalized.append({
-                "clause_name": item.get("article", "") + (" — " + item.get("titre", "") if item.get("titre") else ""),
-                "type":        typ_map.get(item.get("type", "modification"), "replace"),
-                "categorie":   item.get("categorie", "autre"),
-                "our_text":    item.get("notre_fragment", ""),
-                "original":    item.get("fragment_adverse", ""),
-                "proposed":    item.get("contre_proposition", ""),
+                "clause_name": diff.get("article", "") + (" — " + ana.get("titre", "") if ana.get("titre") else ""),
+                "type":        typ_map.get(diff.get("type", "modification"), "replace"),
+                "categorie":   ana.get("categorie", "autre"),
+                "our_text":    diff.get("notre_fragment", ""),
+                "original":    diff.get("fragment_adverse", ""),
+                "proposed":    ana.get("contre_proposition", ""),
                 "risk":        "high" if crit == "critique" else ("medium" if crit == "important" else "low"),
-                "criticite":   item.get("criticite", "modéré"),
-                "reason":      item.get("impact", ""),
+                "criticite":   ana.get("criticite", "modéré"),
+                "reason":      ana.get("impact", ""),
             })
 
         # Sort: critique → important → modéré
