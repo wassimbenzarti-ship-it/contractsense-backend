@@ -2690,12 +2690,30 @@ def delete_queue_item(item_id):
 def export_translation():
     if request.method == "OPTIONS": return "", 204
     try:
-        data          = request.get_json() or {}
-        contract_text = (data.get("contract_text") or "").strip()
-        target_lang   = (data.get("target_lang") or "en").strip()
-        filename      = (data.get("filename") or "contrat").strip()
-        mods          = data.get("modifications") or []
-        decisions     = data.get("decisions") or {}
+        data              = request.get_json() or {}
+        contract_text     = (data.get("contract_text") or "").strip()
+        target_lang       = (data.get("target_lang") or "en").strip()
+        filename          = (data.get("filename") or "contrat").strip()
+        mods              = data.get("modifications") or []
+        decisions         = data.get("decisions") or {}
+        file_cache_id     = (data.get("file_cache_id") or "").strip()
+        file_storage_path = (data.get("file_storage_path") or "").strip()
+
+        # If contract_text is missing, try to recover from in-memory cache or Supabase Storage
+        if not contract_text or len(contract_text) < 20:
+            _recovered = None
+            if file_cache_id:
+                _recovered = _cache_get(file_cache_id)
+            if _recovered is None and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
+                _recovered = supa_storage_download("contracts", file_storage_path)
+            if _recovered:
+                _fname = file_storage_path.rsplit("/", 1)[-1].lower() if file_storage_path else "contrat.docx"
+                if _fname.endswith(".docx") or _fname.endswith(".doc"):
+                    contract_text = extract_text_from_docx(_recovered) or ""
+                elif _fname.endswith(".pdf"):
+                    contract_text = extract_text_from_pdf(_recovered) or ""
+                else:
+                    contract_text = _recovered.decode("utf-8", errors="ignore")
 
         if not contract_text or len(contract_text) < 20:
             return jsonify({"error": "contract_text manquant ou trop court"}), 400
