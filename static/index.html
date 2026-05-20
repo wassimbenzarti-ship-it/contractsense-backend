@@ -169,7 +169,6 @@ nav {
   letter-spacing: 2px; text-transform: uppercase;
   margin-bottom: 40px;
   background: rgba(200,169,75,0.05);
-  animation: fadeUp 1s ease both;
 }
 
 .hero-eyebrow::before {
@@ -186,7 +185,6 @@ nav {
   line-height: 0.92;
   letter-spacing: -4px;
   margin-bottom: 32px;
-  animation: fadeUp 1s 0.1s ease both;
 }
 
 .hero-h1 em {
@@ -199,7 +197,6 @@ nav {
 .hero-sub {
   font-size: 17px; color: var(--muted); max-width: 560px;
   line-height: 1.75; margin-bottom: 52px; font-weight: 300;
-  animation: fadeUp 1s 0.2s ease both;
 }
 
 .hero-btns {
@@ -232,7 +229,6 @@ nav {
   padding-top: 48px;
   border-top: 1px solid var(--border);
   display: flex; gap: 56px;
-  animation: fadeUp 1s 0.4s ease both;
 }
 
 .trust-item { text-align: center; }
@@ -245,7 +241,7 @@ nav {
 .trust-label { font-size: 11px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; }
 
 @keyframes fadeUp {
-  from { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(32px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -728,7 +724,7 @@ footer {
     <em data-fr="au service du droit." data-en="at the service of the law.">au service du droit.</em>
   </h1>
   <p class="hero-sub" data-fr="Omniscient analyse vos contrats et propose des modifications professionnelles basées sur une base de connaissances juridique construite et validée par des avocats Westfield." data-en="Omniscient analyzes your contracts and suggests professional edits based on a legal knowledge base built and validated by Westfield lawyers — across all major jurisdictions.">Omniscient analyse vos contrats et propose des modifications professionnelles basées sur une base de connaissances juridique construite et validée par des avocats Westfield.</p>
-  <div style="display:flex;justify-content:center;align-items:flex-start;gap:24px;flex-wrap:wrap;animation:fadeUp 1s 0.3s ease both">
+  <div style="display:flex;justify-content:center;align-items:flex-start;gap:24px;flex-wrap:wrap">
     <div class="hero-btns" style="margin-top:0">
       <a href="app-v2.html" class="btn-gold" data-fr="Analyser un contrat gratuitement" data-en="Analyze a contract for free">Analyser un contrat gratuitement</a>
       <a href="#workflow" class="btn-outline" data-fr="Voir le workflow →" data-en="See the workflow →">Voir le workflow →</a>
