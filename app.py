@@ -4640,6 +4640,38 @@ def serve_logo():
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
 
+@app.route("/robots.txt", methods=["GET"])
+def serve_robots():
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /analyze\n"
+        "Disallow: /export\n"
+        "Disallow: /chat\n"
+        "Disallow: /rag/\n"
+        "Disallow: /queue/\n"
+        "Disallow: /admin/\n"
+        "Disallow: /payment/\n"
+        "Disallow: /account/\n"
+        "\n"
+        "Sitemap: https://ai.westfieldavocats.com/sitemap.xml\n"
+    )
+    from flask import Response
+    return Response(content, mimetype="text/plain")
+
+@app.route("/sitemap.xml", methods=["GET"])
+def serve_sitemap():
+    content = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://ai.westfieldavocats.com/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>'''
+    from flask import Response
+    return Response(content, mimetype="application/xml")
+
 
 def _init_storage():
     """Crée le bucket Supabase Storage au démarrage si inexistant."""
