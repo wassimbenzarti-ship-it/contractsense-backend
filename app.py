@@ -53,6 +53,13 @@ _CORS_ORIGINS = [
 ]
 CORS(app, origins=_CORS_ORIGINS, supports_credentials=True)
 
+@app.before_request
+def _redirect_http_to_https():
+    # Railway terminates SSL and forwards X-Forwarded-Proto
+    if request.headers.get("X-Forwarded-Proto", "https") == "http":
+        url = request.url.replace("http://", "https://", 1)
+        return __import__("flask").redirect(url, code=301)
+
 @app.after_request
 def _add_cors(response):
     """Safety net: ensure CORS headers are always present on every response."""
