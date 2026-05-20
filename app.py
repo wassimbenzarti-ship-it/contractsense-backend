@@ -53,6 +53,13 @@ _CORS_ORIGINS = [
 ]
 CORS(app, origins=_CORS_ORIGINS, supports_credentials=True)
 
+@app.before_request
+def _redirect_http_to_https():
+    # Railway terminates SSL and forwards X-Forwarded-Proto
+    if request.headers.get("X-Forwarded-Proto", "https") == "http":
+        url = request.url.replace("http://", "https://", 1)
+        return __import__("flask").redirect(url, code=301)
+
 @app.after_request
 def _add_cors(response):
     """Safety net: ensure CORS headers are always present on every response."""
@@ -4625,13 +4632,18 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
 # ── Static frontend ──────────────────────────────────────────────────────────
 @app.route("/app-v2.html", methods=["GET"])
 @app.route("/app-v2", methods=["GET"])
-@app.route("/", methods=["GET"])
-@app.route("/index.html", methods=["GET"])
-def serve_frontend():
+def serve_app():
     resp = send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
+    return resp
+
+@app.route("/", methods=["GET"])
+@app.route("/index.html", methods=["GET"])
+def serve_landing():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
 @app.route("/westfield-ghost.png", methods=["GET"])
@@ -4639,6 +4651,38 @@ def serve_logo():
     resp = send_file(os.path.join(os.path.dirname(__file__), "static", "westfield-ghost.png"))
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
+
+@app.route("/robots.txt", methods=["GET"])
+def serve_robots():
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /analyze\n"
+        "Disallow: /export\n"
+        "Disallow: /chat\n"
+        "Disallow: /rag/\n"
+        "Disallow: /queue/\n"
+        "Disallow: /admin/\n"
+        "Disallow: /payment/\n"
+        "Disallow: /account/\n"
+        "\n"
+        "Sitemap: https://ai.westfieldavocats.com/sitemap.xml\n"
+    )
+    from flask import Response
+    return Response(content, mimetype="text/plain")
+
+@app.route("/sitemap.xml", methods=["GET"])
+def serve_sitemap():
+    content = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://ai.westfieldavocats.com/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>'''
+    from flask import Response
+    return Response(content, mimetype="application/xml")
 
 
 def _init_storage():
