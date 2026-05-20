@@ -4632,13 +4632,18 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
 # ── Static frontend ──────────────────────────────────────────────────────────
 @app.route("/app-v2.html", methods=["GET"])
 @app.route("/app-v2", methods=["GET"])
-@app.route("/", methods=["GET"])
-@app.route("/index.html", methods=["GET"])
-def serve_frontend():
+def serve_app():
     resp = send_file(os.path.join(os.path.dirname(__file__), "static", "app-v2.html"))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
+    return resp
+
+@app.route("/", methods=["GET"])
+@app.route("/index.html", methods=["GET"])
+def serve_landing():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
 @app.route("/westfield-ghost.png", methods=["GET"])
