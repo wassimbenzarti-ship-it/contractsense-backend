@@ -643,8 +643,7 @@ footer {
 .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 700; color: var(--text); }
 
 /* Scroll reveal */
-.reveal { opacity: 1; transform: translateY(0); transition: opacity 0.7s, transform 0.7s; }
-.reveal.js-ready { opacity: 0; transform: translateY(36px); }
+.reveal { opacity: 1; transform: translateY(36px); transition: opacity 0.7s, transform 0.7s; }
 .reveal.vis { opacity: 1; transform: translateY(0); }
 
 @media (max-width: 768px) {
@@ -1243,7 +1242,7 @@ window.addEventListener('scroll', function() {
 var ro = new IntersectionObserver(function(entries) {
   entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('vis'); });
 }, { threshold: 0.1 });
-document.querySelectorAll('.reveal').forEach(function(el) { el.classList.add('js-ready'); ro.observe(el); });
+document.querySelectorAll('.reveal').forEach(function(el) { ro.observe(el); });
 
 // Demo steps
 var cur = 1;
