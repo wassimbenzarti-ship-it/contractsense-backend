@@ -13,6 +13,12 @@
 <link rel="icon" type="image/svg+xml" href="/omniscient-logo.svg" />
 <link rel="shortcut icon" href="/omniscient-logo.svg" />
 
+<!-- Google Fonts — async non-blocking -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap"></noscript>
+
 <!-- Hreflang FR/EN -->
 <link rel="alternate" hreflang="fr" href="https://ai.westfieldavocats.com/" />
 <link rel="alternate" hreflang="en" href="https://ai.westfieldavocats.com/" />
@@ -123,8 +129,6 @@
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap');
-
 :root {
   --bg: #05070e;
   --surface: #0c0f1a;
@@ -246,7 +250,7 @@ nav {
 .mods-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .mods-count { font-size: 16px; font-weight: 600; }
 .mods-rag-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--purple); background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.2); padding: 4px 12px; border-radius: 20px; }
-.mod-card { background: #0e1323; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; opacity: 0; transform: translateX(-16px); transition: all 0.4s; }
+.mod-card { background: #0e1323; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; opacity: 1; transform: translateX(0); transition: all 0.4s; }
 .mod-card.vis { opacity: 1; transform: translateX(0); }
 .mod-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .mod-name { font-weight: 600; font-size: 13px; }
@@ -262,7 +266,7 @@ nav {
 .btn-reject { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,69,96,0.25); background: rgba(255,69,96,0.06); color: var(--red); font-size: 12px; cursor: pointer; transition: all 0.2s; }
 .export-summary { background: rgba(13,207,138,0.05); border: 1px solid rgba(13,207,138,0.2); border-radius: 14px; padding: 24px; margin-bottom: 20px; }
 .export-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
-.export-row { display: flex; align-items: center; gap: 12px; font-size: 13px; opacity: 0; transform: translateX(-10px); transition: all 0.35s; }
+.export-row { display: flex; align-items: center; gap: 12px; font-size: 13px; opacity: 1; transform: translateX(0); transition: all 0.35s; }
 .export-row.vis { opacity: 1; transform: translateX(0); }
 .export-btn { width: 100%; padding: 18px; background: linear-gradient(135deg, var(--accent), var(--purple)); border: none; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; position: relative; overflow: hidden; }
 .export-btn::after { content: ''; position: absolute; top: 50%; left: -100%; width: 60%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); transform: translateY(-50%) skewX(-20deg); animation: shim 2.5s infinite; }
