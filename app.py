@@ -4734,6 +4734,55 @@ def serve_sitemap():
     return Response(content, mimetype="application/xml")
 
 
+@app.route("/ai-contract-review-morocco", methods=["GET"])
+def serve_seo_ai_contract_review():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-ai-contract-review-morocco.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/ia-cabinet-avocat-maroc", methods=["GET"])
+def serve_seo_ia_cabinet():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-ia-cabinet-avocat-maroc.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/negociation-contrats-direction-juridique", methods=["GET"])
+def serve_seo_negociation_dj():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-negociation-contrats-direction-juridique.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/negociation-contrat-pme-maroc", methods=["GET"])
+def serve_seo_negociation_pme():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-negociation-contrat-pme-maroc.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/blog-clauses-abusives-contrats-marocains", methods=["GET"])
+def serve_seo_blog_clauses():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-blog-clauses-abusives-contrats-marocains.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/blog-code-travail-marocain-employeur", methods=["GET"])
+def serve_seo_blog_code_travail():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-blog-code-travail-marocain-employeur.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/blog-negocier-contrat-commercial-maroc", methods=["GET"])
+def serve_seo_blog_negocier():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-blog-negocier-contrat-commercial-maroc.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+@app.route("/presse", methods=["GET"])
+def serve_seo_presse():
+    resp = send_file(os.path.join(os.path.dirname(__file__), "static", "seo-presse.html"))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
 def _init_storage():
     """Crée le bucket Supabase Storage au démarrage si inexistant."""
     if not SUPA_URL or not (SUPA_SERVICE_KEY or SUPA_KEY):
