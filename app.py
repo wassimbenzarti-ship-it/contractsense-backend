@@ -4643,7 +4643,9 @@ def serve_app():
 @app.route("/index.html", methods=["GET"])
 def serve_landing():
     resp = send_file(os.path.join(os.path.dirname(__file__), "static", "index.html"))
-    resp.headers["Cache-Control"] = "public, max-age=3600"
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
     return resp
 
 @app.route("/westfield-ghost.png", methods=["GET"])
