@@ -797,12 +797,14 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
     # Build numbered paragraphs for precise matching
     paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
-    
-    # Build numbered contract text for AI — 300 paragraphs / 40k chars for long contracts (Art. 19+)
+
+    # Build numbered contract text for AI — up to 600 paragraphs / 120k chars
+    # Pactes d'actionnaires and long service contracts routinely exceed 300 paragraphs.
+    # Claude's 200k-token window handles 120k chars (~30k tokens) without issue.
     if paragraphs:
-        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:300])
+        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:600])
     else:
-        numbered_text = contract_text[:40000]
+        numbered_text = contract_text[:120000]
 
     # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
     numbered_text, _anon_mapping = anonymize_contract(numbered_text)
@@ -1338,8 +1340,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- Vérifie chaque proposed: est-ce que ça avantage bien " + partie + " ? Si non, reformule."
     )
 
-    # Limit text — 40k chars ensures late articles (Art. 19+) are included
-    truncated_text = numbered_text[:40000]
+    # Limit text — 120k chars covers long pactes d'actionnaires (Art. 30+)
+    truncated_text = numbered_text[:120000]
     if progress_cb: progress_cb("\U0001f916 Démarrage de l\'analyse IA...")
     raw = ""
     _clause_buf = ""
