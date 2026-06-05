@@ -2133,6 +2133,35 @@ def admin_create_user():
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
+@app.route("/admin/get-model", methods=["GET", "OPTIONS"])
+def admin_get_model():
+    if request.method == "OPTIONS": return "", 204
+    return jsonify({"model": _MAIN_MODEL})
+
+@app.route("/admin/set-model", methods=["POST", "OPTIONS"])
+def admin_set_model():
+    global _MAIN_MODEL
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        api_key = data.get("api_key", "").strip()
+        if api_key != os.environ.get("ANTHROPIC_API_KEY", ""):
+            return jsonify({"error": "Clé API invalide"}), 403
+        model = data.get("model", "").strip()
+        ALLOWED = {
+            "haiku": "claude-haiku-4-5-20251001",
+            "sonnet": "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001": "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-6": "claude-sonnet-4-6",
+        }
+        if model not in ALLOWED:
+            return jsonify({"error": "Modèle non reconnu"}), 400
+        _MAIN_MODEL = ALLOWED[model]
+        print(f"[admin] model switched to {_MAIN_MODEL}", flush=True)
+        return jsonify({"model": _MAIN_MODEL, "status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/admin/users", methods=["GET", "OPTIONS"])
 def admin_list_users():
     if request.method == "OPTIONS": return "", 204
