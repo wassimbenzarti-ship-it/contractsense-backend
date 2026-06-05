@@ -1196,14 +1196,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "INTERDIT: ajouter des exceptions qui contredisent la protection absolue expressément choisie par les parties.\n\n"
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "LANGUE DE L'INTERFACE (langue de travail de l'avocat): " + interface_lang + "\n"
-        "RÈGLE ABSOLUE DE LANGUE — BILINGUE OBLIGATOIRE:\n"
-        "• Le champ 'reason' → TOUJOURS dans la langue de l'interface (" + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + ")\n"
-        "• Les champs 'proposed' et 'clause_name' → dans LA LANGUE DU CONTRAT (" + detected_lang + ")\n"
-        "  - Contrat en ARABE → proposed et clause_name en ARABE\n"
-        "  - Contrat en ANGLAIS → proposed et clause_name en ANGLAIS\n"
-        "  - Contrat en FRANÇAIS → proposed et clause_name en FRANÇAIS\n"
-        "INTERDIT: mettre le reason dans la langue du contrat si elle diffère de la langue de l'interface.\n"
-        "INTERDIT: mettre le proposed dans la langue de l'interface si le contrat est dans une autre langue.\n"
+        "RÈGLE ABSOLUE DE LANGUE:\n"
+        "• Le champ 'reason' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat)\n"
+        "• Les champs 'proposed' et 'clause_name' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat) — même si le contrat est dans une autre langue\n"
+        "• Le champ 'original' → reproduire EXACTEMENT le texte du contrat dans sa langue d'origine\n"
+        "PRIORITÉ ABSOLUE: l'avocat travaille en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " — toutes ses propositions doivent être dans cette langue.\n"
+        "INTERDIT: rédiger proposed ou clause_name dans une autre langue que celle de l'interface.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
@@ -1322,8 +1320,12 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         " INTERDIT: prendre une clause de préavis/démission et proposer à la place une clause de restitution, confidentialité, responsabilité ou tout autre sujet différent."
         " Si tu veux ajouter un sujet nouveau non couvert par l'original → type=nouvelle_clause avec original=null."
         " TEST OBLIGATOIRE: Lis l'original. Lis le proposed. Traitent-ils du même sujet ? Si non → nouvelle_clause.\n"
+        "- RÈGLE CRITIQUE — proposed NE DOIT PAS reproduire l'original: Dans 'proposed', rédige UNIQUEMENT la nouvelle formulation."
+        " INTERDIT de commencer proposed par une copie intégrale ou partielle de l'original avant de le modifier. L'affichage montre déjà l'original séparément — le proposed ne contient que ce qui le remplace.\n"
         "- RÈGLE CRITIQUE — original pour nouvelle_clause: TOUJOURS null (ou chaîne vide). JAMAIS de texte de contrat dans original pour une nouvelle_clause."
         " Si tu copies un texte de contrat dans original d'une nouvelle_clause, tu crées un décalage en cascade qui corrompt TOUTES les modifications suivantes — elles utilisent toutes le mauvais texte original.\n"
+        "- RÈGLE CRITIQUE — CLAUSES MANQUANTES: Avant de proposer une nouvelle_clause, lis TOUT le contrat pour vérifier que ce sujet n'est pas déjà traité dans un autre article, une annexe référencée ou un document lié."
+        " INTERDIT de proposer l'ajout d'une clause qui existe déjà ailleurs dans le contrat, même rédigée différemment ou dans un article séparé.\n"
         "- RÈGLE CRITIQUE — CORRESPONDANCE reason/original: Le [P_N] cité dans reason DOIT correspondre exactement au texte dans original."
         " Ex: si reason dit 'La clause [P43]…' alors original = texte verbatim du paragraphe 43. INTERDIT d'utiliser le texte d'un paragraphe différent.\n"
         "- VALIDATION FINALE OBLIGATOIRE: Avant d'écrire le JSON, lis chaque entrée et vérifie: (1) pour nouvelle_clause → original est null/vide, (2) pour modification → original = paragraphe cité dans reason, (3) proposed traite du MÊME sujet que original.\n"
@@ -1526,9 +1528,6 @@ def create_docx_with_changes(contract_text, modifications, decisions):
         section.bottom_margin = Cm(2)
         section.left_margin   = Cm(2.5)
         section.right_margin  = Cm(2.5)
-
-    title = doc.add_heading("Rapport d'analyse contractuelle", 0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     accepted = [m for m in modifications if decisions.get(str(m.get("id", ""))) == "accepted"]
     if not accepted:
@@ -2629,7 +2628,7 @@ def export():
                 import traceback
                 print(f"[/export] apply_track_changes failed: {zip_err}", flush=True)
                 traceback.print_exc()
-                text_content = file_bytes.decode("utf-8", errors="ignore")
+                text_content = extract_text_from_docx(file_bytes) or file_bytes.decode("utf-8", errors="ignore")
                 output = create_docx_with_changes(text_content, modifications, decisions)
         elif filename.endswith(".doc"):
             # Old .doc format — extract text then create new DOCX
