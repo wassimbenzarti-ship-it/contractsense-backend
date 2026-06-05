@@ -171,6 +171,10 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
+# ── Model selection (override via env var for cost control during testing) ────
+# Set ANTHROPIC_MODEL=claude-haiku-4-5-20251001 on Railway to use Haiku (~12x cheaper)
+_MAIN_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+
 # ── Email (SMTP) ──────────────────────────────────────────────────────────────
 SMTP_HOST     = os.environ.get("SMTP_HOST", "")
 SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
@@ -1358,7 +1362,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
          "cache_control": {"type": "ephemeral"}}
     ]
     with client.messages.stream(
-        model="claude-sonnet-4-6",
+        model=_MAIN_MODEL,
         max_tokens=14000,
         system=_system_blocks,
         messages=[{"role": "user", "content": _user_content}]
@@ -2573,7 +2577,7 @@ IMPORTANT : les valeurs "original" et "proposed" doivent être des résumés con
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         msg = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=_MAIN_MODEL,
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -3371,7 +3375,7 @@ Pour chaque modification, même ordre, même nombre d'éléments:
 Ne pas réordonner. Retourner UNIQUEMENT le tableau JSON."""
 
         sonnet_msg = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=_MAIN_MODEL,
             max_tokens=2048,
             messages=[{"role": "user", "content": sonnet_prompt}]
         )
@@ -4628,7 +4632,7 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
         # Use prompt caching: contract text cached after 1st call (~90% cost reduction on cache hits)
         system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=_MAIN_MODEL,
             max_tokens=8192,
             system=system_blocks,
             messages=messages,
