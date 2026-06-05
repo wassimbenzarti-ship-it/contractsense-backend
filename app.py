@@ -2145,7 +2145,10 @@ def admin_set_model():
     try:
         data = request.get_json() or {}
         api_key = data.get("api_key", "").strip()
-        if api_key != os.environ.get("ANTHROPIC_API_KEY", ""):
+        # Accept: correct Anthropic API key OR the ADMIN_PASS env var (default: westfield2026)
+        _admin_pass = os.environ.get("ADMIN_PASS", "westfield2026")
+        _anthr_key  = os.environ.get("ANTHROPIC_API_KEY", "")
+        if api_key != _anthr_key and api_key != _admin_pass:
             return jsonify({"error": "Clé API invalide"}), 403
         model = data.get("model", "").strip()
         ALLOWED = {
