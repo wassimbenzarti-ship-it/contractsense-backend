@@ -664,7 +664,7 @@ def identify_parties(contract_text, lang, api_key):
 Réponds UNIQUEMENT en {'anglais' if lang == 'en' else 'français'} avec ce JSON exact, sans markdown:
 {{"parties":[{{"id":"partie_1","name":"Nom exact de la partie 1","description":"Role de cette partie"}},{{"id":"partie_2","name":"Nom exact de la partie 2","description":"Role de cette partie"}}]}}
 - Utilise les vrais noms tels qu'ils apparaissent dans le contrat
-- Maximum 3 parties, description max 10 mots"""
+- Maximum 6 parties, description max 10 mots"""
 
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
