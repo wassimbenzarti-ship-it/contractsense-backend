@@ -1715,46 +1715,49 @@ def apply_track_changes(file_bytes, modifications, decisions):
             print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
             continue
 
-        para_text = _p_text(para)
+        try:
+            para_text = _p_text(para)
 
-        # Clear text in all <w:t> descendants of direct <w:r> children
-        for _r in list(para):
-            if _r.tag == _wr_tag:
-                for _t in _r.iter(_wt_tag):
-                    _t.text = ''
-        p = para
+            # Clear text in all <w:t> descendants of direct <w:r> children
+            for _r in list(para):
+                if _r.tag == _wr_tag:
+                    for _t in _r.iter(_wt_tag):
+                        _t.text = ''
+            p = para
 
-        # Del element
-        del_elem = OxmlElement('w:del')
-        del_elem.set(qn('w:id'), str(rev_id))
-        del_elem.set(qn('w:author'), author)
-        del_elem.set(qn('w:date'), date)
-        del_run = OxmlElement('w:r')
-        del_rpr = OxmlElement('w:rPr')
-        del_run.append(del_rpr)
-        del_text = OxmlElement('w:delText')
-        del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-        del_text.text = para_text
-        del_run.append(del_text)
-        del_elem.append(del_run)
-        p.append(del_elem)
-        rev_id += 1
+            # Del element
+            del_elem = OxmlElement('w:del')
+            del_elem.set(qn('w:id'), str(rev_id))
+            del_elem.set(qn('w:author'), author)
+            del_elem.set(qn('w:date'), date)
+            del_run = OxmlElement('w:r')
+            del_rpr = OxmlElement('w:rPr')
+            del_run.append(del_rpr)
+            del_text = OxmlElement('w:delText')
+            del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            del_text.text = para_text
+            del_run.append(del_text)
+            del_elem.append(del_run)
+            p.append(del_elem)
+            rev_id += 1
 
-        # Ins element
-        ins_elem = OxmlElement('w:ins')
-        ins_elem.set(qn('w:id'), str(rev_id))
-        ins_elem.set(qn('w:author'), author)
-        ins_elem.set(qn('w:date'), date)
-        ins_run = OxmlElement('w:r')
-        ins_text_el = OxmlElement('w:t')
-        ins_text_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-        ins_text_el.text = proposed
-        ins_run.append(ins_text_el)
-        ins_elem.append(ins_run)
-        p.append(ins_elem)
-        rev_id += 1
+            # Ins element
+            ins_elem = OxmlElement('w:ins')
+            ins_elem.set(qn('w:id'), str(rev_id))
+            ins_elem.set(qn('w:author'), author)
+            ins_elem.set(qn('w:date'), date)
+            ins_run = OxmlElement('w:r')
+            ins_text_el = OxmlElement('w:t')
+            ins_text_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            ins_text_el.text = proposed
+            ins_run.append(ins_text_el)
+            ins_elem.append(ins_run)
+            p.append(ins_elem)
+            rev_id += 1
 
-        applied.add(mod_id)
+            applied.add(mod_id)
+        except Exception as _mod_err:
+            print(f"[apply_track_changes] mod {mod_id} failed: {_mod_err}", flush=True)
 
     print(f"Track changes: {len(applied)}/{len(accepted)} applied")
     output = io.BytesIO()
@@ -2605,7 +2608,18 @@ def export():
             cached = _cache_get(file_cache_id)
             if cached:
                 file_bytes = cached
-                filename = "contrat.docx"
+                # Detect real file type: storage path extension (most reliable) or magic bytes
+                if file_storage_path and "." in file_storage_path:
+                    _ext = file_storage_path.rsplit(".", 1)[-1].lower()
+                    filename = "contrat." + _ext
+                elif file_bytes[:4] == b'\x50\x4B\x03\x04':
+                    filename = "contrat.docx"   # ZIP magic = DOCX
+                elif file_bytes[:4] == b'\x25\x50\x44\x46':
+                    filename = "contrat.pdf"    # %PDF magic
+                elif file_bytes[:8] == b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1':
+                    filename = "contrat.doc"    # OLE magic = legacy DOC
+                else:
+                    filename = "contrat.docx"   # assume DOCX as fallback
 
         # 2. Supabase Storage (persistance longue durée)
         if file_bytes is None and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
@@ -2626,10 +2640,18 @@ def export():
                 output = apply_track_changes(file_bytes, modifications, decisions)
             except Exception as zip_err:
                 import traceback
-                print(f"[/export] apply_track_changes failed: {zip_err}", flush=True)
+                print(f"[/export] apply_track_changes failed ({type(zip_err).__name__}): {zip_err}", flush=True)
                 traceback.print_exc()
                 text_content = extract_text_from_docx(file_bytes) or file_bytes.decode("utf-8", errors="ignore")
                 output = create_docx_with_changes(text_content, modifications, decisions)
+        elif filename.endswith(".pdf"):
+            # PDF: can't do native track changes — extract text and produce a markup report
+            pdf_text = ""
+            try:
+                pdf_text = extract_text_from_pdf(file_bytes) or ""
+            except Exception:
+                pass
+            output = create_docx_with_changes(pdf_text, modifications, decisions)
         elif filename.endswith(".doc"):
             # Old .doc format — extract text then create new DOCX
             doc_text = extract_text_from_docx(file_bytes) or ""
