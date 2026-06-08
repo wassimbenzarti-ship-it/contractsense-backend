@@ -1677,7 +1677,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
 
     for mod in accepted:
         mod_id = mod.get("id")
-        proposed = mod.get("proposed", "").strip()
+        proposed = (mod.get("proposed") or "").strip()
         if not proposed:
             continue
 
@@ -1687,7 +1687,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
         # In Arabic table contracts, Claude sometimes assigns para_idx to a short
         # header cell (e.g. "الطرف الثاني") instead of the adjacent clause cell.
         # If the candidate is much shorter than original, fall through to fuzzy match.
-        original = mod.get("original", "").strip()
+        original = (mod.get("original") or "").strip()
         para_idx = mod.get("para_idx")
         if para_idx is not None and para_idx < len(paragraphs):
             candidate = paragraphs[para_idx]
@@ -1773,44 +1773,64 @@ def apply_track_changes(file_bytes, modifications, decisions):
             continue
 
         try:
+            import difflib, re as _re, copy as _copy
             para_text = _p_text(para)
 
-            # Clear text in all <w:t> descendants of direct <w:r> children
+            # Preserve base run formatting from first existing run
+            _direct_runs = [r for r in para if r.tag == _wr_tag]
+            _ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
+
+            # Remove all existing direct <w:r> children (rebuild from diff)
             for _r in list(para):
                 if _r.tag == _wr_tag:
-                    for _t in _r.iter(_wt_tag):
-                        _t.text = ''
-            p = para
+                    para.remove(_r)
 
-            # Del element
-            del_elem = OxmlElement('w:del')
-            del_elem.set(qn('w:id'), str(rev_id))
-            del_elem.set(qn('w:author'), author)
-            del_elem.set(qn('w:date'), date)
-            del_run = OxmlElement('w:r')
-            del_rpr = OxmlElement('w:rPr')
-            del_run.append(del_rpr)
-            del_text = OxmlElement('w:delText')
-            del_text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-            del_text.text = para_text
-            del_run.append(del_text)
-            del_elem.append(del_run)
-            p.append(del_elem)
-            rev_id += 1
+            # Tokenize: words + whitespace as atomic units
+            def _tok(t): return _re.findall(r'\S+|\s+', t) if t else []
+            orig_tok = _tok(para_text)
+            prop_tok = _tok(proposed)
+            matcher = difflib.SequenceMatcher(None, orig_tok, prop_tok, autojunk=False)
 
-            # Ins element
-            ins_elem = OxmlElement('w:ins')
-            ins_elem.set(qn('w:id'), str(rev_id))
-            ins_elem.set(qn('w:author'), author)
-            ins_elem.set(qn('w:date'), date)
-            ins_run = OxmlElement('w:r')
-            ins_text_el = OxmlElement('w:t')
-            ins_text_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-            ins_text_el.text = proposed
-            ins_run.append(ins_text_el)
-            ins_elem.append(ins_run)
-            p.append(ins_elem)
-            rev_id += 1
+            for op, i1, i2, j1, j2 in matcher.get_opcodes():
+                if op == 'equal':
+                    txt = ''.join(orig_tok[i1:i2])
+                    if txt:
+                        _r = OxmlElement('w:r')
+                        if _ref_rpr is not None: _r.append(_copy.deepcopy(_ref_rpr))
+                        _t = OxmlElement('w:t')
+                        _t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                        _t.text = txt
+                        _r.append(_t); para.append(_r)
+
+                if op in ('delete', 'replace'):
+                    txt = ''.join(orig_tok[i1:i2])
+                    if txt:
+                        _de = OxmlElement('w:del')
+                        _de.set(qn('w:id'), str(rev_id))
+                        _de.set(qn('w:author'), author)
+                        _de.set(qn('w:date'), date)
+                        _dr = OxmlElement('w:r')
+                        _dr.append(OxmlElement('w:rPr'))
+                        _dt = OxmlElement('w:delText')
+                        _dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                        _dt.text = txt
+                        _dr.append(_dt); _de.append(_dr); para.append(_de)
+                        rev_id += 1
+
+                if op in ('insert', 'replace'):
+                    txt = ''.join(prop_tok[j1:j2])
+                    if txt:
+                        _ie = OxmlElement('w:ins')
+                        _ie.set(qn('w:id'), str(rev_id))
+                        _ie.set(qn('w:author'), author)
+                        _ie.set(qn('w:date'), date)
+                        _ir = OxmlElement('w:r')
+                        if _ref_rpr is not None: _ir.append(_copy.deepcopy(_ref_rpr))
+                        _it = OxmlElement('w:t')
+                        _it.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                        _it.text = txt
+                        _ir.append(_it); _ie.append(_ir); para.append(_ie)
+                        rev_id += 1
 
             applied.add(mod_id)
         except Exception as _mod_err:
