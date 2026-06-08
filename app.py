@@ -1203,11 +1203,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "LANGUE DE L'INTERFACE (langue de travail de l'avocat): " + interface_lang + "\n"
         "RÈGLE ABSOLUE DE LANGUE:\n"
-        "• Le champ 'reason' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat)\n"
-        "• Les champs 'proposed' et 'clause_name' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat) — même si le contrat est dans une autre langue\n"
-        "• Le champ 'original' → reproduire EXACTEMENT le texte du contrat dans sa langue d'origine\n"
-        "PRIORITÉ ABSOLUE: l'avocat travaille en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " — toutes ses propositions doivent être dans cette langue.\n"
-        "INTERDIT: rédiger proposed ou clause_name dans une autre langue que celle de l'interface.\n"
+        "• Le champ 'reason' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat — bouton FR/EN)\n"
+        "• Le champ 'clause_name' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (étiquette courte pour l'avocat)\n"
+        "• Le champ 'proposed' → TOUJOURS dans la MÊME LANGUE que le champ 'original' correspondant.\n"
+        "  - Si original est en français → proposed en français.\n"
+        "  - Si original est en anglais → proposed en anglais.\n"
+        "  - Si original est en arabe → proposed en arabe.\n"
+        "  - Si le contrat est bilingue (clauses mixtes FR+EN), chaque proposed doit correspondre à la langue de son original.\n"
+        "INTERDIT: rédiger proposed dans une langue différente de son original — même si l'avocat travaille en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + ".\n"
+        "Le bouton FR/EN influence uniquement reason et clause_name, jamais proposed.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
@@ -1326,8 +1330,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         " INTERDIT: prendre une clause de préavis/démission et proposer à la place une clause de restitution, confidentialité, responsabilité ou tout autre sujet différent."
         " Si tu veux ajouter un sujet nouveau non couvert par l'original → type=nouvelle_clause avec original=null."
         " TEST OBLIGATOIRE: Lis l'original. Lis le proposed. Traitent-ils du même sujet ? Si non → nouvelle_clause.\n"
-        "- RÈGLE CRITIQUE — proposed NE DOIT PAS reproduire l'original: Dans 'proposed', rédige UNIQUEMENT la nouvelle formulation."
-        " INTERDIT de commencer proposed par une copie intégrale ou partielle de l'original avant de le modifier. L'affichage montre déjà l'original séparément — le proposed ne contient que ce qui le remplace.\n"
+        "- RÈGLE CRITIQUE — proposed NE DOIT PAS reproduire l'original: Dans 'proposed', rédige UNIQUEMENT la nouvelle formulation complète remplaçant le paragraphe."
+        " INTERDIT de commencer proposed par une copie intégrale ou partielle de l'original avant de le modifier."
+        " INTERDIT de répéter dans proposed des phrases ou passages déjà présents dans original avant d'ajouter les changements."
+        " Le track change dans le DOCX affichera l'original barré et le proposed en insertion — si proposed commence par l'original, l'utilisateur verra le même texte deux fois. Ne copie aucune portion de l'original dans proposed.\n"
         "- RÈGLE CRITIQUE — original pour nouvelle_clause: TOUJOURS null (ou chaîne vide). JAMAIS de texte de contrat dans original pour une nouvelle_clause."
         " Si tu copies un texte de contrat dans original d'une nouvelle_clause, tu crées un décalage en cascade qui corrompt TOUTES les modifications suivantes — elles utilisent toutes le mauvais texte original.\n"
         "- RÈGLE CRITIQUE — CLAUSES MANQUANTES: Avant de proposer une nouvelle_clause, lis TOUT le contrat pour vérifier que ce sujet n'est pas déjà traité dans un autre article, une annexe référencée ou un document lié."
@@ -1676,43 +1682,45 @@ def apply_track_changes(file_bytes, modifications, decisions):
                         break
 
             if insert_para is not None:
-                _direct_runs = [r for r in insert_para if r.tag == _wr_tag]
-                ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
-
-                new_p = OxmlElement('w:p')
-
-                _ppr = insert_para.find(qn('w:pPr'))
-                if _ppr is not None:
+                try:
                     import copy
-                    new_p.append(copy.deepcopy(_ppr))
+                    _direct_runs = [r for r in insert_para if r.tag == _wr_tag]
+                    ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
 
-                ins_elem = OxmlElement('w:ins')
-                ins_elem.set(qn('w:id'), str(rev_id))
-                ins_elem.set(qn('w:author'), author)
-                ins_elem.set(qn('w:date'), date)
-                rev_id += 1
+                    new_p = OxmlElement('w:p')
 
-                new_r = OxmlElement('w:r')
-                if ref_rpr is not None:
-                    import copy
-                    new_r.append(copy.deepcopy(ref_rpr))
-                new_t = OxmlElement('w:t')
-                new_t.text = proposed
-                new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                new_r.append(new_t)
-                ins_elem.append(new_r)
-                new_p.append(ins_elem)
+                    _ppr = insert_para.find(qn('w:pPr'))
+                    if _ppr is not None:
+                        new_p.append(copy.deepcopy(_ppr))
 
-                next_sib = insert_para.getnext()
-                if next_sib is not None:
-                    insert_para.getparent().insert(
-                        list(insert_para.getparent()).index(next_sib),
-                        new_p
-                    )
-                else:
-                    insert_para.getparent().append(new_p)
-                applied.add(mod_id)
-                print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
+                    ins_elem = OxmlElement('w:ins')
+                    ins_elem.set(qn('w:id'), str(rev_id))
+                    ins_elem.set(qn('w:author'), author)
+                    ins_elem.set(qn('w:date'), date)
+                    rev_id += 1
+
+                    new_r = OxmlElement('w:r')
+                    if ref_rpr is not None:
+                        new_r.append(copy.deepcopy(ref_rpr))
+                    new_t = OxmlElement('w:t')
+                    new_t.text = proposed
+                    new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                    new_r.append(new_t)
+                    ins_elem.append(new_r)
+                    new_p.append(ins_elem)
+
+                    next_sib = insert_para.getnext()
+                    _parent = insert_para.getparent()
+                    if next_sib is not None:
+                        _children = list(_parent)
+                        _idx = _children.index(next_sib) if next_sib in _children else len(_children)
+                        _parent.insert(_idx, new_p)
+                    else:
+                        _parent.append(new_p)
+                    applied.add(mod_id)
+                    print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
+                except Exception as _ins_err:
+                    print(f"[apply_track_changes] nouvelle_clause insert failed: {_ins_err}", flush=True)
             else:
                 print(f"Could not find insertion point for new clause: {mod.get('clause_name')}")
             continue
