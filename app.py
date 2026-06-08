@@ -171,9 +171,11 @@ SUPA_URL = os.environ.get("SUPABASE_URL", "")
 SUPA_KEY = os.environ.get("SUPABASE_KEY", "")
 SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
-# ── Model selection (override via env var for cost control during testing) ────
-# Set ANTHROPIC_MODEL=claude-haiku-4-5-20251001 on Railway to use Haiku (~12x cheaper)
-_MAIN_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+# ── Model selection ────────────────────────────────────────────────────────────
+# Priority: ANTHROPIC_MODEL env var (Railway) > Supabase persisted pref > default Sonnet
+# Use the admin panel to switch models — preference is persisted in Supabase.
+_MAIN_MODEL_ENV = os.environ.get("ANTHROPIC_MODEL", "")  # non-empty only if explicitly set
+_MAIN_MODEL = _MAIN_MODEL_ENV or "claude-sonnet-4-6"  # Supabase override applied below
 
 # ── Email (SMTP) ──────────────────────────────────────────────────────────────
 SMTP_HOST     = os.environ.get("SMTP_HOST", "")
@@ -271,6 +273,47 @@ def supa_patch(table, updates, filter_str):
     url = SUPA_URL + f"/rest/v1/{table}?{filter_str}"
     r = requests.patch(url, headers=supa_headers(), json=updates, timeout=10)
     return r
+
+_SUPA_MODEL_PREF_EMAIL = "__model_pref__@system"
+
+def _load_model_pref_from_supa():
+    """Load persisted model preference from Supabase at startup. Skipped if Railway env var is set."""
+    global _MAIN_MODEL
+    if _MAIN_MODEL_ENV:
+        return  # Railway env var takes absolute precedence
+    try:
+        if not SUPA_URL or not SUPA_KEY:
+            return
+        url = SUPA_URL + f"/rest/v1/user_accounts?email=eq.{_SUPA_MODEL_PREF_EMAIL}&select=role&limit=1"
+        r = requests.get(url, headers=supa_headers(), timeout=5)
+        if r.ok:
+            data = r.json()
+            if data and data[0].get('role') in ("claude-haiku-4-5-20251001", "claude-sonnet-4-6",
+                                                 "claude-opus-4-8", "claude-haiku-4-5"):
+                _MAIN_MODEL = data[0]['role']
+                print(f"[startup] model pref loaded from Supabase: {_MAIN_MODEL}", flush=True)
+    except Exception as e:
+        print(f"[startup] _load_model_pref_from_supa failed: {e}")
+
+def _save_model_pref_to_supa(model_name):
+    """Persist model preference in Supabase so it survives Railway restarts."""
+    try:
+        if not SUPA_URL or not SUPA_KEY:
+            return
+        headers_ups = supa_headers()
+        headers_ups["Prefer"] = "resolution=merge-duplicates"
+        url = SUPA_URL + "/rest/v1/user_accounts"
+        requests.post(url, headers=headers_ups, json={
+            "email": _SUPA_MODEL_PREF_EMAIL,
+            "role": model_name,
+            "is_admin": False,
+        }, timeout=5)
+        print(f"[admin] model pref persisted to Supabase: {model_name}", flush=True)
+    except Exception as e:
+        print(f"[admin] _save_model_pref_to_supa failed: {e}")
+
+# Load persisted model pref at startup (overrides default if no Railway env var)
+_load_model_pref_from_supa()
 
 def _storage_headers():
     key = SUPA_SERVICE_KEY or SUPA_KEY
@@ -2169,7 +2212,8 @@ def admin_set_model():
             return jsonify({"error": "Modèle non reconnu"}), 400
         _MAIN_MODEL = ALLOWED[model]
         print(f"[admin] model switched to {_MAIN_MODEL}", flush=True)
-        return jsonify({"model": _MAIN_MODEL, "status": "ok"})
+        _save_model_pref_to_supa(_MAIN_MODEL)
+        return jsonify({"model": _MAIN_MODEL, "status": "ok", "persisted": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
