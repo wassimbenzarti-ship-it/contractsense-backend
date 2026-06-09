@@ -176,6 +176,7 @@ SUPA_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 # Use the admin panel to switch models — preference is persisted in Supabase.
 _MAIN_MODEL_ENV = os.environ.get("ANTHROPIC_MODEL", "")  # non-empty only if explicitly set
 _MAIN_MODEL = _MAIN_MODEL_ENV or "claude-sonnet-4-6"  # Supabase override applied below
+_MAIN_MODEL_REFRESH_TS = 0.0  # epoch seconds — for cross-worker 30s sync
 
 # ── Email (SMTP) ──────────────────────────────────────────────────────────────
 SMTP_HOST     = os.environ.get("SMTP_HOST", "")
@@ -311,6 +312,19 @@ def _save_model_pref_to_supa(model_name):
         print(f"[admin] model pref persisted to Supabase: {model_name}", flush=True)
     except Exception as e:
         print(f"[admin] _save_model_pref_to_supa failed: {e}")
+
+def _get_model():
+    """Return the active model, refreshing from Supabase every 30s.
+    Solves gunicorn multi-worker drift: worker A sets haiku, worker B still has sonnet.
+    After ≤30s all workers converge to the Supabase value."""
+    global _MAIN_MODEL, _MAIN_MODEL_REFRESH_TS
+    if _MAIN_MODEL_ENV:
+        return _MAIN_MODEL_ENV  # Railway env var is immutable
+    import time as _time
+    if _time.time() - _MAIN_MODEL_REFRESH_TS > 30:
+        _load_model_pref_from_supa()
+        _MAIN_MODEL_REFRESH_TS = _time.time()
+    return _MAIN_MODEL
 
 # Load persisted model pref at startup (overrides default if no Railway env var)
 _load_model_pref_from_supa()
@@ -1423,7 +1437,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
          "cache_control": {"type": "ephemeral"}}
     ]
     with client.messages.stream(
-        model=_MAIN_MODEL,
+        model=_get_model(),
         max_tokens=14000,
         system=_system_blocks,
         messages=[{"role": "user", "content": _user_content}]
@@ -2713,7 +2727,7 @@ IMPORTANT : les valeurs "original" et "proposed" doivent être des résumés con
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         msg = client.messages.create(
-            model=_MAIN_MODEL,
+            model=_get_model(),
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -3511,7 +3525,7 @@ Pour chaque modification, même ordre, même nombre d'éléments:
 Ne pas réordonner. Retourner UNIQUEMENT le tableau JSON."""
 
         sonnet_msg = client.messages.create(
-            model=_MAIN_MODEL,
+            model=_get_model(),
             max_tokens=2048,
             messages=[{"role": "user", "content": sonnet_prompt}]
         )
@@ -4768,7 +4782,7 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
         # Use prompt caching: contract text cached after 1st call (~90% cost reduction on cache hits)
         system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
         response = client.messages.create(
-            model=_MAIN_MODEL,
+            model=_get_model(),
             max_tokens=8192,
             system=system_blocks,
             messages=messages,
