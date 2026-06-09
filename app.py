@@ -917,9 +917,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
 
         # 1. Primary: hybrid BM25 + vector (best quality)
         if is_voyage:
-            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=15, jurisdiction=_jurisdiction)
+            all_docs = search_rag_hybrid(search_query[:300], query_vec, top_k=20, jurisdiction=_jurisdiction)
             if not all_docs:
-                all_docs = search_rag_pgvector(query_vec, top_k=15)
+                all_docs = search_rag_pgvector(query_vec, top_k=20)
             print(f"Primary RAG: {len(all_docs)} docs (hybrid={bool(all_docs)})")
 
         # 2. Fallback: fetch all docs with embeddings + cosine similarity
@@ -968,10 +968,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         # Prevents protected-source dominance from burying user docs in hybrid BM25 ranking
         try:
             _protected_pfx = ["ailovecontracts", "lexisnexis", "dalloz", "lamy", "mernissi", "traite-de-droit"]
+            _search_src = (contract_type + " " + contract_text[:300]).lower()
+            # 4-char min so short but crucial legal terms like "sarl", "bail", "code" are captured
             _kw_terms = list(dict.fromkeys(
-                w for w in re.findall(r'[a-zA-ZÀ-ÿ]{5,}', (contract_type + " " + contract_text[:300]).lower())
-                if w not in {"cette","avec","dans","pour","les","des","une","par","sur","que","qui","leur","leurs","dont","mais","aussi","entre","comme","plus","sans","tout","tous","toute","toutes","selon","vers","sous"}
-            ))[:4]
+                w for w in re.findall(r'[a-zA-ZÀ-ÿ]{4,}', _search_src)
+                if w not in {"cette","avec","dans","pour","leur","dont","mais","plus","sans","tout","tous","vers","sous","doit","être","sera","aura","etre","bien","note","date","fait","font","avis","dits","nuls","noms","acte"}
+            ))[:6]
+            # Always include short legal-entity / contract-type abbreviations when detected
+            _abbrevs = re.findall(r'\b(sarl|sas|nda|sca|scrl|scop|spa|eurl)\b', _search_src)
+            _kw_terms = list(dict.fromkeys(_abbrevs + _kw_terms))[:7]
             _existing_ids = {d.get("id") for d in all_docs}
             _suppl_key = SUPA_SERVICE_KEY or SUPA_KEY
             _added = 0
