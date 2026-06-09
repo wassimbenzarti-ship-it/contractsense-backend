@@ -1306,7 +1306,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "  (a) POSITION: Toutes les nouvelles clauses s'insèrent AVANT la clause de signature et AVANT la clause de droit applicable / juridiction compétente. Ces deux clauses doivent TOUJOURS être les dernières du contrat. Identifier leur para_idx et insérer AVANT elles.\n"
         "  (b) FORMAT: Respecter strictement le format du tableau existant dans le contrat. Pour un contrat arabe en tableau: 'البند (N): عنوان البند\\nنص البند...' où N suit la numérotation du dernier article substantiel existant. Ne JAMAIS utiliser un format de paragraphe libre si le contrat utilise des tableaux.\n"
         "  (c) NUMÉROTATION: Reprendre le numéro du dernier article substantiel + 1, +2, etc. Si le dernier article substantiel est البند (32), les nouvelles clauses seront البند (33), البند (34)...\n"
-        "  (d) Pour chaque clause manquante: original=null, insertion_after=para_idx de l'article juste AVANT la clause de signature ou de droit applicable.\n"
+        "  (d) Pour chaque clause manquante: original=null, insertion_after=para_idx du DERNIER paragraphe de l'article substantiel qui PRÉCÈDE le point d'insertion."
+        " insertion_after_text=les 6 premiers mots exacts de ce paragraphe (pour ancrage de position)."
+        " EXEMPLE: si le dernier article substantiel avant la signature est [P47] 'Article 19. Droit applicable : Le présent contrat...', mettre insertion_after=47 et insertion_after_text='Article 19. Droit applicable : Le'.\n"
         "4. NIVEAU RÉDACTIONNEL: Style avocat d'affaires senior — précis, technique, sans ambiguïté\n"
         "   RÈGLE TYPOGRAPHIQUE ABSOLUE: INTERDIT d'utiliser des symboles mathématiques (+, -, ×, /) dans le texte juridique rédigé.\n"
         "   Écrire en toutes lettres: 'augmenté de' au lieu de '+', 'diminué de' au lieu de '-', 'ainsi que' au lieu de '+', etc.\n"
@@ -1359,7 +1361,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         '"type":"modification|nouvelle_clause",'
         '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
-        '"insertion_after":"para_idx après lequel insérer ou null si modification",'
+        '"insertion_after":"para_idx du DERNIER paragraphe précédant l\'insertion, ou null si modification",'
+        '"insertion_after_text":"6 premiers mots exacts du paragraphe insertion_after (ancrage), ou null",'
         '"rag_source":"titre EXACT de la source RAG du contexte, ou null si absente/protégée"}]}\n\n'
         "Règles:\n"
         "- MINIMUM 10 modifications obligatoires — un juriste qui en trouve moins de 10 n'a pas analysé exhaustivement\n"
@@ -1368,7 +1371,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "- original: copie EXACTE sans modification\n"
         "- RÈGLE UN ORIGINAL = UNE MODIFICATION: Chaque texte original ne peut apparaître QUE DANS UNE SEULE modification."
         " Si tu identifies plusieurs problèmes dans la même clause (même original), CONSOLIDE-LES tous dans un seul proposed."
-        " Si tu veux traiter un aspect supplémentaire de la même clause → type=nouvelle_clause avec original=null et insertion_after=para_idx de cette clause.\n"
+        " Si tu veux traiter un aspect supplémentaire de la même clause → type=nouvelle_clause avec original=null, insertion_after=para_idx du DERNIER paragraphe de cette clause, et insertion_after_text=6 premiers mots exacts de ce paragraphe.\n"
         "- RÈGLE ABSOLUE COHÉRENCE SUJET: Pour type=modification, le proposed DOIT traiter du MÊME sujet juridique que l'original."
         " INTERDIT: prendre une clause de préavis/démission et proposer à la place une clause de restitution, confidentialité, responsabilité ou tout autre sujet différent."
         " Si tu veux ajouter un sujet nouveau non couvert par l'original → type=nouvelle_clause avec original=null."
@@ -1510,6 +1513,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             rag_sources = re.findall(r'"rag_source"\s*:\s*(?:"((?:[^"\\\\]|\\\\.)*?)"|null)', raw)
             types = re.findall(r'"type"\s*:\s*"([^"]+)"', raw)
             insertions = re.findall(r'"insertion_after"\s*:\s*(\d+|null)', raw)
+            insertion_texts = re.findall(r'"insertion_after_text"\s*:\s*(?:"((?:[^"\\]|\\.)*?)"|null)', raw)
             for i in range(min(len(ids), len(proposeds))):
                 mods.append({
                     "id": int(ids[i]) if i < len(ids) else i+1,
@@ -1520,6 +1524,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
                     "original": originals[i] if i < len(originals) else None,
                     "proposed": proposeds[i] if i < len(proposeds) else "",
                     "insertion_after": int(insertions[i]) if i < len(insertions) and insertions[i] != 'null' else None,
+                    "insertion_after_text": insertion_texts[i] if i < len(insertion_texts) and insertion_texts[i] else None,
                     "rag_source": rag_sources[i] if i < len(rag_sources) and rag_sources[i] else None
                 })
 
@@ -1713,10 +1718,28 @@ def apply_track_changes(file_bytes, modifications, decisions):
         # Handle new clauses (type=nouvelle_clause) — insert as new paragraph
         if mod.get('type') == 'nouvelle_clause':
             insertion_after = mod.get('insertion_after')
+            insertion_after_text = (mod.get('insertion_after_text') or "").strip()
             insert_para = None
             MIN_INSERT_IDX = 5
 
-            if insertion_after is not None:
+            # Method A: text anchor — find the paragraph whose text starts with / contains insertion_after_text
+            if insertion_after_text and len(insertion_after_text) >= 5:
+                _iat_lower = insertion_after_text.lower()
+                for _pe in paragraphs:
+                    _pt = _p_text(_pe).lower()
+                    if _pt and (_iat_lower in _pt or _pt.startswith(_iat_lower[:30])):
+                        insert_para = _pe
+                        break
+                if insert_para is None:
+                    # Fuzzy fallback on anchor text
+                    for _pe in paragraphs:
+                        _pt = _p_text(_pe)
+                        if _pt and fuzzy_match(insertion_after_text, _pt[:max(len(insertion_after_text)*3, 80)], threshold=0.5):
+                            insert_para = _pe
+                            break
+
+            # Method B: index fallback
+            if insert_para is None and insertion_after is not None:
                 safe_idx = max(int(insertion_after), MIN_INSERT_IDX)
                 if safe_idx < len(paragraphs):
                     insert_para = paragraphs[safe_idx]
@@ -1765,7 +1788,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
                     else:
                         _parent.append(new_p)
                     applied.add(mod_id)
-                    print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after}")
+                    print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after} (anchor='{insertion_after_text[:30] if insertion_after_text else 'none'}')", flush=True)
                 except Exception as _ins_err:
                     print(f"[apply_track_changes] nouvelle_clause insert failed: {_ins_err}", flush=True)
             else:
