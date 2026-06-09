@@ -2209,11 +2209,14 @@ def notify_pending_review():
         juriste_email  = (data.get("juriste_email") or "").strip()
         filename       = data.get("filename", "Contrat")
         contract_type  = data.get("contract_type", "")
+        smtp_configured = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+        print(f"[notify] pending-review: juriste={juriste_email} → director={director_email or 'VIDE'} smtp={'OK' if smtp_configured else 'NON CONFIGURÉ'}", flush=True)
+        if not director_email:
+            return jsonify({"status": "skipped", "reason": "director_email vide — vérifier parent_email du juriste dans user_accounts", "smtp_configured": smtp_configured})
         now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
-        if director_email:
-            send_email(director_email,
-                f"[Omniscient] Nouvelle analyse à valider — {filename}",
-                f"""<p>Bonjour,</p>
+        send_email(director_email,
+            f"[Omniscient] Nouvelle analyse à valider — {filename}",
+            f"""<p>Bonjour,</p>
 <p>Le juriste <strong>{juriste_email or 'un juriste'}</strong> vous a soumis une nouvelle analyse pour validation.</p>
 <ul>
 <li><strong>Contrat :</strong> {filename}</li>
@@ -2221,9 +2224,27 @@ def notify_pending_review():
 <li><strong>Soumis le :</strong> {now}</li>
 </ul>
 <p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> → Tableau de bord → Analyses de vos juristes pour réviser et valider.</p>""")
-        return jsonify({"status": "ok", "notified": bool(director_email)})
+        return jsonify({"status": "ok", "notified": True, "smtp_configured": smtp_configured})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/smtp-status", methods=["GET", "OPTIONS"])
+def smtp_status():
+    """Diagnostic: returns SMTP configuration status (no passwords exposed)."""
+    if request.method == "OPTIONS": return "", 204
+    api_key = request.args.get("api_key", "")
+    admin_pass = os.environ.get("ADMIN_PASS", "westfield2026")
+    if api_key not in (os.environ.get("ANTHROPIC_API_KEY", ""), admin_pass):
+        return jsonify({"error": "Non autorisé"}), 403
+    return jsonify({
+        "smtp_configured": bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD),
+        "SMTP_HOST": SMTP_HOST or "(non défini)",
+        "SMTP_PORT": SMTP_PORT,
+        "SMTP_USER": SMTP_USER or "(non défini)",
+        "SMTP_FROM": SMTP_FROM or "(non défini)",
+        "SMTP_PASSWORD_SET": bool(SMTP_PASSWORD)
+    })
 
 
 @app.route("/analyses/validate-by-director/<analysis_id>", methods=["POST", "OPTIONS"])
