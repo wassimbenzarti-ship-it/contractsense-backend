@@ -1376,7 +1376,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "Retourne UNIQUEMENT du JSON valide, sans markdown:\n"
         '{"modifications":[{"id":1,"para_idx":32,"clause_name":"nom court",'
         '"risk":"high|medium|low",'
-        '"reason":"Pourquoi cette clause désavantage ' + partie + ' et comment la modification la protège",'
+        '"reason":"2-3 phrases MAX: (a) risque juridique précis, (b) pourquoi c\'est problématique pour ' + partie + ', (c) correction à apporter. Aucune répétition. Direct et concis.",'
         '"type":"modification|nouvelle_clause",'
         '"original":"texte EXACT du paragraphe ou null pour nouvelle_clause",'
         '"proposed":"clause reformulée favorisant ' + partie + '",'
@@ -1395,6 +1395,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         " INTERDIT: prendre une clause de préavis/démission et proposer à la place une clause de restitution, confidentialité, responsabilité ou tout autre sujet différent."
         " Si tu veux ajouter un sujet nouveau non couvert par l'original → type=nouvelle_clause avec original=null."
         " TEST OBLIGATOIRE: Lis l'original. Lis le proposed. Traitent-ils du même sujet ? Si non → nouvelle_clause.\n"
+        "- RÈGLE CRITIQUE — LANGUE DES NOUVELLES CLAUSES (type=nouvelle_clause): proposed doit être rédigé dans la/les langue(s) du contrat, PAS la langue du bouton FR/EN."
+        " Détecte la langue dominante du contrat (arabe / français / anglais) en lisant ses clauses."
+        " Si le contrat est monolingue arabe → proposed en arabe. Si bilingue FR/AR → proposed dans les deux langues (version française + version arabe séparées par un saut de ligne)."
+        " JAMAIS rédiger une nouvelle clause dans une langue absente du contrat.\n"
         "- RÈGLE CRITIQUE — proposed NE DOIT PAS reproduire l'original: Dans 'proposed', rédige UNIQUEMENT la nouvelle formulation complète remplaçant le paragraphe."
         " INTERDIT de commencer proposed par une copie intégrale ou partielle de l'original avant de le modifier."
         " INTERDIT de répéter dans proposed des phrases ou passages déjà présents dans original avant d'ajouter les changements."
@@ -1558,6 +1562,26 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     for mod in mods:
         if mod.get("type") == "nouvelle_clause" and mod.get("original"):
             mod["original"] = None
+
+    # Deduplicate: same (para_idx, original[:100]) = duplicate modification from Claude
+    _seen_keys = set()
+    _deduped = []
+    for mod in mods:
+        _pidx = mod.get("para_idx")
+        _orig = (mod.get("original") or "").strip()[:100].lower()
+        _key = (_pidx, _orig)
+        if _orig and _key in _seen_keys:
+            print(f"[dedup] skipping duplicate mod para_idx={_pidx} clause='{mod.get('clause_name')}'", flush=True)
+            continue
+        if _orig:
+            _seen_keys.add(_key)
+        _deduped.append(mod)
+    mods = _deduped
+    result["modifications"] = mods
+
+    # Sort by para_idx so clauses appear in contract reading order
+    mods.sort(key=lambda m: (m.get("para_idx") is None, m.get("para_idx") or 9999))
+    result["modifications"] = mods
 
     # Restitue les valeurs PII dans les champs texte des modifications
     if _anon_mapping:
@@ -2153,9 +2177,53 @@ def request_revision_by_director(analysis_id):
         rows = r.json() if r.content else []
         if not rows:
             return jsonify({"error": "Analyse introuvable ou droits insuffisants"}), 403
+        # Email notification: director → juriste
+        try:
+            row = rows[0] if rows else {}
+            juriste_email = row.get("user_email") or data.get("juriste_email", "")
+            director_email_val = data.get("director_email", "")
+            filename = row.get("filename", "Contrat")
+            now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            if juriste_email:
+                send_email(juriste_email,
+                    f"[Omniscient] Le directeur a renvoyé votre analyse — {filename}",
+                    f"""<p>Bonjour,</p>
+<p>Le directeur <strong>{director_email_val or 'votre directeur'}</strong> a examiné votre analyse et vous la renvoie pour révision.</p>
+<ul><li><strong>Contrat :</strong> {filename}</li><li><strong>Date :</strong> {now}</li></ul>
+{f'<p><strong>Note :</strong> {director_notes}</p>' if director_notes else ''}
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> pour voir les décisions clause par clause et soumettre votre nouvelle version.</p>""")
+        except Exception as _ne:
+            print(f"[notify] juriste email failed: {_ne}", flush=True)
         return jsonify({"status": "ok", "updated": len(rows)})
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/notify/pending-review", methods=["POST", "OPTIONS"])
+def notify_pending_review():
+    """Sends an email to the director when a juriste submits an analysis for review."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        director_email = (data.get("director_email") or "").strip()
+        juriste_email  = (data.get("juriste_email") or "").strip()
+        filename       = data.get("filename", "Contrat")
+        contract_type  = data.get("contract_type", "")
+        now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+        if director_email:
+            send_email(director_email,
+                f"[Omniscient] Nouvelle analyse à valider — {filename}",
+                f"""<p>Bonjour,</p>
+<p>Le juriste <strong>{juriste_email or 'un juriste'}</strong> vous a soumis une nouvelle analyse pour validation.</p>
+<ul>
+<li><strong>Contrat :</strong> {filename}</li>
+<li><strong>Type :</strong> {contract_type or 'Non précisé'}</li>
+<li><strong>Soumis le :</strong> {now}</li>
+</ul>
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> → Tableau de bord → Analyses de vos juristes pour réviser et valider.</p>""")
+        return jsonify({"status": "ok", "notified": bool(director_email)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/analyses/validate-by-director/<analysis_id>", methods=["POST", "OPTIONS"])
