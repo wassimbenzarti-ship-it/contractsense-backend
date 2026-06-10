@@ -2512,6 +2512,132 @@ def health():
     rag = load_rag()
     return jsonify({"status": "ok", "rag_docs": len(rag["documents"])})
 
+
+@app.route("/draft", methods=["POST", "OPTIONS"])
+def draft_contract():
+    """Generate a contract draft from a natural language prompt."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        prompt       = (data.get("prompt") or "").strip()
+        contract_type = data.get("contract_type", "generic")
+        jurisdiction  = data.get("jurisdiction", "droit marocain")
+        partie        = (data.get("partie") or "").strip()
+        language      = (data.get("language") or "fr").strip()
+
+        if not prompt:
+            return jsonify({"error": "prompt requis"}), 400
+
+        # RAG: fetch relevant model contracts for this type
+        query_text = f"{contract_type} {prompt[:300]}"
+        try:
+            emb = get_embedding(query_text)
+            rag_docs = search_rag_hybrid(query_text, emb, top_k=8, jurisdiction=jurisdiction)
+        except Exception:
+            rag_docs = []
+
+        model_context = "\n\n".join(
+            f"[MODÈLE — {d.get('title','')}]\n{(d.get('content') or '')[:1200]}"
+            for d in rag_docs if d.get("category","") not in LEGAL_CATS
+        )[:6000]
+
+        legal_framework = get_legal_framework(contract_type)
+
+        lang_instruction = (
+            "Rédige le contrat en français." if language == "fr"
+            else "Draft the contract in English." if language == "en"
+            else "اكتب العقد باللغة العربية."
+        )
+
+        system = (
+            "Tu es un juriste expert en rédaction de contrats commerciaux. "
+            "Tu rédiges des contrats complets, structurés, juridiquement rigoureux, prêts à être signés.\n"
+            "RÈGLES :\n"
+            "- Structure : Préambule → Définitions → Articles numérotés → Signatures\n"
+            "- Chaque article a un titre en majuscules et un contenu précis\n"
+            "- Utilise un style formel et professionnel\n"
+            "- Inclus toutes les clauses standard du type de contrat demandé\n"
+            "- Respecte impérativement le cadre légal fourni\n"
+            f"- {lang_instruction}\n"
+            "- NE commente PAS le contrat, NE donne PAS d'explications — retourne UNIQUEMENT le texte du contrat\n\n"
+            + (f"CADRE LÉGAL APPLICABLE :\n{legal_framework}\n\n" if legal_framework else "")
+            + (f"MODÈLES DE RÉFÉRENCE (extraits RAG) :\n{model_context}\n\n" if model_context else "")
+        )
+
+        user_msg = f"Rédige un contrat complet selon les instructions suivantes :\n{prompt}"
+        if partie:
+            user_msg += f"\n\nLa partie représentée / bénéficiaire de la rédaction est : {partie}"
+
+        resp = anthropic_client.messages.create(
+            model=_get_model(),
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        draft_text = resp.content[0].text.strip()
+        return jsonify({"draft": draft_text, "contract_type": contract_type, "jurisdiction": jurisdiction})
+
+    except Exception as e:
+        print(f"[draft] error: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/draft/export", methods=["POST", "OPTIONS"])
+def draft_export():
+    """Convert a draft text to a downloadable DOCX file."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data     = request.get_json() or {}
+        text     = (data.get("text") or "").strip()
+        filename = (data.get("filename") or "contrat-draft").strip().replace("/", "-")
+
+        if not text:
+            return jsonify({"error": "text requis"}), 400
+
+        from docx import Document as _DocxDoc
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        doc = _DocxDoc()
+        # Remove default empty paragraph
+        for p in doc.paragraphs:
+            p._element.getparent().remove(p._element)
+
+        for line in text.split("\n"):
+            stripped = line.strip()
+            # Detect article headings (e.g. "ARTICLE 1 — OBJET" or "Article 1.")
+            is_heading = (
+                stripped.upper() == stripped and len(stripped) > 3 and len(stripped) < 120
+                and stripped not in ("", "---", "***")
+            ) or stripped.upper().startswith("ARTICLE ")
+            p = doc.add_paragraph()
+            run = p.add_run(stripped if stripped else " ")
+            if is_heading and stripped:
+                run.bold = True
+                run.font.size = Pt(11)
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.space_before = Pt(10)
+                p.paragraph_format.space_after  = Pt(4)
+            else:
+                run.font.size = Pt(10.5)
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after  = Pt(2)
+
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=f"{filename}.docx",
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        print(f"[draft/export] error: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+
 @app.route("/detect-jurisdiction", methods=["POST", "OPTIONS"])
 def detect_jurisdiction():
     """Quick jurisdiction detection from contract file or text."""
