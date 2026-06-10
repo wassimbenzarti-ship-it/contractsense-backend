@@ -194,7 +194,7 @@ def send_email(to: str, subject: str, html: str):
             _payload = _json.dumps({"from": _from, "to": [to], "subject": subject, "html": html}).encode()
             _req = urllib.request.Request("https://api.resend.com/emails",
                 data=_payload,
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json", "User-Agent": "contractsense-backend/1.0"},
                 method="POST")
             with urllib.request.urlopen(_req, timeout=10) as _resp:
                 print(f"[EMAIL] Resend envoyé à {to} — {subject} (status {_resp.status})", flush=True)
