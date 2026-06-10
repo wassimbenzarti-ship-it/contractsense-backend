@@ -198,6 +198,9 @@ def send_email(to: str, subject: str, html: str):
                 method="POST")
             with urllib.request.urlopen(_req, timeout=10) as _resp:
                 print(f"[EMAIL] Resend envoyé à {to} — {subject} (status {_resp.status})", flush=True)
+        except urllib.error.HTTPError as e:
+            _body = e.read().decode("utf-8", errors="replace")
+            print(f"[EMAIL] Resend erreur {e.code} envoi à {to}: {_body}", flush=True)
         except Exception as e:
             print(f"[EMAIL] Resend erreur envoi à {to}: {e}", flush=True)
         return
