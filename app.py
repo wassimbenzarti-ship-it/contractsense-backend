@@ -178,7 +178,8 @@ _MAIN_MODEL_ENV = os.environ.get("ANTHROPIC_MODEL", "")  # non-empty only if exp
 _MAIN_MODEL = _MAIN_MODEL_ENV or "claude-sonnet-4-6"  # Supabase override applied below
 _MAIN_MODEL_REFRESH_TS = 0.0  # epoch seconds — for cross-worker 30s sync
 
-# ── Email (SMTP) ──────────────────────────────────────────────────────────────
+# ── Email (Resend API en priorité, fallback SMTP) ─────────────────────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SMTP_HOST     = os.environ.get("SMTP_HOST", "")
 SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER     = os.environ.get("SMTP_USER", "")
@@ -186,8 +187,22 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM     = os.environ.get("SMTP_FROM", SMTP_USER)
 
 def send_email(to: str, subject: str, html: str):
+    if RESEND_API_KEY:
+        try:
+            import urllib.request, json as _json
+            _from = SMTP_FROM or "Omniscient <noreply@westfieldavocats.com>"
+            _payload = _json.dumps({"from": _from, "to": [to], "subject": subject, "html": html}).encode()
+            _req = urllib.request.Request("https://api.resend.com/emails",
+                data=_payload,
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                method="POST")
+            with urllib.request.urlopen(_req, timeout=10) as _resp:
+                print(f"[EMAIL] Resend envoyé à {to} — {subject} (status {_resp.status})", flush=True)
+        except Exception as e:
+            print(f"[EMAIL] Resend erreur envoi à {to}: {e}", flush=True)
+        return
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL] SMTP non configuré — email non envoyé à {to}", flush=True)
+        print(f"[EMAIL] Aucun service email configuré — email non envoyé à {to}", flush=True)
         return
     try:
         msg = MIMEMultipart("alternative")
@@ -204,9 +219,9 @@ def send_email(to: str, subject: str, html: str):
                 s.starttls()
                 s.login(SMTP_USER, SMTP_PASSWORD)
                 s.sendmail(SMTP_FROM, [to], msg.as_string())
-        print(f"[EMAIL] Envoyé à {to} — {subject}", flush=True)
+        print(f"[EMAIL] SMTP envoyé à {to} — {subject}", flush=True)
     except Exception as e:
-        print(f"[EMAIL] Erreur envoi à {to}: {e}", flush=True)
+        print(f"[EMAIL] SMTP erreur envoi à {to}: {e}", flush=True)
 
 # ── In-memory file cache ──────────────────────────────────────────────────────
 # Stores original uploaded files (bytes) keyed by UUID so /export can retrieve
