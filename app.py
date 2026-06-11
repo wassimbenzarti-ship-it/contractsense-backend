@@ -1776,6 +1776,25 @@ def apply_track_changes(file_bytes, modifications, decisions):
                     para = _pe
                     break
 
+        # Method 3: Strip leading numeric prefix (e.g. "5.2.5.  ") before fuzzy match
+        # Handles DOCX auto-numbering where the number is not in the text runs
+        if para is None:
+            _stripped_original = re.sub(r'^[\d]+(?:\.[\d]+)*\.?\s+', '', original).strip()
+            if _stripped_original and _stripped_original != original:
+                for _pe in paragraphs:
+                    _pt = _p_text(_pe)
+                    if _pt and fuzzy_match(_stripped_original, _pt):
+                        para = _pe
+                        break
+                # Also try: para text may have the prefix but with different spacing
+                if para is None:
+                    _orig_norm = re.sub(r'\s+', ' ', original).strip()
+                    for _pe in paragraphs:
+                        _pt = re.sub(r'\s+', ' ', _p_text(_pe)).strip()
+                        if _pt and fuzzy_match(_orig_norm, _pt):
+                            para = _pe
+                            break
+
         # Handle new clauses (type=nouvelle_clause) — insert as new paragraph
         if mod.get('type') == 'nouvelle_clause':
             insertion_after = mod.get('insertion_after')
@@ -1857,7 +1876,7 @@ def apply_track_changes(file_bytes, modifications, decisions):
             continue
 
         if para is None:
-            print(f"Could not find paragraph for mod {mod_id}: {mod.get('clause_name')}")
+            print(f"Could not find paragraph for mod {mod_id} '{mod.get('clause_name')}': original='{original[:80]}'", flush=True)
             continue
 
         try:
