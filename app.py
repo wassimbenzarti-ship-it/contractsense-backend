@@ -2578,12 +2578,11 @@ def draft_contract():
             "- Style formel, complet, sans ellipses ni formules télégraphiques\n"
             "- Chaque clause doit être rédigée en phrases complètes\n"
             "- Inclus TOUTES les clauses standard du type de contrat (durée, résiliation, confidentialité, droit applicable, juridiction, force majeure, etc.)\n"
-            "- Si le contrat comporte un tableau (grille tarifaire, annexe, planning), utilise le format suivant sur des lignes séparées :\n"
-            "  ##TABLE##\n"
-            "  COL1 | COL2 | COL3\n"
-            "  val1 | val2 | val3\n"
-            "  ##ENDTABLE##\n"
-            "- PAS de markdown (pas de **, pas de #, pas de *, pas de --- comme séparateur)\n"
+            "- Pour les tableaux de données (grille tarifaire, annexe, planning), utilise le format markdown standard sur des lignes séparées :\n"
+            "  | Col1 | Col2 | Col3 |\n"
+            "  |------|------|------|\n"
+            "  | val1 | val2 | val3 |\n"
+            "- Sinon PAS de markdown : pas de **, pas de #, pas de *, pas de --- comme séparateur de section\n"
             "- NE commente PAS le contrat, NE donne PAS d'explications — retourne UNIQUEMENT le texte du contrat\n"
             f"- {lang_instruction}\n\n"
             + (f"CADRE LÉGAL APPLICABLE :\n{legal_framework}\n\n" if legal_framework else "")
@@ -2721,6 +2720,7 @@ def draft_export():
                 p.paragraph_format.space_after  = _Pt(0)
             else:
                 _add_run_with_inline(p, stripped)
+                p.alignment = _WDA.JUSTIFY
                 p.paragraph_format.space_before = _Pt(0)
                 p.paragraph_format.space_after  = _Pt(2)
             i += 1
