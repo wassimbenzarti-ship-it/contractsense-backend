@@ -2570,15 +2570,22 @@ def draft_contract():
 
         system = (
             "Tu es un juriste expert en rédaction de contrats commerciaux. "
-            "Tu rédiges des contrats complets, structurés, juridiquement rigoureux, prêts à être signés.\n"
-            "RÈGLES :\n"
-            "- Structure : Préambule → Définitions → Articles numérotés → Signatures\n"
-            "- Chaque article a un titre en majuscules et un contenu précis\n"
-            "- Utilise un style formel et professionnel\n"
-            "- Inclus toutes les clauses standard du type de contrat demandé\n"
-            "- Respecte impérativement le cadre légal fourni\n"
-            f"- {lang_instruction}\n"
-            "- NE commente PAS le contrat, NE donne PAS d'explications — retourne UNIQUEMENT le texte du contrat\n\n"
+            "Tu rédiges des contrats complets, structurés, juridiquement rigoureux, prêts à être signés.\n\n"
+            "RÈGLES DE RÉDACTION :\n"
+            "- Structure obligatoire : Préambule → Entre les soussignés → Définitions → Articles numérotés → Signatures\n"
+            "- Chaque article commence par son titre en MAJUSCULES (ex: ARTICLE 1 — OBJET DU CONTRAT)\n"
+            "- Les sous-alinéas sont numérotés (1.1, 1.2, etc.) ou lettrés (a), b), c))\n"
+            "- Style formel, complet, sans ellipses ni formules télégraphiques\n"
+            "- Chaque clause doit être rédigée en phrases complètes\n"
+            "- Inclus TOUTES les clauses standard du type de contrat (durée, résiliation, confidentialité, droit applicable, juridiction, force majeure, etc.)\n"
+            "- Si le contrat comporte un tableau (grille tarifaire, annexe, planning), utilise le format suivant sur des lignes séparées :\n"
+            "  ##TABLE##\n"
+            "  COL1 | COL2 | COL3\n"
+            "  val1 | val2 | val3\n"
+            "  ##ENDTABLE##\n"
+            "- PAS de markdown (pas de **, pas de #, pas de *, pas de --- comme séparateur)\n"
+            "- NE commente PAS le contrat, NE donne PAS d'explications — retourne UNIQUEMENT le texte du contrat\n"
+            f"- {lang_instruction}\n\n"
             + (f"CADRE LÉGAL APPLICABLE :\n{legal_framework}\n\n" if legal_framework else "")
             + (f"MODÈLES DE RÉFÉRENCE (extraits RAG) :\n{model_context}\n\n" if model_context else "")
         )
@@ -2618,29 +2625,105 @@ def draft_export():
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         doc = _DocxDoc()
-        # Remove default empty paragraph
+        from docx.shared import Pt as _Pt, Cm as _Cm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH as _WDA
+        from docx.oxml.ns import qn as _qn2
+        from lxml import etree as _etree2
         for p in doc.paragraphs:
             p._element.getparent().remove(p._element)
 
-        for line in text.split("\n"):
-            stripped = line.strip()
-            # Detect article headings (e.g. "ARTICLE 1 — OBJET" or "Article 1.")
+        def _add_run_with_inline(para, raw_line):
+            """Add runs to para, handling **bold** inline markers."""
+            import re as _re2
+            parts = _re2.split(r'(\*\*[^*]+\*\*)', raw_line)
+            for part in parts:
+                if part.startswith('**') and part.endswith('**'):
+                    r = para.add_run(part[2:-2])
+                    r.bold = True
+                    r.font.size = _Pt(10.5)
+                else:
+                    r = para.add_run(part)
+                    r.font.size = _Pt(10.5)
+
+        lines = text.split("\n")
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+
+            # ##TABLE## block
+            if stripped == "##TABLE##":
+                rows = []
+                i += 1
+                while i < len(lines) and lines[i].strip() != "##ENDTABLE##":
+                    cols = [c.strip() for c in lines[i].split("|")]
+                    cols = [c for c in cols if c]
+                    if cols:
+                        rows.append(cols)
+                    i += 1
+                if rows:
+                    max_cols = max(len(r) for r in rows)
+                    tbl = doc.add_table(rows=len(rows), cols=max_cols)
+                    tbl.style = 'Table Grid'
+                    for ri, row_data in enumerate(rows):
+                        for ci, cell_val in enumerate(row_data):
+                            cell = tbl.cell(ri, ci)
+                            cell.text = cell_val
+                            for run in cell.paragraphs[0].runs:
+                                run.font.size = _Pt(10)
+                                if ri == 0:
+                                    run.bold = True
+                i += 1
+                continue
+
+            # Also handle raw markdown tables (| col | col |)
+            if stripped.startswith("|") and stripped.endswith("|") and "|" in stripped[1:]:
+                table_lines = []
+                while i < len(lines) and lines[i].strip().startswith("|"):
+                    row_stripped = lines[i].strip()
+                    if not all(c in '-|: ' for c in row_stripped):  # skip separator rows
+                        cols = [c.strip() for c in row_stripped.split("|") if c.strip()]
+                        if cols:
+                            table_lines.append(cols)
+                    i += 1
+                if table_lines:
+                    max_cols = max(len(r) for r in table_lines)
+                    tbl = doc.add_table(rows=len(table_lines), cols=max_cols)
+                    tbl.style = 'Table Grid'
+                    for ri, row_data in enumerate(table_lines):
+                        for ci, cell_val in enumerate(row_data):
+                            if ci < max_cols:
+                                cell = tbl.cell(ri, ci)
+                                cell.text = cell_val
+                                for run in cell.paragraphs[0].runs:
+                                    run.font.size = _Pt(10)
+                                    if ri == 0:
+                                        run.bold = True
+                continue
+
             is_heading = (
-                stripped.upper() == stripped and len(stripped) > 3 and len(stripped) < 120
-                and stripped not in ("", "---", "***")
-            ) or stripped.upper().startswith("ARTICLE ")
+                stripped.upper() == stripped and len(stripped) > 4 and len(stripped) < 120
+                and stripped not in ("", "---", "***", "___")
+                and not stripped.startswith("|")
+            ) or re.match(r'^ARTICLE\s+\d', stripped, re.IGNORECASE) is not None
+
             p = doc.add_paragraph()
-            run = p.add_run(stripped if stripped else " ")
             if is_heading and stripped:
-                run.bold = True
-                run.font.size = Pt(11)
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_before = Pt(10)
-                p.paragraph_format.space_after  = Pt(4)
+                r = p.add_run(stripped)
+                r.bold = True
+                r.font.size = _Pt(11)
+                p.alignment = _WDA.CENTER
+                p.paragraph_format.space_before = _Pt(12)
+                p.paragraph_format.space_after  = _Pt(4)
+            elif not stripped:
+                r = p.add_run(" ")
+                r.font.size = _Pt(6)
+                p.paragraph_format.space_before = _Pt(0)
+                p.paragraph_format.space_after  = _Pt(0)
             else:
-                run.font.size = Pt(10.5)
-                p.paragraph_format.space_before = Pt(0)
-                p.paragraph_format.space_after  = Pt(2)
+                _add_run_with_inline(p, stripped)
+                p.paragraph_format.space_before = _Pt(0)
+                p.paragraph_format.space_after  = _Pt(2)
+            i += 1
 
         buf = io.BytesIO()
         doc.save(buf)
