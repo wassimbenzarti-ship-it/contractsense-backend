@@ -2587,7 +2587,7 @@ def draft_contract():
         if partie:
             user_msg += f"\n\nLa partie représentée / bénéficiaire de la rédaction est : {partie}"
 
-        resp = anthropic_client.messages.create(
+        resp = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "")).messages.create(
             model=_get_model(),
             max_tokens=4096,
             system=system,
