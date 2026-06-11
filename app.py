@@ -2740,6 +2740,39 @@ def draft_export():
 
 
 
+@app.route("/draft/refine", methods=["POST", "OPTIONS"])
+def draft_refine():
+    """Apply an instruction to an existing draft and return the updated full text."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data        = request.get_json() or {}
+        draft       = (data.get("draft") or "").strip()
+        instruction = (data.get("instruction") or "").strip()
+        if not draft or not instruction:
+            return jsonify({"error": "draft et instruction requis"}), 400
+
+        system = (
+            "Tu es un juriste expert en rédaction de contrats. "
+            "Tu reçois un contrat existant et une instruction de modification. "
+            "Applique UNIQUEMENT la modification demandée, conserve le reste à l'identique. "
+            "Retourne le contrat COMPLET modifié sans commentaires ni explications.\n"
+            "- Pour les tableaux, utilise le format markdown standard : | Col1 | Col2 |\n"
+            "- Sinon PAS de markdown : pas de **, pas de #, pas de *\n"
+        )
+        user_msg = f"Contrat actuel :\n\n{draft}\n\nInstruction de modification :\n{instruction}"
+
+        resp = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "")).messages.create(
+            model=_get_model(),
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        return jsonify({"draft": resp.content[0].text.strip()})
+    except Exception as e:
+        print(f"[draft/refine] error: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/detect-jurisdiction", methods=["POST", "OPTIONS"])
 def detect_jurisdiction():
     """Quick jurisdiction detection from contract file or text."""
