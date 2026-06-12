@@ -576,6 +576,37 @@ def search_rag_hybrid(query_text, query_embedding, top_k=15, jurisdiction=None):
         print(f"Hybrid search exception: {e}")
     return search_rag_pgvector(query_embedding, top_k=top_k)
 
+def search_rag_article_refs(query_text, limit_per_ref=6):
+    """Direct textual lookup of explicit article references (ex. 'article 16 de la loi 21-18').
+    Vector similarity misses exact article numbers (digits carry no semantic weight),
+    and BM25 plainto_tsquery ANDs all terms. Word-boundary regex (\\m...\\M) avoids
+    'Article 16' matching 'Article 161'. If a law number is mentioned, scope to it first."""
+    hits = []
+    try:
+        art_refs = re.findall(r"(?:article|art\.?)\s+(\d{1,4})(?:\s*(bis|ter))?", query_text, re.IGNORECASE)
+        law_refs = re.findall(r"(?:loi|dahir)\s*(?:n[°o]?\s*)?(\d{1,3}[-.]\d{1,3})", query_text, re.IGNORECASE)
+        seen = set()
+        for an, suffix in list(dict.fromkeys(art_refs))[:3]:
+            pat = f"\\marticle {an}" + (f" {suffix}" if suffix else "") + "\\M"
+            params = {"select": "title,content,category,source",
+                      "content": f"imatch.{pat}",
+                      "limit": str(limit_per_ref)}
+            docs = []
+            if law_refs:
+                scoped = dict(params)
+                scoped["title"] = f"ilike.*{law_refs[0]}*"
+                docs = supa_get("rag_documents", scoped) or []
+            if not docs:
+                docs = supa_get("rag_documents", params) or []
+            for d in docs:
+                k = str(d.get("content", ""))[:120]
+                if k not in seen:
+                    seen.add(k)
+                    hits.append(d)
+    except Exception as e:
+        print(f"search_rag_article_refs error: {e}")
+    return hits
+
 def extract_article_refs(content, title=""):
     """Extract article references (e.g. 'Art. 16 CT', 'Article 264 DOC') from RAG doc content."""
     refs = re.findall(r'\bArt(?:icle)?\.?\s*\d+[\w\-]*(?:\s+(?:CT|DOC|CC|CO|CSC|CPCM|CPC))?\b', content or "", re.IGNORECASE)
@@ -4551,11 +4582,18 @@ def rag_search_debug():
         if not _rdocs:
             _rdocs = search_rag_keyword(q, top_k=k)
             out["method"] = "keyword"
+        # Same direct article-number lookup as /chat
+        _direct = search_rag_article_refs(q)
+        out["direct_article_hits"] = len(_direct)
+        for _d in _direct:
+            _d["_direct"] = True
+        _rdocs = _direct + (_rdocs or [])
         for _rd in (_rdocs or [])[:k]:
             out["results"].append({
                 "title": _rd.get("title") or _rd.get("source") or "?",
                 "category": _rd.get("category", ""),
                 "similarity": _rd.get("similarity") or _rd.get("score"),
+                "direct_match": bool(_rd.get("_direct")),
                 "excerpt": str(_rd.get("content", ""))[:400]
             })
         out["count"] = len(out["results"])
@@ -5214,24 +5252,12 @@ def chat():
             if not _rdocs:
                 _rdocs = search_rag_keyword(_rag_query, top_k=20)
             # Targeted retrieval: explicit article references (ex. "l'article 16 de la loi 21-18")
-            # get a direct content search — vector similarity often misses exact article numbers
+            # get a direct word-boundary content search — vector similarity misses exact numbers
             try:
-                _art_nums = re.findall(r"(?:article|art\.?)\s+(\d{1,4})(?:\s*(bis|ter))?", _rag_query, re.IGNORECASE)
-                _seen_keys = set(str(d.get("content", ""))[:120] for d in (_rdocs or []))
-                _direct_hits = []
-                for _an, _suffix in list(dict.fromkeys(_art_nums))[:3]:
-                    _pat = f"Article {_an}" + (f" {_suffix}" if _suffix else "")
-                    _adocs = supa_get("rag_documents", {
-                        "select": "title,content,category,source",
-                        "content": f"ilike.*{_pat}*",
-                        "limit": "5"
-                    }) or []
-                    for _ad in _adocs:
-                        _k = str(_ad.get("content", ""))[:120]
-                        if _k not in _seen_keys:
-                            _seen_keys.add(_k)
-                            _direct_hits.append(_ad)
+                _direct_hits = search_rag_article_refs(_rag_query)
                 if _direct_hits:
+                    _seen_keys = set(str(d.get("content", ""))[:120] for d in (_rdocs or []))
+                    _direct_hits = [d for d in _direct_hits if str(d.get("content", ""))[:120] not in _seen_keys]
                     _rdocs = _direct_hits + (_rdocs or [])
                     print(f"[/chat] RAG direct article hits: {len(_direct_hits)}")
             except Exception as _ae:
