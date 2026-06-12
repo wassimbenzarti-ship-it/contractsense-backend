@@ -62,22 +62,27 @@ AS $$
     LIMIT 40
   ),
   -- BM25 full-text search (OR des lexèmes, classé par densité de matchs)
+  -- NB: le ORDER BY doit être DANS la sous-requête avant LIMIT, sinon
+  -- Postgres prend 40 lignes arbitraires au lieu des 40 meilleures
   bm25 AS (
-    SELECT rd.id,
-           ROW_NUMBER() OVER (
-             ORDER BY ts_rank_cd(
+    SELECT sub.id,
+           ROW_NUMBER() OVER (ORDER BY sub.rank_raw DESC) AS rank_bm25
+    FROM (
+      SELECT rd.id,
+             ts_rank_cd(
                to_tsvector('french', coalesce(rd.title,'') || ' ' || coalesce(rd.law_name,'') || ' ' || coalesce(rd.content,'')),
                q.tsq
-             ) DESC
-           ) AS rank_bm25
-    FROM rag_documents rd, q
-    WHERE q.tsq IS NOT NULL
-      AND to_tsvector('french', coalesce(rd.title,'') || ' ' || coalesce(rd.law_name,'') || ' ' || coalesce(rd.content,''))
-          @@ q.tsq
-      AND (p_jurisdiction IS NULL
-           OR rd.jurisdiction = p_jurisdiction
-           OR rd.jurisdiction IN ('universel','auto'))
-    LIMIT 40
+             ) AS rank_raw
+      FROM rag_documents rd, q
+      WHERE q.tsq IS NOT NULL
+        AND to_tsvector('french', coalesce(rd.title,'') || ' ' || coalesce(rd.law_name,'') || ' ' || coalesce(rd.content,''))
+            @@ q.tsq
+        AND (p_jurisdiction IS NULL
+             OR rd.jurisdiction = p_jurisdiction
+             OR rd.jurisdiction IN ('universel','auto'))
+      ORDER BY rank_raw DESC
+      LIMIT 40
+    ) sub
   ),
   -- Reciprocal Rank Fusion
   fused AS (
