@@ -2236,6 +2236,60 @@ def request_revision_by_director(analysis_id):
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
+@app.route("/analyses/assign-to-juriste/<analysis_id>", methods=["POST", "OPTIONS"])
+def assign_analysis_to_juriste(analysis_id):
+    """Director assigns their own analysis to a juriste for revision.
+    Unlike request-revision, this also changes user_email (requires service key)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        juriste_email  = (data.get("juriste_email") or "").strip()
+        director_email = (data.get("director_email") or "").strip()
+        director_notes = (data.get("director_notes") or "").strip()
+        modifications  = data.get("modifications", [])
+        if not juriste_email:
+            return jsonify({"error": "juriste_email requis"}), 400
+        # Prepend director note, dedupe any previous ones
+        modifications = [m for m in modifications if not (isinstance(m, dict) and m.get("_isDirectorNote"))]
+        if director_notes:
+            modifications = [{"_isDirectorNote": True, "note": director_notes}] + modifications
+        patch = {
+            "user_email": juriste_email,
+            "status": "revision_requested",
+            "director_email": director_email,
+            "modifications": modifications
+        }
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        r = requests.patch(
+            SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json", "Prefer": "return=representation"},
+            json=patch, timeout=10
+        )
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable"}), 404
+        try:
+            row = rows[0]
+            filename = row.get("filename", "Contrat")
+            now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            send_email(juriste_email,
+                f"[Omniscient] Analyse assignée pour révision — {filename}",
+                f"""<p>Bonjour,</p>
+<p>Le directeur <strong>{director_email or 'votre directeur'}</strong> vous a assigné une analyse pour révision.</p>
+<ul><li><strong>Contrat :</strong> {filename}</li><li><strong>Date :</strong> {now}</li></ul>
+{f'<p><strong>Note :</strong> {director_notes}</p>' if director_notes else ''}
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> pour traiter cette analyse.</p>""")
+        except Exception as _ne:
+            print(f"[assign-juriste] email error: {_ne}", flush=True)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
 @app.route("/notify/pending-review", methods=["POST", "OPTIONS"])
 def notify_pending_review():
     """Sends an email to the director when a juriste submits an analysis for review."""
