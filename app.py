@@ -2236,6 +2236,60 @@ def request_revision_by_director(analysis_id):
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
+@app.route("/analyses/assign-to-juriste/<analysis_id>", methods=["POST", "OPTIONS"])
+def assign_analysis_to_juriste(analysis_id):
+    """Director assigns their own analysis to a juriste for revision.
+    Unlike request-revision, this also changes user_email (requires service key)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        juriste_email  = (data.get("juriste_email") or "").strip()
+        director_email = (data.get("director_email") or "").strip()
+        director_notes = (data.get("director_notes") or "").strip()
+        modifications  = data.get("modifications", [])
+        if not juriste_email:
+            return jsonify({"error": "juriste_email requis"}), 400
+        # Prepend director note, dedupe any previous ones
+        modifications = [m for m in modifications if not (isinstance(m, dict) and m.get("_isDirectorNote"))]
+        if director_notes:
+            modifications = [{"_isDirectorNote": True, "note": director_notes}] + modifications
+        patch = {
+            "user_email": juriste_email,
+            "status": "revision_requested",
+            "director_email": director_email,
+            "modifications": modifications
+        }
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        r = requests.patch(
+            SUPA_URL + f"/rest/v1/analyses?id=eq.{analysis_id}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json", "Prefer": "return=representation"},
+            json=patch, timeout=10
+        )
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Analyse introuvable"}), 404
+        try:
+            row = rows[0]
+            filename = row.get("filename", "Contrat")
+            now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            send_email(juriste_email,
+                f"[Omniscient] Analyse assignée pour révision — {filename}",
+                f"""<p>Bonjour,</p>
+<p>Le directeur <strong>{director_email or 'votre directeur'}</strong> vous a assigné une analyse pour révision.</p>
+<ul><li><strong>Contrat :</strong> {filename}</li><li><strong>Date :</strong> {now}</li></ul>
+{f'<p><strong>Note :</strong> {director_notes}</p>' if director_notes else ''}
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> pour traiter cette analyse.</p>""")
+        except Exception as _ne:
+            print(f"[assign-juriste] email error: {_ne}", flush=True)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
 @app.route("/notify/pending-review", methods=["POST", "OPTIONS"])
 def notify_pending_review():
     """Sends an email to the director when a juriste submits an analysis for review."""
@@ -5040,25 +5094,35 @@ def chat():
         contract_excerpt = contract_text[:80000] if contract_text else ""
 
         # Search RAG for legal context relevant to the user's question
+        # Build a composite query from recent conversation history + current message
+        # so that "la durée est correcte ?" finds the same law doc as "durée RNESM Loi 21-18"
         _legal_rag_ctx = ""
         try:
             _vkey = os.environ.get("VOYAGE_API_KEY")
-            _qemb = get_embedding(message[:500], voyage_key=_vkey)
-            _rdocs = search_rag_hybrid(message[:300], _qemb, top_k=15)
+            _ctx_parts = []
+            for _hm in (history or [])[-4:]:  # last 2 turns (user + assistant)
+                if isinstance(_hm, dict):
+                    _hc = str(_hm.get("content", ""))[:400]
+                    if _hc.strip():
+                        _ctx_parts.append(_hc)
+            _ctx_parts.append(message[:400])
+            _rag_query = " ".join(_ctx_parts)[:700]
+            _qemb = get_embedding(_rag_query, voyage_key=_vkey)
+            _rdocs = search_rag_hybrid(_rag_query[:300], _qemb, top_k=20)
             if not _rdocs:
-                _rdocs = search_rag_pgvector(_qemb, top_k=15)
+                _rdocs = search_rag_pgvector(_qemb, top_k=20)
             if not _rdocs:
-                _rdocs = search_rag_keyword(message, top_k=15)
+                _rdocs = search_rag_keyword(_rag_query, top_k=20)
             if _rdocs:
                 _legal_rag_ctx = "\n\n=== BASE LÉGALE ET DOCUMENTAIRE (extraits pertinents) ===\n"
-                for _rd in _rdocs[:10]:
+                _legal_rag_ctx += "PRIORITÉ ABSOLUE : ces extraits prévalent sur toute mémoire d'entraînement. Si un chiffre (durée, montant, délai) figure ici, c'est ce chiffre qui s'applique — jamais ta mémoire.\n"
+                for _rd in _rdocs[:12]:
                     _rt = _rd.get("title") or _rd.get("source") or "Document"
                     _rc = str(_rd.get("content", ""))[:3000]
                     if _rc.strip():
                         _legal_rag_ctx += f"\n[{_rt}]\n{_rc}\n"
                 _legal_rag_ctx += "\n=== FIN BASE LÉGALE ===\n"
-                _legal_rag_ctx += "Cite précisément ces sources légales quand tu t'y réfères dans ta réponse.\n"
-                print(f"[/chat] RAG: {len(_rdocs)} docs for: {message[:60]}")
+                print(f"[/chat] RAG: {len(_rdocs)} docs — query: {_rag_query[:80]}")
         except Exception as _re:
             print(f"[/chat] RAG error: {_re}")
 
@@ -5067,12 +5131,20 @@ def chat():
             "Tu es un assistant juridique expert en droit des contrats. "
             "Tu aides un avocat à analyser et améliorer un contrat. "
             "Réponds toujours en français, de manière professionnelle.\n"
-            "RÈGLE ABSOLUE SUR LES SOURCES LÉGALES : tu ne dois JAMAIS prétendre avoir accès "
-            "à une loi ou un document juridique sauf si son contenu figure EXPLICITEMENT dans la section "
-            "BASE LÉGALE ET DOCUMENTAIRE ci-dessous. Si cette section est absente ou ne contient pas "
-            "la loi demandée, réponds : 'Cette loi ne figure pas dans ma base documentaire pour cette session. "
-            "Voici ce que je sais de mémoire générale :' — puis réponds depuis tes connaissances générales "
-            "en précisant que ce n'est pas un extrait de la base. "
+            "RÈGLE ABSOLUE SUR LES SOURCES LÉGALES :\n"
+            "1. La BASE LÉGALE ET DOCUMENTAIRE fournie ci-dessous a une PRIORITÉ ABSOLUE sur ta mémoire d'entraînement. "
+            "Si un chiffre (durée, montant, délai, seuil) figure dans la BASE LÉGALE, c'est CE chiffre qui s'applique, "
+            "même si ta mémoire d'entraînement te suggère autre chose.\n"
+            "2. Tu ne peux citer un texte légal (loi, article, décret) QUE si son contenu figure EXPLICITEMENT dans la BASE LÉGALE.\n"
+            "3. Si la BASE LÉGALE ne contient pas l'information précise, réponds EXACTEMENT : "
+            "'⚠ Cette disposition ne figure pas dans ma base documentaire pour cette session. "
+            "Je ne peux pas affirmer ce que prévoit cette loi sans le texte officiel. "
+            "Veuillez me fournir l'extrait ou consulter le texte officiel.'\n"
+            "4. INTERDIT ABSOLU même depuis la mémoire générale : citer des durées précises (ex. 6 ans, 60 mois), "
+            "des montants, des seuils, des délais légaux, des numéros d'articles — SANS les avoir dans la BASE LÉGALE. "
+            "Ces chiffres changent selon les révisions législatives et une erreur engage la responsabilité de l'avocat.\n"
+            "5. Tu peux énoncer un principe général (ex. 'la loi impose un délai de conservation') "
+            "MAIS JAMAIS le chiffre exact (ex. 'ce délai est de 6 ans') sans source dans la BASE LÉGALE.\n"
             "INTERDIT : inventer une liste de lois 'disponibles', citer des articles sans les avoir dans le contexte.\n"
             "CAPACITÉ TRADUCTION WORD : si l'utilisateur demande une traduction du contrat en Word/DOCX "
             "(en anglais, français, arabe, etc.), ou confirme vouloir générer le fichier, "
