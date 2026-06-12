@@ -4314,29 +4314,59 @@ def rag_upload():
 
         import uuid
         voyage_key = os.environ.get("VOYAGE_API_KEY") or request.form.get("voyage_key", "")
+        if not voyage_key:
+            return jsonify({"error": "VOYAGE_API_KEY manquante — impossible de créer les embeddings pgvector. Le document ne serait pas trouvable par la recherche sémantique."}), 500
+
+        # Verify Voyage AI is reachable before wiping existing docs
+        _test_emb = get_embedding("test", voyage_key)
+        if not _test_emb or len(_test_emb) != 1024:
+            return jsonify({"error": f"Voyage AI indisponible ou dimensions incorrectes ({len(_test_emb) if _test_emb else 0}d). Upload annulé pour éviter de perdre les données existantes."}), 500
+
+        # Use service key for rag_documents inserts (bypasses RLS)
+        _orig_key = SUPA_KEY
+        import threading as _thr
+        _key_lock = _thr.local()
 
         # Upsert: delete existing docs with same source name to avoid duplicates
         deleted = delete_rag_by_source(title)
         if deleted:
             print(f"rag_upload: supprimé {deleted} ancien(s) chunk(s) pour source='{title}'")
 
+        _saved = 0
+        _failed = 0
+        _no_pgvec = 0
         for i, chunk in enumerate(chunks):
             embedding = get_embedding(chunk, voyage_key)
+            if not embedding or len(embedding) != 1024:
+                _no_pgvec += 1
+                print(f"rag_upload WARN: chunk {i+1} embedding {len(embedding) if embedding else 0}d — skipping (Voyage AI fallback)")
+                continue  # skip chunks with bad embeddings entirely
             chunk_title = (title + " (partie " + str(i+1) + ")") if len(chunks) > 1 else title
-            save_rag_doc({
-                "id": str(uuid.uuid4()),
-                "title": chunk_title,
-                "category": category,
-                "content": chunk,
-                "embedding": embedding,  # raw list — save_rag_doc handles JSON + pgvector
-                "source": title,
-                "jurisdiction": jurisdiction,
-                "validated_at": datetime.datetime.now().isoformat()
-            })
+            try:
+                save_rag_doc({
+                    "id": str(uuid.uuid4()),
+                    "title": chunk_title,
+                    "category": category,
+                    "content": chunk,
+                    "embedding": embedding,
+                    "source": title,
+                    "jurisdiction": jurisdiction,
+                    "validated_at": datetime.datetime.now().isoformat()
+                })
+                _saved += 1
+            except Exception as _se:
+                _failed += 1
+                print(f"rag_upload: chunk {i+1} save error: {_se}")
 
         total = load_rag()
-        return jsonify({"success": True, "chunks": len(chunks), "source": title,
-                        "replaced": deleted, "total_docs": len(total["documents"])})
+        result = {"success": True, "chunks_total": len(chunks), "chunks_saved": _saved,
+                  "chunks_failed": _failed, "chunks_no_pgvec": _no_pgvec,
+                  "source": title, "replaced": deleted, "total_docs": len(total["documents"])}
+        if _no_pgvec:
+            result["warning"] = f"{_no_pgvec} chunk(s) ignoré(s) car embedding Voyage AI non-1024d"
+        if _failed:
+            result["error_note"] = f"{_failed} chunk(s) en erreur à l'insertion Supabase (voir logs Railway)"
+        return jsonify(result)
 
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
@@ -4462,6 +4492,37 @@ def rag_diag():
         diag["traceback"] = traceback.format_exc()
 
     return jsonify(diag)
+
+
+@app.route("/rag/check", methods=["GET"])
+def rag_check_source():
+    """Check if a source document exists in RAG with valid pgvector embeddings.
+    Usage: GET /rag/check?source=loi 21-18"""
+    source = (request.args.get("source") or "").strip()
+    if not source:
+        return jsonify({"error": "paramètre source requis"}), 400
+    try:
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        # Find all chunks for this source (by title prefix or source field)
+        all_r = requests.get(
+            SUPA_URL + "/rest/v1/rag_documents",
+            headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "count=exact"},
+            params={"source": f"ilike.*{source}*", "select": "id,title,category,jurisdiction,embedding_vector", "limit": "200"},
+            timeout=15
+        )
+        docs = all_r.json() if all_r.ok and all_r.content else []
+        total = int(all_r.headers.get("content-range", "0/0").split("/")[-1] or 0)
+        with_vec = [d for d in docs if d.get("embedding_vector")]
+        return jsonify({
+            "source_query": source,
+            "total_chunks": total,
+            "chunks_with_pgvector": len(with_vec),
+            "chunks_without_pgvector": len(docs) - len(with_vec),
+            "searchable": len(with_vec) > 0,
+            "sample_titles": [d.get("title","?") for d in docs[:5]]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/rag/search", methods=["GET", "POST"])
