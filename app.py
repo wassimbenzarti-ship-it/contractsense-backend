@@ -2595,7 +2595,7 @@ def draft_contract():
 
         resp = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "")).messages.create(
             model=_get_model(),
-            max_tokens=4096,
+            max_tokens=8192,
             system=system,
             messages=[{"role": "user", "content": user_msg}]
         )
