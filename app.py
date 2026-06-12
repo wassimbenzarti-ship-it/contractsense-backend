@@ -4464,6 +4464,45 @@ def rag_diag():
     return jsonify(diag)
 
 
+@app.route("/rag/search", methods=["GET", "POST"])
+def rag_search_debug():
+    """Debug endpoint: run the same retrieval pipeline as /chat and show what comes back.
+    Usage: GET /rag/search?q=durée+inscription+sûretés+mobilières&k=20"""
+    try:
+        if request.method == "POST":
+            body = request.get_json() or {}
+            q = (body.get("q") or "").strip()
+            k = int(body.get("k") or 20)
+        else:
+            q = (request.args.get("q") or "").strip()
+            k = int(request.args.get("k") or 20)
+        if not q:
+            return jsonify({"error": "paramètre q requis"}), 400
+        k = min(max(k, 1), 50)
+        out = {"query": q, "results": []}
+        _vkey = os.environ.get("VOYAGE_API_KEY")
+        _qemb = get_embedding(q[:700], voyage_key=_vkey)
+        _rdocs = search_rag_hybrid(q[:300], _qemb, top_k=k)
+        out["method"] = "hybrid"
+        if not _rdocs:
+            _rdocs = search_rag_pgvector(_qemb, top_k=k)
+            out["method"] = "pgvector"
+        if not _rdocs:
+            _rdocs = search_rag_keyword(q, top_k=k)
+            out["method"] = "keyword"
+        for _rd in (_rdocs or [])[:k]:
+            out["results"].append({
+                "title": _rd.get("title") or _rd.get("source") or "?",
+                "category": _rd.get("category", ""),
+                "similarity": _rd.get("similarity") or _rd.get("score"),
+                "excerpt": str(_rd.get("content", ""))[:400]
+            })
+        out["count"] = len(out["results"])
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
     try:
@@ -5113,6 +5152,29 @@ def chat():
                 _rdocs = search_rag_pgvector(_qemb, top_k=20)
             if not _rdocs:
                 _rdocs = search_rag_keyword(_rag_query, top_k=20)
+            # Targeted retrieval: explicit article references (ex. "l'article 16 de la loi 21-18")
+            # get a direct content search — vector similarity often misses exact article numbers
+            try:
+                _art_nums = re.findall(r"(?:article|art\.?)\s+(\d{1,4})(?:\s*(bis|ter))?", _rag_query, re.IGNORECASE)
+                _seen_keys = set(str(d.get("content", ""))[:120] for d in (_rdocs or []))
+                _direct_hits = []
+                for _an, _suffix in list(dict.fromkeys(_art_nums))[:3]:
+                    _pat = f"Article {_an}" + (f" {_suffix}" if _suffix else "")
+                    _adocs = supa_get("rag_documents", {
+                        "select": "title,content,category,source",
+                        "content": f"ilike.*{_pat}*",
+                        "limit": "5"
+                    }) or []
+                    for _ad in _adocs:
+                        _k = str(_ad.get("content", ""))[:120]
+                        if _k not in _seen_keys:
+                            _seen_keys.add(_k)
+                            _direct_hits.append(_ad)
+                if _direct_hits:
+                    _rdocs = _direct_hits + (_rdocs or [])
+                    print(f"[/chat] RAG direct article hits: {len(_direct_hits)}")
+            except Exception as _ae:
+                print(f"[/chat] RAG article-ref search error: {_ae}")
             if _rdocs:
                 _legal_rag_ctx = "\n\n=== BASE LÉGALE ET DOCUMENTAIRE (extraits pertinents) ===\n"
                 _legal_rag_ctx += "PRIORITÉ ABSOLUE : ces extraits prévalent sur toute mémoire d'entraînement. Si un chiffre (durée, montant, délai) figure ici, c'est ce chiffre qui s'applique — jamais ta mémoire.\n"
