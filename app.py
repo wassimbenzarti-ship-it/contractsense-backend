@@ -2908,6 +2908,7 @@ def identify_parties_route():
         if not contract_text or len(contract_text.strip()) < 50:
             return jsonify({"error": "Fichier vide ou illisible"}), 400
         result = identify_parties(contract_text, lang, api_key)
+        result["contract_text"] = contract_text  # needed by frontend for translation cache
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
