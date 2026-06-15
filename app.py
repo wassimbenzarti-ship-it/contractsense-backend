@@ -5277,6 +5277,15 @@ def chat():
 
         # System prompt
         system_prompt = (
+            "RÈGLE #0 — PRIORITÉ MAXIMALE — BLOC <modification> EN PREMIER :\n"
+            "Dès que tu modifies ou proposes une nouvelle rédaction pour une clause, "
+            "produis LE BLOC <modification> IMMÉDIATEMENT, AVANT tout texte explicatif. "
+            "Format exact :\n"
+            "<modification>\n"
+            "{\"clause_name\":\"Article X – Titre\",\"original\":\"[copie exacte]\",\"proposed\":\"[rédaction complète]\"}\n"
+            "</modification>\n"
+            "Tu peux expliquer APRÈS le bloc, jamais avant. "
+            "INTERDIT : annoncer 'J'intègre maintenant...' ou 'Je vais modifier...' sans produire le bloc dans la même réponse.\n\n"
             "Tu es un assistant juridique expert en droit des contrats. "
             "Tu aides un avocat à analyser et améliorer un contrat. "
             "Réponds toujours en français, de manière professionnelle.\n"
@@ -5303,7 +5312,15 @@ def chat():
             "[EXPORT_TRANSLATION:en] pour anglais, [EXPORT_TRANSLATION:fr] pour français, "
             "[EXPORT_TRANSLATION:ar] pour arabe. "
             "Ce marqueur déclenchera automatiquement la génération et le téléchargement du fichier Word.\n"
-            + (f"Partie représentée : {partie}. Tu défends UNIQUEMENT les intérêts de cette partie.\n" if partie else "")
+            + (
+                f"PARTIE REPRÉSENTÉE : {partie}.\n"
+                f"Tu défends EXCLUSIVEMENT les intérêts de '{partie}'. "
+                f"Avant de proposer toute modification, pose-toi cette question : "
+                f"'Cette modification réduit-elle les obligations de '{partie}', augmente-t-elle ses droits, ou retire-t-elle un risque pour '{partie}' ?' "
+                f"Si la réponse est non — si la modification AJOUTE des obligations ou des restrictions SUR '{partie}' — NE LA PROPOSE PAS. "
+                f"Exemple interdit : une clause oblige UNIQUEMENT l'autre partie ; la rendre réciproque ajoute une obligation sur '{partie}' → INTERDIT.\n"
+                if partie else ""
+            )
             + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
             + _legal_rag_ctx
             + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
