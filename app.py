@@ -498,7 +498,9 @@ def get_embedding(text, voyage_key=None):
     if voyage_key:
         try:
             vo = voyageai.Client(api_key=voyage_key)
-            result = vo.embed([text[:1000]], model="voyage-law-2", input_type="document")
+            # Chunks indexed via /rag/upload are ~400 words (~2000-2500 chars) — 1000 chars
+            # used to truncate roughly the back half of every chunk before embedding it.
+            result = vo.embed([text[:6000]], model="voyage-law-2", input_type="document")
             return result.embeddings[0]
         except Exception as e:
             print("Voyage AI error: " + str(e))
@@ -2173,7 +2175,7 @@ def suggestion_approve(suggestion_id):
             return jsonify({"error": "Non trouve"}), 404
         doc = docs[0]
         voyage_key = os.environ.get("VOYAGE_API_KEY", "")
-        emb = get_embedding((doc.get("content") or "")[:1000], voyage_key)
+        emb = get_embedding((doc.get("content") or "")[:6000], voyage_key)
         rag_doc = {
             "source": doc["filename"],
             "title": doc["filename"],
@@ -4831,7 +4833,7 @@ def rag_reindex():
                         skipped += 1
                         continue
                     # Re-compute embedding
-                    emb = get_embedding(content[:1000], voyage_key)
+                    emb = get_embedding(content[:6000], voyage_key)
                     if not emb or len(emb) != 1024:
                         skipped += 1
                         continue
@@ -4865,7 +4867,9 @@ def rag_reindex():
 
 @app.route("/rag/reindex-all", methods=["POST", "OPTIONS"])
 def rag_reindex_all():
-    """Force re-embed RAG docs in paginated batches. Use ?offset=0&limit=200 per call."""
+    """Force re-embed RAG docs in paginated batches. Use ?offset=0&limit=200 per call.
+    Optional ?title=<substring> scopes to docs whose title matches (ex. ?title=obligations et des contrats)
+    so a single source can be re-embedded without touching the rest of the corpus."""
     if request.method == "OPTIONS":
         return "", 204
     try:
@@ -4875,19 +4879,19 @@ def rag_reindex_all():
         # Paginated: process only `limit` docs starting at `offset`
         offset = int(request.args.get("offset", 0))
         limit = min(int(request.args.get("limit", 200)), 300)
+        title_filter = (request.args.get("title") or "").strip()
         fixed = skipped = errors = 0
-        docs = supa_get("rag_documents", {
-            "select": "id,content",
-            "limit": str(limit),
-            "offset": str(offset)
-        })
+        params = {"select": "id,content", "limit": str(limit), "offset": str(offset), "order": "id"}
+        if title_filter:
+            params["title"] = f"ilike.*{title_filter}*"
+        docs = supa_get("rag_documents", params)
         for doc in (docs or []):
             try:
                 content = (doc.get("content") or "").strip()
                 if not content:
                     skipped += 1
                     continue
-                emb = get_embedding(content[:1000], voyage_key)
+                emb = get_embedding(content[:6000], voyage_key)
                 if not emb or len(emb) != 1024:
                     skipped += 1
                     continue
@@ -4902,10 +4906,11 @@ def rag_reindex_all():
             except Exception as de:
                 errors += 1
         next_offset = offset + limit
+        _title_qs = f"&title={title_filter}" if title_filter else ""
         return jsonify({
             "success": True, "fixed": fixed, "skipped": skipped, "errors": errors,
             "offset": offset, "limit": limit,
-            "next_call": f"?offset={next_offset}&limit={limit}",
+            "next_call": f"?offset={next_offset}&limit={limit}{_title_qs}",
             "done": len(docs or []) < limit
         })
     except Exception as e:
