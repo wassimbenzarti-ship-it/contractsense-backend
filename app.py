@@ -4664,6 +4664,17 @@ def rag_search_debug():
         if force_method == "pgvector":
             _rdocs = search_rag_pgvector(_qemb, top_k=k)
             out["method"] = "pgvector (forced)"
+            if not _rdocs:
+                # Surface the raw RPC error instead of swallowing it, for diagnosis
+                _vec_str = "[" + ",".join(str(x) for x in _qemb) + "]"
+                _dbg = requests.post(
+                    SUPA_URL + "/rest/v1/rpc/search_rag",
+                    headers=supa_headers(),
+                    json={"query_embedding": _vec_str, "match_count": k, "filter_type": None, "filter_user": None},
+                    timeout=15
+                )
+                out["_debug_rpc_status"] = _dbg.status_code
+                out["_debug_rpc_body"] = _dbg.text[:500]
         elif force_method == "keyword":
             _rdocs = search_rag_keyword(q, top_k=k)
             out["method"] = "keyword (forced)"
