@@ -4694,6 +4694,81 @@ def rag_search_debug():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/rag/exhaustive-similarity", methods=["GET"])
+def rag_exhaustive_similarity():
+    """Debug endpoint: brute-force exact cosine similarity in Python against EVERY doc
+    in rag_documents (paginated fetch, no RPC, no SQL threshold/filter logic involved).
+    Lets us check whether a known-relevant chunk genuinely has low semantic similarity
+    to a query (real vocabulary gap) vs. being a high-similarity match that the
+    search_rag/search_rag_hybrid RPCs are failing to surface (RPC-side bug).
+    Usage: GET /rag/exhaustive-similarity?q=...&substr=édifice+ruine&k=15
+    &substr (optional): also reports the rank/score of any doc whose content contains it."""
+    try:
+        q = (request.args.get("q") or "").strip()
+        k = min(max(int(request.args.get("k") or 15), 1), 50)
+        substr = (request.args.get("substr") or "").strip().lower()
+        if not q:
+            return jsonify({"error": "paramètre q requis"}), 400
+        voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+        query_vec = get_embedding(q[:700], voyage_key)
+        scored = []
+        substr_hits = []
+        offset = 0
+        total_scanned = 0
+        while True:
+            batch = supa_get("rag_documents", {
+                "select": "id,title,content,source,category,embedding,embedding_vector",
+                "limit": "500",
+                "offset": str(offset)
+            }) or []
+            if not batch:
+                break
+            for doc in batch:
+                total_scanned += 1
+                emb = None
+                raw_emb = doc.get("embedding")
+                if isinstance(raw_emb, str) and raw_emb.strip():
+                    try: emb = json.loads(raw_emb)
+                    except: pass
+                elif isinstance(raw_emb, list):
+                    emb = raw_emb
+                if not emb:
+                    raw_vec = doc.get("embedding_vector")
+                    if isinstance(raw_vec, str) and raw_vec.strip().startswith("["):
+                        try: emb = json.loads(raw_vec)
+                        except: pass
+                    elif isinstance(raw_vec, list):
+                        emb = raw_vec
+                if not emb or len(emb) != len(query_vec):
+                    continue
+                sim = cosine_similarity(query_vec, emb)
+                entry = {
+                    "id": doc.get("id"), "title": doc.get("title") or doc.get("source"),
+                    "category": doc.get("category", ""), "similarity": sim,
+                    "excerpt": str(doc.get("content", ""))[:300]
+                }
+                scored.append(entry)
+                if substr and substr in str(doc.get("content", "")).lower():
+                    substr_hits.append(entry)
+            if len(batch) < 500:
+                break
+            offset += 500
+        scored.sort(key=lambda x: x["similarity"], reverse=True)
+        for rank, e in enumerate(scored, start=1):
+            e["rank"] = rank
+        result = {
+            "query": q, "total_scanned": total_scanned,
+            "top": scored[:k],
+        }
+        if substr:
+            substr_hits.sort(key=lambda x: x["rank"])
+            result["substr"] = substr
+            result["substr_matches"] = substr_hits[:10]
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/rag/list", methods=["GET"])
 def rag_list():
     try:
