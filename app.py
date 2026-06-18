@@ -5393,6 +5393,13 @@ def chat():
                 "Si la BASE LÉGALE ne permet pas de répondre précisément, termine simplement en invitant "
                 "l'utilisateur à préciser sa question ou à fournir le texte/l'article concerné — "
                 "SANS jamais évoquer de contrat à analyser.\n"
+                "ORIENTATION OPINION JURIDIQUE : tu construis avec l'utilisateur un avis juridique exploitable, "
+                "pas un simple échange de questions/réponses. Quand — et seulement quand — tu viens de fournir "
+                "une réponse juridique substantielle et étayée par la BASE LÉGALE (pas une simple demande de "
+                "précision ni un refus faute de source), termine ta réponse par UNE phrase brève proposant la "
+                "formalisation : « Souhaitez-vous que je formalise cette analyse en mémo Word ou en email ? » "
+                "Ne le propose pas après une question de clarification ou un refus — uniquement après un avis "
+                "réellement constitué.\n"
                 + _legal_sourcing_rules
                 + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
                 + _legal_rag_ctx
@@ -5638,6 +5645,62 @@ def export_chat_memo():
             as_attachment=True,
             download_name="memo-juridique.docx"
         )
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/chat/export-email", methods=["POST", "OPTIONS"])
+def export_chat_email():
+    """Synthétise un échange de l'assistant 'Avis juridique' en email prêt à envoyer
+    (objet + corps), retourné en JSON pour copier/coller ou ouvrir dans le client mail."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        history = data.get("history") or []
+
+        turns = [
+            h for h in history
+            if isinstance(h, dict) and h.get("role") in ("user", "assistant") and (h.get("content") or "").strip()
+        ]
+        if not turns:
+            return jsonify({"error": "Aucun échange à synthétiser"}), 400
+        turns = turns[-20:]
+
+        qa_text = "\n\n".join(
+            ("QUESTION : " if t["role"] == "user" else "RÉPONSE : ") + t["content"].strip()
+            for t in turns
+        )
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        synth = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Tu vas rédiger un email professionnel en français à partir de l'échange juridique "
+                    "ci-dessous entre un avocat et un assistant de recherche juridique. "
+                    "Réponds STRICTEMENT au format suivant, sans rien ajouter avant ou après :\n"
+                    "OBJET: (une ligne, concise, résumant le sujet juridique)\n"
+                    "CORPS:\n"
+                    "(email complet : formule d'appel neutre 'Bonjour,', synthèse de l'analyse juridique en "
+                    "paragraphes clairs ou listes à puces avec '- ', puis une formule de politesse professionnelle "
+                    "et une ligne de signature générique 'Cordialement,')\n"
+                    "N'invente AUCUNE information absente de l'échange ci-dessous. "
+                    "Ne mentionne jamais de 'contrat' sauf si l'échange en parle explicitement.\n\n"
+                    "ÉCHANGE :\n" + qa_text
+                )
+            }]
+        )
+        raw = synth.content[0].text.strip()
+
+        m = re.match(r"OBJET:\s*(.+?)\nCORPS:\s*(.*)", raw, re.DOTALL | re.IGNORECASE)
+        if m:
+            subject, body = m.group(1).strip(), m.group(2).strip()
+        else:
+            subject, body = "Avis juridique — Omniscient", raw
+
+        return jsonify({"subject": subject, "body": body})
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
