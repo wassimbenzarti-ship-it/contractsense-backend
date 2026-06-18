@@ -1,10 +1,14 @@
--- Fix 1: search_rag (3-arg, plpgsql) — add ivfflat.probes to avoid low-recall ANN misses
+-- Fix 1: search_rag (3-arg, plpgsql) — add ivfflat.probes via function-level SET clause
+-- (NOT a "SET LOCAL ...;" statement inside the body — that errors with
+-- "SET is not allowed in a non-volatile function". The SET clause attached to
+-- the function signature itself is the correct, volatility-safe way to scope
+-- a GUC to a single function call.)
 CREATE OR REPLACE FUNCTION public.search_rag(query_embedding vector, match_count integer DEFAULT 10, filter_type text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, similarity double precision)
  LANGUAGE plpgsql
+ SET ivfflat.probes = 20
 AS $function$
 BEGIN
-  SET LOCAL ivfflat.probes = 20;
   RETURN QUERY
   SELECT
     r.id::text,
@@ -23,13 +27,13 @@ BEGIN
 END;
 $function$;
 
--- Fix 2: search_rag (4-arg, sql) — same probes fix
+-- Fix 2: search_rag (4-arg, sql) — same probes fix via function-level SET
 CREATE OR REPLACE FUNCTION public.search_rag(query_embedding vector, match_count integer DEFAULT 15, filter_type text DEFAULT NULL::text, filter_user text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, jurisdiction text, article_number text, article_title text, law_name text, tags text[], contract_types text[], document_id text, chunk_index integer, similarity double precision)
  LANGUAGE sql
  STABLE
+ SET ivfflat.probes = 20
 AS $function$
-  SET LOCAL ivfflat.probes = 20;
   SELECT
     id, title, content, source, category, party_label, jurisdiction,
     article_number, article_title, law_name, tags, contract_types,
@@ -42,16 +46,16 @@ AS $function$
   LIMIT match_count;
 $function$;
 
--- Fix 3: search_rag_hybrid — add ivfflat.probes AND fix missing ORDER BY before LIMIT 40
--- in the bm25 CTE (it previously had a ROW_NUMBER() rank computed but no ORDER BY governing
--- which 40 rows survived the LIMIT, so it returned an arbitrary subset, not the top 40 by
--- BM25 relevance).
+-- Fix 3: search_rag_hybrid — add ivfflat.probes via function-level SET AND fix missing
+-- ORDER BY before LIMIT 40 in the bm25 CTE (it previously had a ROW_NUMBER() rank computed
+-- but no ORDER BY governing which 40 rows survived the LIMIT, so it returned an arbitrary
+-- subset, not the top 40 by BM25 relevance).
 CREATE OR REPLACE FUNCTION public.search_rag_hybrid(query_text text, query_embedding vector, match_count integer DEFAULT 15, p_jurisdiction text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, jurisdiction text, article_number text, article_title text, law_name text, tags text[], contract_types text[], document_id text, chunk_index integer, score double precision)
  LANGUAGE sql
  STABLE
+ SET ivfflat.probes = 20
 AS $function$
-  SET LOCAL ivfflat.probes = 20;
   WITH
   q AS (
     SELECT CASE
