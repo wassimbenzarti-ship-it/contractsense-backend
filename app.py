@@ -4640,29 +4640,40 @@ def rag_check_source():
 @app.route("/rag/search", methods=["GET", "POST"])
 def rag_search_debug():
     """Debug endpoint: run the same retrieval pipeline as /chat and show what comes back.
-    Usage: GET /rag/search?q=durée+inscription+sûretés+mobilières&k=20"""
+    Usage: GET /rag/search?q=durée+inscription+sûretés+mobilières&k=20
+    Optional &method=hybrid|pgvector|keyword forces a single method (bypasses fallback chain) —
+    useful to isolate whether BM25 or vector similarity is driving (or hiding) a given result."""
     try:
         if request.method == "POST":
             body = request.get_json() or {}
             q = (body.get("q") or "").strip()
             k = int(body.get("k") or 20)
+            force_method = (body.get("method") or "").strip().lower()
         else:
             q = (request.args.get("q") or "").strip()
             k = int(request.args.get("k") or 20)
+            force_method = (request.args.get("method") or "").strip().lower()
         if not q:
             return jsonify({"error": "paramètre q requis"}), 400
         k = min(max(k, 1), 50)
         out = {"query": q, "results": []}
         _vkey = os.environ.get("VOYAGE_API_KEY")
         _qemb = get_embedding(q[:700], voyage_key=_vkey)
-        _rdocs = search_rag_hybrid(q[:300], _qemb, top_k=k)
-        out["method"] = "hybrid"
-        if not _rdocs:
+        if force_method == "pgvector":
             _rdocs = search_rag_pgvector(_qemb, top_k=k)
-            out["method"] = "pgvector"
-        if not _rdocs:
+            out["method"] = "pgvector (forced)"
+        elif force_method == "keyword":
             _rdocs = search_rag_keyword(q, top_k=k)
-            out["method"] = "keyword"
+            out["method"] = "keyword (forced)"
+        else:
+            _rdocs = search_rag_hybrid(q[:300], _qemb, top_k=k)
+            out["method"] = "hybrid"
+            if not _rdocs:
+                _rdocs = search_rag_pgvector(_qemb, top_k=k)
+                out["method"] = "pgvector"
+            if not _rdocs:
+                _rdocs = search_rag_keyword(q, top_k=k)
+                out["method"] = "keyword"
         # Same direct article-number / code-name lookup as /chat
         _direct = search_rag_article_refs(q) + search_rag_code_refs(q)
         out["direct_article_hits"] = len(_direct)
