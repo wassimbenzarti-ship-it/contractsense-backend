@@ -2484,6 +2484,187 @@ def validate_analysis_by_director(analysis_id):
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
+# ===== LEGAL OPINIONS (Avis juridique) — workflow & RAG promotion =====
+
+@app.route("/legal-opinions/request-revision/<opinion_id>", methods=["POST", "OPTIONS"])
+def legal_opinion_request_revision(opinion_id):
+    """Le directeur renvoie un avis juridique au juriste avec une note (mirrors /analyses/request-revision)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        director_notes = (data.get("director_notes") or "").strip()
+        patch = {
+            "status": "revision_requested",
+            "director_notes": director_notes,
+            "director_email": data.get("director_email", "")
+        }
+        patch_url = SUPA_URL + f"/rest/v1/legal_opinions?id=eq.{opinion_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        r = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Avis introuvable ou droits insuffisants"}), 403
+        try:
+            row = rows[0]
+            juriste_email = row.get("user_email") or data.get("juriste_email", "")
+            director_email_val = data.get("director_email", "")
+            title = row.get("title") or "Avis juridique"
+            now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            if juriste_email:
+                send_email(juriste_email,
+                    f"[Omniscient] Le directeur a renvoyé votre avis juridique — {title}",
+                    f"""<p>Bonjour,</p>
+<p>Le directeur <strong>{director_email_val or 'votre directeur'}</strong> a examiné votre avis juridique et vous le renvoie pour révision.</p>
+<ul><li><strong>Sujet :</strong> {title}</li><li><strong>Date :</strong> {now}</li></ul>
+{f'<p><strong>Note :</strong> {director_notes}</p>' if director_notes else ''}
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> pour consulter la note du directeur et soumettre votre nouvelle version.</p>""")
+        except Exception as _ne:
+            print(f"[legal-opinions notify] juriste email failed: {_ne}", flush=True)
+        return jsonify({"status": "ok", "updated": len(rows)})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/legal-opinions/assign-to-juriste/<opinion_id>", methods=["POST", "OPTIONS"])
+def legal_opinion_assign_to_juriste(opinion_id):
+    """Le directeur assigne son propre avis à un juriste pour relecture (mirrors /analyses/assign-to-juriste).
+    Change user_email (reassigne la propriété) → nécessite la clé service pour contourner les RLS."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        juriste_email  = (data.get("juriste_email") or "").strip()
+        director_email = (data.get("director_email") or "").strip()
+        director_notes = (data.get("director_notes") or "").strip()
+        if not juriste_email:
+            return jsonify({"error": "juriste_email requis"}), 400
+        patch = {
+            "user_email": juriste_email,
+            "status": "revision_requested",
+            "director_email": director_email,
+            "director_notes": director_notes
+        }
+        key = SUPA_SERVICE_KEY or SUPA_KEY
+        r = requests.patch(
+            SUPA_URL + f"/rest/v1/legal_opinions?id=eq.{opinion_id}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json", "Prefer": "return=representation"},
+            json=patch, timeout=10
+        )
+        if not r.ok:
+            err = r.json() if r.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {r.status_code}")}), 500
+        rows = r.json() if r.content else []
+        if not rows:
+            return jsonify({"error": "Avis introuvable"}), 404
+        try:
+            row = rows[0]
+            title = row.get("title") or "Avis juridique"
+            now = datetime.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            send_email(juriste_email,
+                f"[Omniscient] Avis juridique assigné pour révision — {title}",
+                f"""<p>Bonjour,</p>
+<p>Le directeur <strong>{director_email or 'votre directeur'}</strong> vous a assigné un avis juridique pour révision.</p>
+<ul><li><strong>Sujet :</strong> {title}</li><li><strong>Date :</strong> {now}</li></ul>
+{f'<p><strong>Note :</strong> {director_notes}</p>' if director_notes else ''}
+<p>Connectez-vous à <a href="https://ai.westfieldavocats.com">Omniscient</a> pour traiter cet avis.</p>""")
+        except Exception as _ne:
+            print(f"[legal-opinions assign] email error: {_ne}", flush=True)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/legal-opinions/validate-by-director/<opinion_id>", methods=["POST", "OPTIONS"])
+def legal_opinion_validate_by_director(opinion_id):
+    """Validation finale du directeur : marque l'avis comme intégré, puis le pousse
+    (1) dans le RAG admin global (rag_documents) et (2) dans le sous-RAG du cabinet (user_models / Modèles)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        director_email = (data.get("director_email") or "").strip()
+        rows = supa_get("legal_opinions", {"id": f"eq.{opinion_id}", "limit": "1"})
+        if not rows:
+            return jsonify({"error": "Avis introuvable"}), 404
+        op = rows[0]
+        title = op.get("title") or "Avis juridique"
+        conversation = op.get("conversation") or []
+        if isinstance(conversation, str):
+            try:
+                conversation = json.loads(conversation)
+            except Exception:
+                conversation = []
+        qa_text = "\n\n".join(
+            ("QUESTION : " if t.get("role") == "user" else "RÉPONSE : ") + (t.get("content") or "").strip()
+            for t in conversation if isinstance(t, dict) and (t.get("content") or "").strip()
+        )
+        content_text = "AVIS JURIDIQUE [" + title + "]\n\n" + qa_text
+
+        patch = {"status": "final_validated", "director_email": director_email}
+        patch_url = SUPA_URL + f"/rest/v1/legal_opinions?id=eq.{opinion_id}"
+        patch_headers = {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        pr = requests.patch(patch_url, headers=patch_headers, json=patch, timeout=10)
+        if not pr.ok:
+            err = pr.json() if pr.content else {}
+            return jsonify({"error": err.get("message", f"Erreur Supabase {pr.status_code}")}), 500
+        prows = pr.json() if pr.content else []
+        if not prows:
+            return jsonify({"error": "Avis introuvable ou droits insuffisants"}), 403
+
+        # 1) RAG admin global (rag_documents) — recherchable via search_rag/search_rag_hybrid
+        try:
+            voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+            embedding = get_embedding(content_text, voyage_key)
+            save_rag_doc({
+                "id": str(uuid.uuid4()),
+                "title": "[AVIS JURIDIQUE] " + title,
+                "category": "legal_opinion",
+                "content": content_text,
+                "embedding": json.dumps(embedding),
+                "source": ("org:" + director_email + "§" if director_email else "") + "legal_opinion_validated",
+                "validated_at": datetime.datetime.now().isoformat()
+            })
+        except Exception as _re:
+            print("legal-opinion -> rag_documents ERROR: " + str(_re), flush=True)
+
+        # 2) Sous-RAG du cabinet (user_models / "Modèles") — injecté en priorité dans analyze_contract
+        try:
+            dir_user_id = None
+            if director_email:
+                dacc = supa_get("user_accounts", {"email": f"eq.{director_email}", "select": "id", "limit": "1"})
+                if dacc:
+                    dir_user_id = dacc[0].get("id")
+            model_row = {
+                "id": str(uuid.uuid4()),
+                "user_email": director_email,
+                "filename": "[Avis juridique] " + title,
+                "content": content_text,
+                "category": "avis_juridique",
+                "is_public": False
+            }
+            if dir_user_id:
+                model_row["user_id"] = dir_user_id
+            supa_insert("user_models", model_row)
+        except Exception as _me:
+            print("legal-opinion -> user_models ERROR: " + str(_me), flush=True)
+
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
 # ===== ADMIN USER CREATION =====
 
 @app.route("/admin/create-user", methods=["POST", "OPTIONS"])
