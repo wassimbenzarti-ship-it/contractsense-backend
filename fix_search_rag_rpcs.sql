@@ -1,12 +1,19 @@
--- Fix 1: search_rag (3-arg, plpgsql) — add ivfflat.probes via function-level SET clause
--- (NOT a "SET LOCAL ...;" statement inside the body — that errors with
--- "SET is not allowed in a non-volatile function". The SET clause attached to
--- the function signature itself is the correct, volatility-safe way to scope
--- a GUC to a single function call.)
+-- Root fix: drop the ivfflat approximate-nearest-neighbor index entirely.
+-- It only probes 1/100 "lists" by default (ivfflat.probes=1), so most queries
+-- never actually scan the list containing the true nearest neighbor — this is
+-- what caused search_rag / search_rag_hybrid to silently return semantically
+-- wrong top results. Attempting to fix this via SET ivfflat.probes (either as
+-- an in-body SET LOCAL, or as a function-level SET clause) fails with
+-- "permission denied to set parameter" on this Supabase role.
+-- At this corpus size (a few thousand chunks), an exact brute-force cosine
+-- scan on every query is still fast and removes the recall problem at the
+-- root — correctness matters far more than the marginal latency here.
+DROP INDEX IF EXISTS rag_embedding_idx;
+
+-- Fix 1: search_rag (3-arg, plpgsql) — unchanged logic, no probes tuning needed now
 CREATE OR REPLACE FUNCTION public.search_rag(query_embedding vector, match_count integer DEFAULT 10, filter_type text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, similarity double precision)
  LANGUAGE plpgsql
- SET ivfflat.probes = 20
 AS $function$
 BEGIN
   RETURN QUERY
@@ -27,12 +34,11 @@ BEGIN
 END;
 $function$;
 
--- Fix 2: search_rag (4-arg, sql) — same probes fix via function-level SET
+-- Fix 2: search_rag (4-arg, sql) — unchanged logic
 CREATE OR REPLACE FUNCTION public.search_rag(query_embedding vector, match_count integer DEFAULT 15, filter_type text DEFAULT NULL::text, filter_user text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, jurisdiction text, article_number text, article_title text, law_name text, tags text[], contract_types text[], document_id text, chunk_index integer, similarity double precision)
  LANGUAGE sql
  STABLE
- SET ivfflat.probes = 20
 AS $function$
   SELECT
     id, title, content, source, category, party_label, jurisdiction,
@@ -46,15 +52,14 @@ AS $function$
   LIMIT match_count;
 $function$;
 
--- Fix 3: search_rag_hybrid — add ivfflat.probes via function-level SET AND fix missing
--- ORDER BY before LIMIT 40 in the bm25 CTE (it previously had a ROW_NUMBER() rank computed
--- but no ORDER BY governing which 40 rows survived the LIMIT, so it returned an arbitrary
--- subset, not the top 40 by BM25 relevance).
+-- Fix 3: search_rag_hybrid — fix missing ORDER BY before LIMIT 40 in the bm25 CTE
+-- (it previously had a ROW_NUMBER() rank computed but no ORDER BY governing which
+-- 40 rows survived the LIMIT, so it returned an arbitrary subset, not the top 40
+-- by BM25 relevance).
 CREATE OR REPLACE FUNCTION public.search_rag_hybrid(query_text text, query_embedding vector, match_count integer DEFAULT 15, p_jurisdiction text DEFAULT NULL::text)
  RETURNS TABLE(id text, title text, content text, source text, category text, party_label text, jurisdiction text, article_number text, article_title text, law_name text, tags text[], contract_types text[], document_id text, chunk_index integer, score double precision)
  LANGUAGE sql
  STABLE
- SET ivfflat.probes = 20
 AS $function$
   WITH
   q AS (
