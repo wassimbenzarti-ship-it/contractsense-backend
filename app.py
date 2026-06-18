@@ -5104,6 +5104,24 @@ def account_info():
     rem = acc.get("analyses_remaining", 0) or 0
     return jsonify({**acc, "can_analyze": rem > 0})
 
+
+@app.route("/account/upload-logo", methods=["POST", "OPTIONS"])
+def upload_firm_logo():
+    """Enregistre/supprime le logo du cabinet (affiché dans les documents générés, ex. mémo juridique)."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip()
+        if not email:
+            return jsonify({"error": "email requis"}), 400
+        logo_base64 = data.get("logo_base64") or None
+        r = supa_patch("user_accounts", {"firm_logo": logo_base64}, f"email=eq.{email}")
+        if not r.ok:
+            return jsonify({"error": f"Erreur Supabase {r.status_code}"}), 500
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
 # ── CMI Payment ──────────────────────────────────────────────────────────────
 
 def cmi_hash(params, store_key):
@@ -5665,6 +5683,21 @@ def export_chat_memo():
             for t in turns
         )
 
+        # Logo du cabinet (remplace le branding "Omniscient" dans le document généré)
+        user_email = (data.get("user_email") or "").strip()
+        logo_b64 = None
+        if user_email:
+            try:
+                accs = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "firm_logo,role,parent_email", "limit": "1"})
+                if accs:
+                    logo_b64 = accs[0].get("firm_logo")
+                    if not logo_b64 and accs[0].get("role") == "juriste" and accs[0].get("parent_email"):
+                        dacc = supa_get("user_accounts", {"email": f"eq.{accs[0]['parent_email']}", "select": "firm_logo", "limit": "1"})
+                        if dacc:
+                            logo_b64 = dacc[0].get("firm_logo")
+            except Exception as _le:
+                print("export-memo logo lookup error: " + str(_le))
+
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         synth = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -5672,12 +5705,19 @@ def export_chat_memo():
             messages=[{
                 "role": "user",
                 "content": (
-                    "Tu vas rédiger une note juridique (mémo) en français à partir de l'échange ci-dessous "
-                    "entre un avocat et un assistant de recherche juridique. "
-                    "Structure stricte à respecter, avec ces en-têtes EXACTS précédés de '## ' :\n"
-                    "## Objet\n(1-2 phrases résumant la question posée)\n"
-                    "## Analyse\n(synthèse claire et structurée de la réponse juridique, en paragraphes ou listes à puces avec '- ')\n"
-                    "## Conclusion\n(synthèse opérationnelle en 2-4 phrases)\n"
+                    "Tu vas rédiger une note juridique (mémo) structurée et rédigée en français à partir de l'échange "
+                    "ci-dessous entre un avocat et un assistant de recherche juridique. "
+                    "Respecte une structure stricte en 3 sections numérotées, avec ces en-têtes EXACTS précédés de '## ' :\n"
+                    "## 1. Objet de la consultation\n"
+                    "(2 à 4 phrases rédigées en prose, présentant clairement la question juridique posée et son contexte)\n"
+                    "## 2. Analyse juridique\n"
+                    "(développement rédigé en paragraphes complets et argumentés, citant les textes et règles applicables "
+                    "évoqués dans l'échange ; n'utilise des listes à puces qu'à titre exceptionnel pour énumérer des "
+                    "éléments réellement distincts, jamais comme structure principale de la section)\n"
+                    "## 3. Conclusion et recommandations\n"
+                    "(synthèse opérationnelle rédigée en 3 à 5 phrases, formulée comme une recommandation claire à l'avocat)\n"
+                    "Rédige dans un style professionnel et fluide, en phrases complètes et bien construites — évite "
+                    "absolument le style télégraphique ou les bouts de phrase juxtaposés. "
                     "N'invente AUCUNE information absente de l'échange ci-dessous. "
                     "Ne mentionne jamais de 'contrat' sauf si l'échange en parle explicitement.\n\n"
                     "ÉCHANGE :\n" + qa_text
@@ -5687,7 +5727,7 @@ def export_chat_memo():
         memo_text = synth.content[0].text.strip()
 
         from docx import Document as _MemoDoc
-        from docx.shared import Pt, Cm, RGBColor
+        from docx.shared import Pt, Cm, RGBColor, Inches
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         doc = _MemoDoc()
@@ -5695,7 +5735,15 @@ def export_chat_memo():
             section.top_margin = Cm(2.2); section.bottom_margin = Cm(2.2)
             section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
 
-        h = doc.add_heading("Note juridique — Omniscient", level=0)
+        if logo_b64:
+            try:
+                _logo_data = logo_b64.split(",", 1)[1] if "," in logo_b64 else logo_b64
+                doc.add_picture(io.BytesIO(base64.b64decode(_logo_data)), width=Inches(1.6))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            except Exception as _le2:
+                print("export-memo logo embed error: " + str(_le2))
+
+        h = doc.add_heading("Note juridique", level=0)
         h.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         meta = doc.add_paragraph()
@@ -5724,16 +5772,6 @@ def export_chat_memo():
                         doc.add_paragraph(line)
             else:
                 doc.add_paragraph(block)
-
-        doc.add_page_break()
-        doc.add_heading("Annexe — Échange complet", level=2)
-        for t in turns:
-            label = "Question" if t["role"] == "user" else "Réponse"
-            p = doc.add_paragraph()
-            r = p.add_run(label + " : ")
-            r.bold = True
-            p.add_run(t["content"].strip())
-            doc.add_paragraph()
 
         out = io.BytesIO()
         doc.save(out)
