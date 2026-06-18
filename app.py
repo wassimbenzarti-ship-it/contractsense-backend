@@ -5201,6 +5201,7 @@ def chat():
         file_cache_id  = (data.get("file_cache_id") or "").strip()
         file_storage_path = (data.get("file_storage_path") or "").strip()
         user_email_chat = (data.get("user_email") or "").strip()
+        general_qa     = bool(data.get("general_qa"))
 
         if not message:
             return jsonify({"error": "message requis"}), 400
@@ -5307,19 +5308,7 @@ def chat():
             print(f"[/chat] RAG error: {_re}")
 
         # System prompt
-        system_prompt = (
-            "RÈGLE #0 — PRIORITÉ MAXIMALE — BLOC <modification> EN PREMIER :\n"
-            "Dès que tu modifies ou proposes une nouvelle rédaction pour une clause, "
-            "produis LE BLOC <modification> IMMÉDIATEMENT, AVANT tout texte explicatif. "
-            "Format exact :\n"
-            "<modification>\n"
-            "{\"clause_name\":\"Article X – Titre\",\"original\":\"[copie exacte]\",\"proposed\":\"[rédaction complète]\"}\n"
-            "</modification>\n"
-            "Tu peux expliquer APRÈS le bloc, jamais avant. "
-            "INTERDIT : annoncer 'J'intègre maintenant...' ou 'Je vais modifier...' sans produire le bloc dans la même réponse.\n\n"
-            "Tu es un assistant juridique expert en droit des contrats. "
-            "Tu aides un avocat à analyser et améliorer un contrat. "
-            "Réponds toujours en français, de manière professionnelle.\n"
+        _legal_sourcing_rules = (
             "RÈGLE ABSOLUE SUR LES SOURCES LÉGALES :\n"
             "1. La BASE LÉGALE ET DOCUMENTAIRE fournie ci-dessous a une PRIORITÉ ABSOLUE sur ta mémoire d'entraînement. "
             "Si un chiffre (durée, montant, délai, seuil) figure dans la BASE LÉGALE, c'est CE chiffre qui s'applique, "
@@ -5335,28 +5324,63 @@ def chat():
             "5. Tu peux énoncer un principe général (ex. 'la loi impose un délai de conservation') "
             "MAIS JAMAIS le chiffre exact (ex. 'ce délai est de 6 ans') sans source dans la BASE LÉGALE.\n"
             "INTERDIT : inventer une liste de lois 'disponibles', citer des articles sans les avoir dans le contexte.\n"
-            "CAPACITÉ TRADUCTION WORD : si l'utilisateur demande une traduction du contrat en Word/DOCX "
-            "(en anglais, français, arabe, etc.), ou confirme vouloir générer le fichier, "
-            "réponds avec UNE SEULE phrase de confirmation puis place IMMÉDIATEMENT le marqueur — "
-            "INTERDIT de demander 'voulez-vous que je génère ?' ou toute confirmation supplémentaire. "
-            "Marqueur à placer seul sur la dernière ligne : "
-            "[EXPORT_TRANSLATION:en] pour anglais, [EXPORT_TRANSLATION:fr] pour français, "
-            "[EXPORT_TRANSLATION:ar] pour arabe. "
-            "Ce marqueur déclenchera automatiquement la génération et le téléchargement du fichier Word.\n"
-            + (
-                f"PARTIE REPRÉSENTÉE : {partie}.\n"
-                f"Tu défends EXCLUSIVEMENT les intérêts de '{partie}'. "
-                f"Avant de proposer toute modification, pose-toi cette question : "
-                f"'Cette modification réduit-elle les obligations de '{partie}', augmente-t-elle ses droits, ou retire-t-elle un risque pour '{partie}' ?' "
-                f"Si la réponse est non — si la modification AJOUTE des obligations ou des restrictions SUR '{partie}' — NE LA PROPOSE PAS. "
-                f"Exemple interdit : une clause oblige UNIQUEMENT l'autre partie ; la rendre réciproque ajoute une obligation sur '{partie}' → INTERDIT.\n"
-                if partie else ""
+        )
+
+        if general_qa:
+            # Avis juridique général — pas de contrat ouvert, pas de blocs <modification>,
+            # le bot ne doit jamais évoquer ou demander un contrat à analyser.
+            system_prompt = (
+                "Tu es Omniscient, un assistant de recherche juridique générale en droit marocain. "
+                "L'utilisateur n'a AUCUN contrat ouvert — il pose une question juridique générale "
+                "(loi, procédure, délai, garantie, jurisprudence, etc.). "
+                "Réponds toujours en français, de manière professionnelle, claire et synthétique.\n"
+                "INTERDIT ABSOLU : ne mentionne jamais 'votre contrat', ne demande jamais "
+                "'avez-vous un contrat à me soumettre' ou équivalent, ne produis jamais de bloc <modification>. "
+                "Tu es ici un assistant de recherche juridique, pas un assistant de révision contractuelle.\n"
+                "Si la BASE LÉGALE ne permet pas de répondre précisément, termine simplement en invitant "
+                "l'utilisateur à préciser sa question ou à fournir le texte/l'article concerné — "
+                "SANS jamais évoquer de contrat à analyser.\n"
+                + _legal_sourcing_rules
+                + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+                + _legal_rag_ctx
             )
-            + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-            + _legal_rag_ctx
-            + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
-            + mods_summary
-            + """
+        else:
+            system_prompt = (
+                "RÈGLE #0 — PRIORITÉ MAXIMALE — BLOC <modification> EN PREMIER :\n"
+                "Dès que tu modifies ou proposes une nouvelle rédaction pour une clause, "
+                "produis LE BLOC <modification> IMMÉDIATEMENT, AVANT tout texte explicatif. "
+                "Format exact :\n"
+                "<modification>\n"
+                "{\"clause_name\":\"Article X – Titre\",\"original\":\"[copie exacte]\",\"proposed\":\"[rédaction complète]\"}\n"
+                "</modification>\n"
+                "Tu peux expliquer APRÈS le bloc, jamais avant. "
+                "INTERDIT : annoncer 'J'intègre maintenant...' ou 'Je vais modifier...' sans produire le bloc dans la même réponse.\n\n"
+                "Tu es un assistant juridique expert en droit des contrats. "
+                "Tu aides un avocat à analyser et améliorer un contrat. "
+                "Réponds toujours en français, de manière professionnelle.\n"
+                + _legal_sourcing_rules
+                + "CAPACITÉ TRADUCTION WORD : si l'utilisateur demande une traduction du contrat en Word/DOCX "
+                "(en anglais, français, arabe, etc.), ou confirme vouloir générer le fichier, "
+                "réponds avec UNE SEULE phrase de confirmation puis place IMMÉDIATEMENT le marqueur — "
+                "INTERDIT de demander 'voulez-vous que je génère ?' ou toute confirmation supplémentaire. "
+                "Marqueur à placer seul sur la dernière ligne : "
+                "[EXPORT_TRANSLATION:en] pour anglais, [EXPORT_TRANSLATION:fr] pour français, "
+                "[EXPORT_TRANSLATION:ar] pour arabe. "
+                "Ce marqueur déclenchera automatiquement la génération et le téléchargement du fichier Word.\n"
+                + (
+                    f"PARTIE REPRÉSENTÉE : {partie}.\n"
+                    f"Tu défends EXCLUSIVEMENT les intérêts de '{partie}'. "
+                    f"Avant de proposer toute modification, pose-toi cette question : "
+                    f"'Cette modification réduit-elle les obligations de '{partie}', augmente-t-elle ses droits, ou retire-t-elle un risque pour '{partie}' ?' "
+                    f"Si la réponse est non — si la modification AJOUTE des obligations ou des restrictions SUR '{partie}' — NE LA PROPOSE PAS. "
+                    f"Exemple interdit : une clause oblige UNIQUEMENT l'autre partie ; la rendre réciproque ajoute une obligation sur '{partie}' → INTERDIT.\n"
+                    if partie else ""
+                )
+                + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
+                + _legal_rag_ctx
+                + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
+                + mods_summary
+                + """
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LOI ABSOLUE — BLOCS <modification> OBLIGATOIRES
@@ -5402,7 +5426,7 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
 {"clause_name":"Article 15.1 – Confidentialité","original":"Les parties s'engagent à garder confidentielles toutes les informations échangées.","proposed":"Les parties s'engagent mutuellement et irrévocablement à maintenir strictement confidentielles toutes informations, documents et données échangés dans le cadre du présent accord, pour une durée de cinq (5) ans suivant son expiration. En cas de divulgation non autorisée, la partie fautive dispose d'un délai de trente (30) jours pour remédier au manquement avant que des dommages et intérêts ne soient exigibles."}
 </modification>
 """
-        )
+            )
 
         # Build messages list for Claude
         messages = []
@@ -5457,6 +5481,110 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
             result["chat_remaining"] = 9999
         return jsonify(result)
 
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
+
+
+@app.route("/chat/export-memo", methods=["POST", "OPTIONS"])
+def export_chat_memo():
+    """Synthétise un échange de l'assistant 'Avis juridique' en mémo Word structuré."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        history = data.get("history") or []
+
+        turns = [
+            h for h in history
+            if isinstance(h, dict) and h.get("role") in ("user", "assistant") and (h.get("content") or "").strip()
+        ]
+        if not turns:
+            return jsonify({"error": "Aucun échange à synthétiser"}), 400
+        turns = turns[-20:]
+
+        qa_text = "\n\n".join(
+            ("QUESTION : " if t["role"] == "user" else "RÉPONSE : ") + t["content"].strip()
+            for t in turns
+        )
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        synth = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Tu vas rédiger une note juridique (mémo) en français à partir de l'échange ci-dessous "
+                    "entre un avocat et un assistant de recherche juridique. "
+                    "Structure stricte à respecter, avec ces en-têtes EXACTS précédés de '## ' :\n"
+                    "## Objet\n(1-2 phrases résumant la question posée)\n"
+                    "## Analyse\n(synthèse claire et structurée de la réponse juridique, en paragraphes ou listes à puces avec '- ')\n"
+                    "## Conclusion\n(synthèse opérationnelle en 2-4 phrases)\n"
+                    "N'invente AUCUNE information absente de l'échange ci-dessous. "
+                    "Ne mentionne jamais de 'contrat' sauf si l'échange en parle explicitement.\n\n"
+                    "ÉCHANGE :\n" + qa_text
+                )
+            }]
+        )
+        memo_text = synth.content[0].text.strip()
+
+        from docx import Document as _MemoDoc
+        from docx.shared import Pt, Cm, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        doc = _MemoDoc()
+        for section in doc.sections:
+            section.top_margin = Cm(2.2); section.bottom_margin = Cm(2.2)
+            section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
+
+        h = doc.add_heading("Note juridique — Omniscient", level=0)
+        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        meta = doc.add_paragraph()
+        meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        mr = meta.add_run("Généré le " + datetime.datetime.now().strftime("%d/%m/%Y à %H:%M"))
+        mr.font.size = Pt(9); mr.font.color.rgb = RGBColor(0x70, 0x70, 0x70); mr.italic = True
+
+        doc.add_paragraph()
+
+        for block in re.split(r'\n(?=##\s)', memo_text):
+            block = block.strip()
+            if not block:
+                continue
+            m = re.match(r'##\s*(.+?)\n(.*)', block, re.DOTALL)
+            if m:
+                heading_txt, body = m.group(1).strip(), m.group(2).strip()
+                doc.add_heading(heading_txt, level=2)
+                for line in body.split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith('- ') or line.startswith('• '):
+                        p = doc.add_paragraph('• ' + line[2:].strip())
+                        p.paragraph_format.left_indent = Cm(0.6)
+                    else:
+                        doc.add_paragraph(line)
+            else:
+                doc.add_paragraph(block)
+
+        doc.add_page_break()
+        doc.add_heading("Annexe — Échange complet", level=2)
+        for t in turns:
+            label = "Question" if t["role"] == "user" else "Réponse"
+            p = doc.add_paragraph()
+            r = p.add_run(label + " : ")
+            r.bold = True
+            p.add_run(t["content"].strip())
+            doc.add_paragraph()
+
+        out = io.BytesIO()
+        doc.save(out)
+        out.seek(0)
+        return send_file(
+            out,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            as_attachment=True,
+            download_name="memo-juridique.docx"
+        )
     except Exception as e:
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
