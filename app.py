@@ -665,10 +665,33 @@ def extract_text_from_doc_ole(file_bytes):
         print("OLE extract error: " + str(e))
         return None
 
+def _extract_docx_raw_text(file_bytes):
+    """Last-resort extraction: pulls every <w:t> run from every word/*.xml part
+    (document.xml, headers, footers, and text boxes nested inside drawings —
+    none of which the structured body walk in extract_text_from_docx traverses).
+    Uses real XML parsing (not regex) so self-closing <w:t/> runs can't bridge
+    into unrelated markup."""
+    from lxml import etree
+    w_t = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'
+    runs = []
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+        for name in z.namelist():
+            if name.startswith('word/') and name.endswith('.xml'):
+                try:
+                    root = etree.fromstring(z.read(name))
+                except Exception:
+                    continue
+                for el in root.iter(w_t):
+                    if el.text:
+                        runs.append(el.text)
+    return re.sub(r'\s+', ' ', ' '.join(runs)).strip()
+
+
 def extract_text_from_docx(file_bytes):
+    text = []
+    parse_error = None
     try:
         doc = Document(io.BytesIO(file_bytes))
-        text = []
         # Walk the body in document order: paragraphs AND table cells
         for element in doc.element.body:
             tag = element.tag.split('}')[-1] if '}' in element.tag else element.tag
@@ -690,20 +713,27 @@ def extract_text_from_docx(file_bytes):
                         text.append(" | ".join(row_texts))
         if not text:
             text = [p.text for p in doc.paragraphs if p.text.strip()]
-        return "\n".join(text)
-    except Exception:
-        # Try OLE for old .doc format
+    except Exception as e:
+        parse_error = e
+
+    result = "\n".join(text)
+
+    # Structured walk found little/no text — e.g. content lives in text boxes,
+    # headers/footers, or an exotic layout, or the file is an old/corrupted .doc.
+    # Try progressively broader fallbacks before reporting the file as unreadable.
+    if len(result.strip()) < 50:
         ole_text = extract_text_from_doc_ole(file_bytes)
-        if ole_text:
-            return ole_text
+        if ole_text and len(ole_text.strip()) > len(result.strip()):
+            result = ole_text
+    if len(result.strip()) < 50:
         try:
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-                if 'word/document.xml' in z.namelist():
-                    doc_xml = z.read('word/document.xml').decode('utf-8', errors='ignore')
-                    text = re.sub(r'<[^>]+>', ' ', doc_xml)
-                    return re.sub(r'\s+', ' ', text).strip()
+            fallback_text = _extract_docx_raw_text(file_bytes)
+            if len(fallback_text) > len(result.strip()):
+                result = fallback_text
         except Exception as e2:
-            raise ValueError("Impossible de lire le fichier Word: " + str(e2))
+            if not result.strip() and parse_error:
+                raise ValueError("Impossible de lire le fichier Word: " + str(parse_error or e2))
+    return result
 
 def extract_text_from_pdf(file_bytes):
     """Extract plain text from a PDF. Uses pypdf for text PDFs, falls back to
