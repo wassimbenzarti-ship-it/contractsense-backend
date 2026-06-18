@@ -530,14 +530,16 @@ def search_rag_pgvector(query_embedding, top_k=10, doc_type=None, user_id=None):
             vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
         else:
             vec_str = str(query_embedding)
+        # search_rag is overloaded in Postgres (3-arg vs 4-arg-with-filter_user, both with
+        # defaults) — PostgREST can't resolve which one to call unless all 4 named params
+        # of the 4-arg version are present, otherwise it errors "function is not unique",
+        # which we were silently turning into an empty result list below.
         payload = {
             "query_embedding": vec_str,
             "match_count": top_k,
-            "filter_type": doc_type
+            "filter_type": doc_type,
+            "filter_user": user_id
         }
-        # If user_id provided, search only their models
-        if user_id:
-            payload["filter_user_id"] = user_id
         r = requests.post(url, headers=supa_headers(), json=payload, timeout=15)
         if r.ok:
             results = r.json()
