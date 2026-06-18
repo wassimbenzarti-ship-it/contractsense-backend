@@ -607,6 +607,54 @@ def search_rag_article_refs(query_text, limit_per_ref=6):
         print(f"search_rag_article_refs error: {e}")
     return hits
 
+# Legal codes whose archaic/statutory phrasing doesn't match modern query vocabulary
+# (ex. DOC de 1913 dit "louage d'ouvrage" / "périt par vice de construction" pour ce que
+# les utilisateurs et la doctrine moderne appellent "garantie décennale" — la similarité
+# vectorielle/BM25 perd alors face à des documents qui contiennent le terme moderne).
+# Quand le nom du code est cité explicitement dans la requête, on scope une recherche
+# par mots-clés à ce code uniquement, en bypassant le ranking sémantique global.
+RAG_CODE_ALIASES = [
+    (r"\b(doc|dahir des obligations|code des obligations)\b", "obligations et des contrats"),
+    (r"\bcode du travail\b", "code du travail"),
+    (r"\bcode de commerce\b", "code de commerce"),
+    (r"\bcode des assurances\b", "code des assurances"),
+]
+
+def search_rag_code_refs(query_text, limit=8):
+    """Direct keyword-scoped lookup when the query names a legal code explicitly
+    (ex. 'le DOC', 'le code du travail'). See RAG_CODE_ALIASES for rationale."""
+    hits = []
+    try:
+        qlow = query_text.lower()
+        title_kw = None
+        for pattern, kw in RAG_CODE_ALIASES:
+            if re.search(pattern, qlow, re.IGNORECASE):
+                title_kw = kw
+                break
+        if not title_kw:
+            return hits
+        docs = supa_get("rag_documents", {
+            "title": f"ilike.*{title_kw}*",
+            "select": "id,title,content,category,source,jurisdiction",
+            "limit": "500"
+        }) or []
+        if not docs:
+            return hits
+        query_words = set(re.findall(r"\w{4,}", qlow)) - set(re.findall(r"\w{4,}", title_kw.lower()))
+        scored = []
+        for d in docs:
+            text = (d.get("title", "") + " " + d.get("content", "")).lower()
+            doc_words = set(re.findall(r"\w{4,}", text))
+            overlap = len(query_words & doc_words)
+            if overlap == 0:
+                continue
+            scored.append((overlap, d))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        hits = [d for _, d in scored[:limit]]
+    except Exception as e:
+        print(f"search_rag_code_refs error: {e}")
+    return hits
+
 def extract_article_refs(content, title=""):
     """Extract article references (e.g. 'Art. 16 CT', 'Article 264 DOC') from RAG doc content."""
     refs = re.findall(r'\bArt(?:icle)?\.?\s*\d+[\w\-]*(?:\s+(?:CT|DOC|CC|CO|CSC|CPCM|CPC))?\b', content or "", re.IGNORECASE)
@@ -4613,8 +4661,8 @@ def rag_search_debug():
         if not _rdocs:
             _rdocs = search_rag_keyword(q, top_k=k)
             out["method"] = "keyword"
-        # Same direct article-number lookup as /chat
-        _direct = search_rag_article_refs(q)
+        # Same direct article-number / code-name lookup as /chat
+        _direct = search_rag_article_refs(q) + search_rag_code_refs(q)
         out["direct_article_hits"] = len(_direct)
         for _d in _direct:
             _d["_direct"] = True
@@ -5286,12 +5334,12 @@ def chat():
             # Targeted retrieval: explicit article references (ex. "l'article 16 de la loi 21-18")
             # get a direct word-boundary content search — vector similarity misses exact numbers
             try:
-                _direct_hits = search_rag_article_refs(_rag_query)
+                _direct_hits = search_rag_article_refs(_rag_query) + search_rag_code_refs(_rag_query)
                 if _direct_hits:
                     _seen_keys = set(str(d.get("content", ""))[:120] for d in (_rdocs or []))
                     _direct_hits = [d for d in _direct_hits if str(d.get("content", ""))[:120] not in _seen_keys]
                     _rdocs = _direct_hits + (_rdocs or [])
-                    print(f"[/chat] RAG direct article hits: {len(_direct_hits)}")
+                    print(f"[/chat] RAG direct article/code hits: {len(_direct_hits)}")
             except Exception as _ae:
                 print(f"[/chat] RAG article-ref search error: {_ae}")
             if _rdocs:
