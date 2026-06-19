@@ -4700,10 +4700,12 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
 
         elif markup_type == "comment":
             # Pas de Track Change sous-jacente à finaliser/annuler ici (un commentaire
-            # ne modifie pas le texte) : "accepter" = insérer notre réponse au contrat,
-            # juste après le passage exact visé par le commentaire adverse ; "refuser"
-            # = ignorer ce commentaire, aucune modification du document.
-            if decision == "accepted" and proposed_text:
+            # ne modifie pas le texte) : "refuser" (= refuser la position adverse) =
+            # insérer notre contre-proposition au contrat, juste après le passage exact
+            # visé par le commentaire adverse ; "accepter" (= accepter la position
+            # adverse telle quelle) = aucune modification du document. Convention
+            # identique aux branches insertion/deletion ci-dessus.
+            if decision == "rejected" and proposed_text:
                 anchor_quote = (mod.get("anchor_quote") or "").strip()
                 idx = _find_insert_idx_after_quote(para, anchor_quote)
                 children = list(para)
