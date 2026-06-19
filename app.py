@@ -4346,6 +4346,23 @@ def _extract_docx_revisions_and_comments(file_bytes):
                     "para_text": _p_text(p),
                 })
 
+    def _comment_anchor_quote(p, cid):
+        # Le passage exact sur lequel porte le commentaire = le texte des <w:t>
+        # situés entre <w:commentRangeStart w:id=cid> et <w:commentRangeEnd w:id=cid>
+        # (la partie adverse commente souvent des mots précis, pas tout le paragraphe).
+        capturing = False
+        parts = []
+        for elem in p.iter():
+            et = _tag(elem)
+            if et == 'commentRangeStart' and elem.get(_WNS + 'id') == cid:
+                capturing = True
+                continue
+            if et == 'commentRangeEnd' and elem.get(_WNS + 'id') == cid:
+                break
+            if capturing and et == 't':
+                parts.append(elem.text or '')
+        return "".join(parts).strip()
+
     comments = []
     try:
         with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
@@ -4364,7 +4381,8 @@ def _extract_docx_revisions_and_comments(file_bytes):
                 for p in paragraphs:
                     p_idx = para_index[id(p)]
                     for ref in p.iter(_WNS + 'commentReference'):
-                        cdata = comment_map.get(ref.get(_WNS + 'id'))
+                        cid = ref.get(_WNS + 'id')
+                        cdata = comment_map.get(cid)
                         if cdata and cdata["text"]:
                             comments.append({
                                 "para_idx": p_idx,
@@ -4372,6 +4390,7 @@ def _extract_docx_revisions_and_comments(file_bytes):
                                 "date": cdata["date"],
                                 "text": cdata["text"],
                                 "anchor_text": _p_text(p),
+                                "anchor_quote": _comment_anchor_quote(p, cid),
                             })
     except Exception as e:
         print(f"[_extract_docx_revisions_and_comments] comments parse failed: {e}")
@@ -4462,6 +4481,7 @@ def analyze_adverse_markup():
                     "para_idx": c["para_idx"],
                     "text": c["text"],
                     "context": c["anchor_text"],
+                    "anchor_quote": c.get("anchor_quote", ""),
                 })
 
         if not items:
@@ -4471,16 +4491,18 @@ def analyze_adverse_markup():
         _partie_label = partie if partie else "notre client"
         legal_fw = get_legal_framework(contract_type)
 
-        items_for_ai = [
-            {
+        items_for_ai = []
+        for i, it in enumerate(items):
+            entry = {
                 "i": i,
                 "type": it["markup_type"],
                 "auteur": it["author"],
                 "paragraphe_actuel": it["context"][:600],
                 "contenu": it["text"][:600],
             }
-            for i, it in enumerate(items)
-        ]
+            if it.get("anchor_quote"):
+                entry["passage_commente"] = it["anchor_quote"][:300]
+            items_for_ai.append(entry)
 
         prompt = f"""Tu es juriste senior en droit des contrats (droit marocain).
 
@@ -4488,7 +4510,7 @@ def analyze_adverse_markup():
 Tu analyses les modifications (Track Changes) et commentaires Word RÉELS insérés dans le document par la partie adverse. Pour chaque élément :
 - "insertion" = texte ajouté par la partie adverse au contrat
 - "deletion" = texte supprimé par la partie adverse du contrat
-- "comment" = commentaire Word laissé par la partie adverse sur un passage
+- "comment" = commentaire Word laissé par la partie adverse sur un passage précis (champ "passage_commente" = les mots exacts visés par le commentaire, quand disponible)
 
 {legal_fw}
 
@@ -4496,7 +4518,7 @@ Pour chaque élément, donne ton avis du point de vue de {_partie_label} :
 - "recommandation": "accept" si l'élément est acceptable/favorable ou neutre pour {_partie_label}, "reject" sinon
 - "risk": "high"|"medium"|"low" — risque pour {_partie_label} si on laisse cet élément tel quel
 - "reason": 1 phrase expliquant l'impact pour {_partie_label}
-- "contre_proposition": si recommandation="reject", le texte à proposer à la place (vide si recommandation="accept" ou si type="comment" sans action requise)
+- "contre_proposition": texte concret et directement insérable dans le contrat (pas une explication) qui répond au commentaire/à la modification adverse, à proposer si recommandation="reject" (vide si recommandation="accept" ou si type="comment" sans action requise). Pour un "comment", ce texte sera inséré juste après le passage commenté si l'utilisateur l'accepte.
 
 ÉLÉMENTS:
 {json.dumps(items_for_ai, ensure_ascii=False)}
@@ -4533,6 +4555,7 @@ Retourne UNIQUEMENT le tableau JSON."""
                 "context": it["context"],
                 "proposed": ana.get("contre_proposition", "") or "",
                 "recommendation": ana.get("recommandation", "accept") if ana.get("recommandation") in ("accept", "reject") else "accept",
+                "anchor_quote": it.get("anchor_quote", ""),
             })
 
         return jsonify({"modifications": modifications})
@@ -4574,13 +4597,50 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
             return True
         return False
 
+    def _elem_visible_text(elem):
+        return "".join(t.text or '' for t in elem.iter(_WNS + 't'))
+
+    def _find_insert_idx_after_quote(para, quote):
+        """Index (parmi les enfants directs du paragraphe) juste après le passage
+        exact cité par le commentaire adverse, pour insérer notre réponse au bon
+        endroit plutôt qu'en fin de paragraphe. None si le passage n'est pas retrouvé."""
+        if not quote:
+            return None
+        cumulative = ""
+        for idx, ch in enumerate(list(para)):
+            cumulative += _elem_visible_text(ch)
+            if quote in cumulative:
+                return idx + 1
+        return None
+
+    def _make_ins(text):
+        nonlocal rev_id
+        ins_elem = OxmlElement('w:ins')
+        ins_elem.set(qn('w:id'), str(rev_id))
+        ins_elem.set(qn('w:author'), author)
+        ins_elem.set(qn('w:date'), date)
+        rev_id += 1
+        new_r = OxmlElement('w:r')
+        new_t = OxmlElement('w:t')
+        new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        new_t.text = text
+        new_r.append(new_t)
+        ins_elem.append(new_r)
+        return ins_elem
+
     body = doc.element.body
     paragraphs = []
     for child in body.iter():
         if _tag(child) == 'p' and _p_has_content(child):
             paragraphs.append(child)
 
-    consumed = set()
+    # Liste (pas un set d'id()) : un w:ins/w:del retiré de l'arbre peut voir son
+    # id() Python réutilisé par un objet proxy lxml totalement différent une fois
+    # garbage-collecté, ce qui provoquait des faux positifs "déjà consommé" et
+    # faisait sauter silencieusement des modifications suivantes. Garder les
+    # références elles-mêmes évite à la fois la réutilisation d'id() et la
+    # collecte prématurée.
+    consumed = []
     resolved = 0
 
     for mod in modifications:
@@ -4596,13 +4656,16 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
         markup_type = mod.get("markup_type")
         proposed_text = (mod.get("proposed") or "").strip()
 
-        target_elem = None
         if markup_type in ("insertion", "deletion"):
+            # Track Change réelle : "accepter" = garder le texte adverse tel quel
+            # (finalise leur w:ins/w:del) ; "refuser" = annuler leur changement et
+            # insérer notre contre-proposition à la place.
+            target_elem = None
             want_tag = "ins" if markup_type == "insertion" else "del"
             want_author = mod.get("author", "")
             want_text = (mod.get("original") or "").strip()
             for elem in para.iter():
-                if _tag(elem) != want_tag or id(elem) in consumed:
+                if _tag(elem) != want_tag or any(elem is c for c in consumed):
                     continue
                 ea = elem.get(_WNS + 'author') or 'Auteur inconnu'
                 if want_tag == 'ins':
@@ -4611,44 +4674,43 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
                     et = "".join(t.text or '' for t in elem.iter(_WNS + 'delText')).strip()
                 if ea == want_author and et == want_text:
                     target_elem = elem
-                    consumed.add(id(elem))
+                    consumed.append(elem)
                     break
 
-        insert_idx = len(list(para))
-        if target_elem is not None:
-            insert_idx = list(para).index(target_elem)
-            if markup_type == "insertion":
-                if decision == "accepted":
-                    _unwrap_element(target_elem)
-                else:
-                    para.remove(target_elem)
-            else:  # deletion
-                if decision == "accepted":
-                    para.remove(target_elem)
-                else:
-                    for r in list(target_elem):
-                        if _tag(r) == 'r':
-                            for dt in r.iter(_WNS + 'delText'):
-                                dt.tag = _WNS + 't'
-                    _unwrap_element(target_elem)
-            resolved += 1
-        elif markup_type == "comment":
-            resolved += 1
+            if target_elem is not None:
+                insert_idx = list(para).index(target_elem)
+                if markup_type == "insertion":
+                    if decision == "accepted":
+                        _unwrap_element(target_elem)
+                    else:
+                        para.remove(target_elem)
+                else:  # deletion
+                    if decision == "accepted":
+                        para.remove(target_elem)
+                    else:
+                        for r in list(target_elem):
+                            if _tag(r) == 'r':
+                                for dt in r.iter(_WNS + 'delText'):
+                                    dt.tag = _WNS + 't'
+                        _unwrap_element(target_elem)
+                resolved += 1
+                if decision == "rejected" and proposed_text:
+                    children = list(para)
+                    para.insert(min(insert_idx, len(children)), _make_ins(proposed_text))
 
-        if decision == "rejected" and proposed_text:
-            ins_elem = OxmlElement('w:ins')
-            ins_elem.set(qn('w:id'), str(rev_id))
-            ins_elem.set(qn('w:author'), author)
-            ins_elem.set(qn('w:date'), date)
-            rev_id += 1
-            new_r = OxmlElement('w:r')
-            new_t = OxmlElement('w:t')
-            new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-            new_t.text = proposed_text
-            new_r.append(new_t)
-            ins_elem.append(new_r)
-            children = list(para)
-            para.insert(min(insert_idx, len(children)), ins_elem)
+        elif markup_type == "comment":
+            # Pas de Track Change sous-jacente à finaliser/annuler ici (un commentaire
+            # ne modifie pas le texte) : "accepter" = insérer notre réponse au contrat,
+            # juste après le passage exact visé par le commentaire adverse ; "refuser"
+            # = ignorer ce commentaire, aucune modification du document.
+            if decision == "accepted" and proposed_text:
+                anchor_quote = (mod.get("anchor_quote") or "").strip()
+                idx = _find_insert_idx_after_quote(para, anchor_quote)
+                children = list(para)
+                if idx is None:
+                    idx = len(children)
+                para.insert(min(idx, len(children)), _make_ins(proposed_text))
+            resolved += 1
 
     print(f"Adverse markup: {resolved}/{len(modifications)} résolus")
     output = io.BytesIO()
