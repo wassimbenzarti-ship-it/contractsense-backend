@@ -2000,9 +2000,17 @@ def apply_track_changes(file_bytes, modifications, decisions):
             _direct_runs = [r for r in para if r.tag == _wr_tag]
             _ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
 
-            # Remove all existing direct <w:r> children (rebuild from diff)
+            # Remove all existing direct children except <w:pPr> (rebuild from diff).
+            # Must strip more than just <w:r>: when a 2nd/3rd modification targets the
+            # same paragraph (already rebuilt by an earlier mod in this same export),
+            # leftover <w:ins>/<w:del> wrappers — and any orphaned <w:commentRangeStart>/
+            # <w:commentRangeEnd>/<w:bookmarkStart>/<w:bookmarkEnd>/<w:proofErr> markers
+            # from the original document — are NOT <w:r> tags, so they used to survive
+            # untouched and get duplicated alongside the new rebuild, corrupting the
+            # paragraph (text interleaved mid-word, Word forced into repair/locked mode).
+            _ppr_tag = _WNS + 'pPr'
             for _r in list(para):
-                if _r.tag == _wr_tag:
+                if _r.tag != _ppr_tag:
                     para.remove(_r)
 
             # Tokenize: words + whitespace as atomic units
