@@ -4479,6 +4479,32 @@ def identify_adverse_authors():
         print(f"[/identify-adverse-authors] error: {e}")
         return jsonify({"error": str(e)}), 500
 
+_CONTRE_PROP_INSTR_RE = re.compile(
+    r'^\s*(?:veuillez\s+)?(?:ajouter(?:\s+(?:après|avant)\b[^:«»]*)?'
+    r'|modifier(?:\s+(?:la\s+définition|le\s+passage|en)\b[^:«»]*)?'
+    r'|ins[ée]rer\b[^:«»]*'
+    r'|remplacer\b[^:«»]*'
+    r'|supprimer(?:\s+et\s+remplacer\b[^:«»]*)?)'
+    r'\s*:\s*',
+    re.IGNORECASE
+)
+
+def _clean_contre_proposition(text):
+    """Nettoie le champ contre_proposition généré par l'IA : malgré la consigne
+    du prompt, le modèle produit parfois une instruction ("Ajouter : « ... »")
+    au lieu du texte brut à insérer, ce qui finit littéralement dans le
+    document Word en Track Changes ("Ajouter : « ... »" inséré tel quel, texte
+    coupé/mal placé). Filet de sécurité : retire le verbe d'instruction et les
+    guillemets englobants quand présents."""
+    text = (text or "").strip()
+    if not text:
+        return text
+    cleaned = _CONTRE_PROP_INSTR_RE.sub("", text, count=1).strip()
+    _WRAP_PAIRS = {"«": "»", '"': '"', "(": ")"}
+    if len(cleaned) >= 2 and cleaned[0] in _WRAP_PAIRS and cleaned[-1] == _WRAP_PAIRS[cleaned[0]]:
+        cleaned = cleaned[1:-1].strip()
+    return cleaned or text
+
 @app.route("/analyze-adverse-markup", methods=["POST", "OPTIONS"])
 def analyze_adverse_markup():
     """Étape 2 : analyse les Track Changes / commentaires réels d'un ou plusieurs
@@ -4560,7 +4586,12 @@ Pour chaque élément, donne ton avis du point de vue de {_partie_label} :
 - "recommandation": "accept" si l'élément est acceptable/favorable ou neutre pour {_partie_label}, "reject" sinon
 - "risk": "high"|"medium"|"low" — risque pour {_partie_label} si on laisse cet élément tel quel
 - "reason": 1 phrase expliquant l'impact pour {_partie_label}
-- "contre_proposition": texte concret et directement insérable dans le contrat (pas une explication) qui répond au commentaire/à la modification adverse, à proposer si recommandation="reject" (vide si recommandation="accept" ou si type="comment" sans action requise). Pour un "comment", ce texte sera inséré juste après le passage commenté si l'utilisateur l'accepte.
+- "contre_proposition": UNIQUEMENT le texte de la clause à insérer telle quelle dans le contrat, à proposer si recommandation="reject" (vide si recommandation="accept" ou si type="comment" sans action requise). Pour un "comment", ce texte sera inséré juste après le passage commenté si l'utilisateur l'accepte.
+  ⚠️ FORMAT STRICT : ce champ sera inséré MOT POUR MOT dans le document Word (Track Changes), donc :
+  - NE JAMAIS commencer par un verbe d'instruction ("Ajouter", "Ajouter après...", "Modifier", "Modifier en", "Modifier le passage par", "Insérer", "Remplacer par", "Supprimer et remplacer par", etc.)
+  - NE JAMAIS entourer le texte de guillemets « » ou de parenthèses englobant tout le texte
+  - Exemple INCORRECT : "Ajouter : « Les données communiquées seront strictement limitées à celles nécessaires à l'exécution de l'Objet Autorisé. »"
+  - Exemple CORRECT : "Les données communiquées seront strictement limitées à celles nécessaires à l'exécution de l'Objet Autorisé."
 
 ÉLÉMENTS:
 {json.dumps(items_for_ai, ensure_ascii=False)}
@@ -4595,7 +4626,7 @@ Retourne UNIQUEMENT le tableau JSON."""
                 "reason": ana.get("reason", ""),
                 "original": it["text"],
                 "context": it["context"],
-                "proposed": ana.get("contre_proposition", "") or "",
+                "proposed": _clean_contre_proposition(ana.get("contre_proposition", "")),
                 "recommendation": ana.get("recommandation", "accept") if ana.get("recommandation") in ("accept", "reject") else "accept",
                 "anchor_quote": it.get("anchor_quote", ""),
             })
