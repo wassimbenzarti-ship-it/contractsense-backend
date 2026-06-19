@@ -4283,6 +4283,406 @@ Ne pas réordonner. Retourner UNIQUEMENT le tableau JSON."""
         print(f"[/compare-adversary] error: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ── Partie adverse : markup réel (track changes + commentaires Word) ────────
+_WNS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+def _extract_docx_revisions_and_comments(file_bytes):
+    """Parse le DOCX (OOXML brut) pour extraire les vraies Track Changes Word
+    (w:ins/w:del) et les commentaires (comments.xml), avec attribution d'auteur.
+    Indexation des paragraphes identique à build_numbered_paragraphs/apply_track_changes
+    (ordre du document, table cells incluses, paragraphes non vides uniquement).
+    Retourne {"revisions": [...], "comments": [...], "authors": [...]}.
+    """
+    try:
+        doc = Document(io.BytesIO(file_bytes))
+    except Exception as e:
+        print(f"[_extract_docx_revisions_and_comments] doc open failed: {e}")
+        return {"revisions": [], "comments": [], "authors": []}
+
+    def _tag(elem):
+        return elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+
+    def _p_text(elem):
+        return "".join(t.text or '' for t in elem.iter(_WNS + 't')).strip()
+
+    def _p_has_content(elem):
+        # Une Track Change de suppression (w:del) n'a pas de <w:t> visible — il ne
+        # faut pas l'exclure de l'indexation des paragraphes pour autant.
+        if _p_text(elem):
+            return True
+        if "".join(t.text or '' for t in elem.iter(_WNS + 'delText')).strip():
+            return True
+        for _ in elem.iter(_WNS + 'commentReference'):
+            return True
+        return False
+
+    body = doc.element.body
+    paragraphs = []
+    for child in body.iter():
+        if _tag(child) == 'p' and _p_has_content(child):
+            paragraphs.append(child)
+    para_index = {id(p): i for i, p in enumerate(paragraphs)}
+
+    revisions = []
+    for p in paragraphs:
+        p_idx = para_index[id(p)]
+        for elem in p.iter():
+            t = _tag(elem)
+            if t not in ('ins', 'del'):
+                continue
+            author = elem.get(_WNS + 'author') or 'Auteur inconnu'
+            date = elem.get(_WNS + 'date') or ''
+            if t == 'ins':
+                text = "".join(rt.text or '' for rt in elem.iter(_WNS + 't')).strip()
+            else:
+                text = "".join(rt.text or '' for rt in elem.iter(_WNS + 'delText')).strip()
+            if text:
+                revisions.append({
+                    "para_idx": p_idx,
+                    "author": author,
+                    "date": date,
+                    "type": "insertion" if t == 'ins' else "deletion",
+                    "text": text,
+                    "para_text": _p_text(p),
+                })
+
+    comments = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+            comments_path = next((n for n in z.namelist() if n.endswith('word/comments.xml')), None)
+            if comments_path:
+                from lxml import etree
+                croot = etree.fromstring(z.read(comments_path))
+                comment_map = {}
+                for c in croot.iter(_WNS + 'comment'):
+                    cid = c.get(_WNS + 'id')
+                    comment_map[cid] = {
+                        "author": c.get(_WNS + 'author') or 'Auteur inconnu',
+                        "date": c.get(_WNS + 'date') or '',
+                        "text": "".join(t.text or '' for t in c.iter(_WNS + 't')).strip(),
+                    }
+                for p in paragraphs:
+                    p_idx = para_index[id(p)]
+                    for ref in p.iter(_WNS + 'commentReference'):
+                        cdata = comment_map.get(ref.get(_WNS + 'id'))
+                        if cdata and cdata["text"]:
+                            comments.append({
+                                "para_idx": p_idx,
+                                "author": cdata["author"],
+                                "date": cdata["date"],
+                                "text": cdata["text"],
+                                "anchor_text": _p_text(p),
+                            })
+    except Exception as e:
+        print(f"[_extract_docx_revisions_and_comments] comments parse failed: {e}")
+
+    authors = sorted(set([r["author"] for r in revisions] + [c["author"] for c in comments]))
+    return {"revisions": revisions, "comments": comments, "authors": authors}
+
+@app.route("/identify-adverse-authors", methods=["POST", "OPTIONS"])
+def identify_adverse_authors():
+    """Étape 1 de la revue de markup adverse : détecte les auteurs distincts des
+    Track Changes / commentaires Word du DOCX importé, pour que l'utilisateur
+    choisisse qui est la partie adverse (même UX que la sélection de partie)."""
+    if request.method == "OPTIONS":
+        return _add_cors(Response("", 204))
+    try:
+        adverse_file = request.files.get("file")
+        if not adverse_file:
+            return jsonify({"error": "Fichier adverse manquant"}), 400
+        if not adverse_file.filename.lower().endswith((".docx", ".doc")):
+            return jsonify({"error": "Le markup réel n'est détectable que sur un fichier DOCX (Track Changes Word)."}), 400
+
+        file_bytes = adverse_file.read()
+        extracted = _extract_docx_revisions_and_comments(file_bytes)
+
+        if not extracted["authors"]:
+            return jsonify({"authors": [], "has_markup": False})
+
+        counts = {}
+        for r in extracted["revisions"]:
+            counts[r["author"]] = counts.get(r["author"], 0) + 1
+        for c in extracted["comments"]:
+            counts[c["author"]] = counts.get(c["author"], 0) + 1
+
+        authors = [
+            {
+                "name": a,
+                "party_label": a,
+                "description": str(counts.get(a, 0)) + " modification(s)/commentaire(s)",
+            }
+            for a in extracted["authors"]
+        ]
+        return jsonify({"authors": authors, "has_markup": True})
+    except Exception as e:
+        print(f"[/identify-adverse-authors] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/analyze-adverse-markup", methods=["POST", "OPTIONS"])
+def analyze_adverse_markup():
+    """Étape 2 : analyse les Track Changes / commentaires réels d'un ou plusieurs
+    auteurs sélectionnés (la partie adverse) et propose, pour chacun, un risque,
+    une recommandation accepter/refuser, et une contre-proposition — sur le même
+    modèle que l'analyse principale (renderReview/decide)."""
+    if request.method == "OPTIONS":
+        return _add_cors(Response("", 204))
+    try:
+        adverse_file = request.files.get("file")
+        authors_json = request.form.get("authors", "[]")
+        partie = request.form.get("partie", "").strip()
+        contract_type = request.form.get("type", "generic")
+
+        if not adverse_file:
+            return jsonify({"error": "Fichier adverse manquant"}), 400
+        try:
+            selected_authors = set(json.loads(authors_json))
+        except Exception:
+            selected_authors = set()
+        if not selected_authors:
+            return jsonify({"error": "Aucun auteur sélectionné"}), 400
+
+        file_bytes = adverse_file.read()
+        extracted = _extract_docx_revisions_and_comments(file_bytes)
+
+        items = []
+        for r in extracted["revisions"]:
+            if r["author"] in selected_authors:
+                items.append({
+                    "markup_type": r["type"],
+                    "author": r["author"],
+                    "para_idx": r["para_idx"],
+                    "text": r["text"],
+                    "context": r["para_text"],
+                })
+        for c in extracted["comments"]:
+            if c["author"] in selected_authors:
+                items.append({
+                    "markup_type": "comment",
+                    "author": c["author"],
+                    "para_idx": c["para_idx"],
+                    "text": c["text"],
+                    "context": c["anchor_text"],
+                })
+
+        if not items:
+            return jsonify({"modifications": []})
+
+        items = items[:40]
+        _partie_label = partie if partie else "notre client"
+        legal_fw = get_legal_framework(contract_type)
+
+        items_for_ai = [
+            {
+                "i": i,
+                "type": it["markup_type"],
+                "auteur": it["author"],
+                "paragraphe_actuel": it["context"][:600],
+                "contenu": it["text"][:600],
+            }
+            for i, it in enumerate(items)
+        ]
+
+        prompt = f"""Tu es juriste senior en droit des contrats (droit marocain).
+
+⚠️ TU REPRÉSENTES EXCLUSIVEMENT : {_partie_label}
+Tu analyses les modifications (Track Changes) et commentaires Word RÉELS insérés dans le document par la partie adverse. Pour chaque élément :
+- "insertion" = texte ajouté par la partie adverse au contrat
+- "deletion" = texte supprimé par la partie adverse du contrat
+- "comment" = commentaire Word laissé par la partie adverse sur un passage
+
+{legal_fw}
+
+Pour chaque élément, donne ton avis du point de vue de {_partie_label} :
+- "recommandation": "accept" si l'élément est acceptable/favorable ou neutre pour {_partie_label}, "reject" sinon
+- "risk": "high"|"medium"|"low" — risque pour {_partie_label} si on laisse cet élément tel quel
+- "reason": 1 phrase expliquant l'impact pour {_partie_label}
+- "contre_proposition": si recommandation="reject", le texte à proposer à la place (vide si recommandation="accept" ou si type="comment" sans action requise)
+
+ÉLÉMENTS:
+{json.dumps(items_for_ai, ensure_ascii=False)}
+
+Réponds avec UN tableau JSON, même ordre, même nombre d'éléments (clé "i" = index reçu) :
+[{{"i":0,"recommandation":"accept"|"reject","risk":"high"|"medium"|"low","reason":"...","contre_proposition":"..."}}]
+Retourne UNIQUEMENT le tableau JSON."""
+
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model=_get_model(),
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        m = re.search(r'\[[\s\S]*\]', raw)
+        analyses = json.loads(m.group(0)) if m else []
+        analyses_by_i = {a.get("i"): a for a in analyses if isinstance(a, dict)}
+
+        _type_label = {"insertion": "Ajout adverse", "deletion": "Suppression adverse", "comment": "Commentaire adverse"}
+        modifications = []
+        for i, it in enumerate(items):
+            ana = analyses_by_i.get(i, {})
+            risk = ana.get("risk", "medium")
+            modifications.append({
+                "id": i + 1,
+                "para_idx": it["para_idx"],
+                "author": it["author"],
+                "markup_type": it["markup_type"],
+                "clause_name": _type_label.get(it["markup_type"], "Modification") + " — " + it["author"],
+                "risk": risk if risk in ("high", "medium", "low") else "medium",
+                "reason": ana.get("reason", ""),
+                "original": it["text"],
+                "context": it["context"],
+                "proposed": ana.get("contre_proposition", "") or "",
+                "recommendation": ana.get("recommandation", "accept") if ana.get("recommandation") in ("accept", "reject") else "accept",
+            })
+
+        return jsonify({"modifications": modifications})
+    except Exception as e:
+        print(f"[/analyze-adverse-markup] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def _unwrap_element(elem):
+    """Replace elem by its children in-place (used to finalize a w:ins/w:del — i.e. 'accepter'/'rejeter' une Track Change Word réelle)."""
+    parent = elem.getparent()
+    if parent is None:
+        return
+    idx = list(parent).index(elem)
+    for j, ch in enumerate(list(elem)):
+        parent.insert(idx + j, ch)
+    parent.remove(elem)
+
+def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
+    """Résout chirurgicalement les Track Changes / commentaires réels de la partie
+    adverse selon les décisions accepter/refuser, et ajoute nos propres contre-
+    propositions en Track Changes (auteur 'ContractSense') quand refusé."""
+    doc = Document(io.BytesIO(file_bytes))
+    author = "ContractSense (contre-proposition)"
+    date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    rev_id = 90000  # plage dédiée pour ne pas entrer en collision avec les w:id existants
+
+    def _tag(elem):
+        return elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+
+    def _p_text(elem):
+        return "".join(t.text or '' for t in elem.iter(_WNS + 't')).strip()
+
+    def _p_has_content(elem):
+        if _p_text(elem):
+            return True
+        if "".join(t.text or '' for t in elem.iter(_WNS + 'delText')).strip():
+            return True
+        for _ in elem.iter(_WNS + 'commentReference'):
+            return True
+        return False
+
+    body = doc.element.body
+    paragraphs = []
+    for child in body.iter():
+        if _tag(child) == 'p' and _p_has_content(child):
+            paragraphs.append(child)
+
+    consumed = set()
+    resolved = 0
+
+    for mod in modifications:
+        mod_id = str(mod.get("id", ""))
+        decision = decisions.get(mod_id)
+        if decision not in ("accepted", "rejected"):
+            continue
+
+        para_idx = mod.get("para_idx")
+        if para_idx is None or para_idx >= len(paragraphs):
+            continue
+        para = paragraphs[para_idx]
+        markup_type = mod.get("markup_type")
+        proposed_text = (mod.get("proposed") or "").strip()
+
+        target_elem = None
+        if markup_type in ("insertion", "deletion"):
+            want_tag = "ins" if markup_type == "insertion" else "del"
+            want_author = mod.get("author", "")
+            want_text = (mod.get("original") or "").strip()
+            for elem in para.iter():
+                if _tag(elem) != want_tag or id(elem) in consumed:
+                    continue
+                ea = elem.get(_WNS + 'author') or 'Auteur inconnu'
+                if want_tag == 'ins':
+                    et = "".join(t.text or '' for t in elem.iter(_WNS + 't')).strip()
+                else:
+                    et = "".join(t.text or '' for t in elem.iter(_WNS + 'delText')).strip()
+                if ea == want_author and et == want_text:
+                    target_elem = elem
+                    consumed.add(id(elem))
+                    break
+
+        insert_idx = len(list(para))
+        if target_elem is not None:
+            insert_idx = list(para).index(target_elem)
+            if markup_type == "insertion":
+                if decision == "accepted":
+                    _unwrap_element(target_elem)
+                else:
+                    para.remove(target_elem)
+            else:  # deletion
+                if decision == "accepted":
+                    para.remove(target_elem)
+                else:
+                    for r in list(target_elem):
+                        if _tag(r) == 'r':
+                            for dt in r.iter(_WNS + 'delText'):
+                                dt.tag = _WNS + 't'
+                    _unwrap_element(target_elem)
+            resolved += 1
+        elif markup_type == "comment":
+            resolved += 1
+
+        if decision == "rejected" and proposed_text:
+            ins_elem = OxmlElement('w:ins')
+            ins_elem.set(qn('w:id'), str(rev_id))
+            ins_elem.set(qn('w:author'), author)
+            ins_elem.set(qn('w:date'), date)
+            rev_id += 1
+            new_r = OxmlElement('w:r')
+            new_t = OxmlElement('w:t')
+            new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            new_t.text = proposed_text
+            new_r.append(new_t)
+            ins_elem.append(new_r)
+            children = list(para)
+            para.insert(min(insert_idx, len(children)), ins_elem)
+
+    print(f"Adverse markup: {resolved}/{len(modifications)} résolus")
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+    return output
+
+@app.route("/export-adverse-markup", methods=["POST", "OPTIONS"])
+def export_adverse_markup():
+    if request.method == "OPTIONS":
+        return _add_cors(Response("", 204))
+    try:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "Fichier manquant"}), 400
+        if not file.filename.lower().endswith(".docx"):
+            return jsonify({"error": "Export uniquement disponible pour les fichiers DOCX"}), 400
+
+        modifications = json.loads(request.form.get("modifications", "[]"))
+        decisions = json.loads(request.form.get("decisions", "{}"))
+        file_bytes = file.read()
+
+        output = apply_adverse_markup_decisions(file_bytes, modifications, decisions)
+
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            as_attachment=True,
+            download_name="contrat-reponse-partie-adverse.docx"
+        )
+    except Exception as e:
+        print(f"[/export-adverse-markup] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/rag/contribute", methods=["POST"])
 def rag_contribute():
     """Auto-queue full contract with AI scoring for admin validation"""
