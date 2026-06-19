@@ -4731,11 +4731,21 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
                     if decision == "accepted":
                         para.remove(target_elem)
                     else:
+                        # "refuser leur suppression" = restaurer le texte original :
+                        # unwrap déplace les enfants de target_elem (le texte
+                        # restauré) à la position insert_idx, ce qui ALLONGE le
+                        # paragraphe d'autant d'éléments. insert_idx doit donc être
+                        # décalé en conséquence, sinon la contre-proposition ci-
+                        # dessous s'insère AVANT le texte restauré au lieu d'après
+                        # (texte coupé en plein milieu, ex. "au" + contre-proposition
+                        # + "tre" au lieu de "autre" + contre-proposition).
+                        _restored_count = len(list(target_elem))
                         for r in list(target_elem):
                             if _tag(r) == 'r':
                                 for dt in r.iter(_WNS + 'delText'):
                                     dt.tag = _WNS + 't'
                         _unwrap_element(target_elem)
+                        insert_idx += _restored_count
                 resolved += 1
                 if decision == "rejected" and proposed_text:
                     children = list(para)
