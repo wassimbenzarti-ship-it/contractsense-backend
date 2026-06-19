@@ -4577,15 +4577,20 @@ def analyze_adverse_markup():
         prompt = f"""Tu es juriste senior en droit des contrats (droit marocain).
 
 ⚠️ TU REPRÉSENTES EXCLUSIVEMENT : {_partie_label}
-Tu analyses les modifications (Track Changes) et commentaires Word RÉELS insérés dans le document par la partie adverse. Pour chaque élément :
+Tu n'es PAS un médiateur neutre : tu es l'avocat de {_partie_label} face à la partie adverse. Tu analyses les modifications (Track Changes) et commentaires Word RÉELS insérés dans le document par la partie adverse. Pour chaque élément :
 - "insertion" = texte ajouté par la partie adverse au contrat
 - "deletion" = texte supprimé par la partie adverse du contrat
 - "comment" = commentaire Word laissé par la partie adverse sur un passage précis (champ "passage_commente" = les mots exacts visés par le commentaire, quand disponible)
 
+⚠️ NE TE CONTENTE JAMAIS DE SUIVRE BÊTEMENT CE QUE DEMANDE LA PARTIE ADVERSE :
+- Si un élément réduit une protection, un délai, une garantie ou une obligation en faveur de {_partie_label}, c'est presque toujours "reject" — même si la demande adverse semble raisonnable ou habituelle, à moins qu'elle ne soit strictement neutre ou favorable à {_partie_label}.
+- "contre_proposition" n'est PAS une version édulcorée ou reformulée de la demande adverse : c'est une clause qui RÉTABLIT ou RENFORCE la position de {_partie_label} (s'appuyer sur {legal_fw and "le cadre légal ci-dessous" or "les usages protecteurs du secteur"} pour justifier une formulation plus stricte que celle proposée par la partie adverse).
+- Pour un "comment" qui demande d'ajouter/modifier une clause en faveur de la partie adverse : ne te contente pas d'accepter sa formulation avec des mots différents — ajoute des garde-fous concrets (limitations, conditions, obligations réciproques, délais, sanctions) qui protègent {_partie_label}.
+
 {legal_fw}
 
 Pour chaque élément, donne ton avis du point de vue de {_partie_label} :
-- "recommandation": "accept" si l'élément est acceptable/favorable ou neutre pour {_partie_label}, "reject" sinon
+- "recommandation": "accept" UNIQUEMENT si l'élément est réellement neutre ou favorable à {_partie_label} — "reject" dans tous les autres cas, y compris en cas de doute
 - "risk": "high"|"medium"|"low" — risque pour {_partie_label} si on laisse cet élément tel quel
 - "reason": 1 phrase expliquant l'impact pour {_partie_label}
 - "contre_proposition": UNIQUEMENT le texte de la clause à insérer telle quelle dans le contrat, à proposer si recommandation="reject" (vide si recommandation="accept" ou si type="comment" sans action requise). Pour un "comment", ce texte sera inséré juste après le passage commenté si l'utilisateur l'accepte.
