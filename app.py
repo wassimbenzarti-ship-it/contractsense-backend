@@ -4433,6 +4433,7 @@ def _extract_docx_revisions_and_comments(file_bytes):
                                 "text": cdata["text"],
                                 "anchor_text": _p_text(p),
                                 "anchor_quote": _comment_anchor_quote(p, cid),
+                                "comment_id": cid,
                             })
     except Exception as e:
         print(f"[_extract_docx_revisions_and_comments] comments parse failed: {e}")
@@ -4550,6 +4551,7 @@ def analyze_adverse_markup():
                     "text": c["text"],
                     "context": c["anchor_text"],
                     "anchor_quote": c.get("anchor_quote", ""),
+                    "comment_id": c.get("comment_id", ""),
                 })
 
         if not items:
@@ -4629,6 +4631,7 @@ Retourne UNIQUEMENT le tableau JSON."""
                 "proposed": _clean_contre_proposition(ana.get("contre_proposition", "")),
                 "recommendation": ana.get("recommandation", "accept") if ana.get("recommandation") in ("accept", "reject") else "accept",
                 "anchor_quote": it.get("anchor_quote", ""),
+                "comment_id": it.get("comment_id", ""),
             })
 
         return jsonify({"modifications": modifications})
@@ -4677,7 +4680,10 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
     def _find_insert_idx_after_quote(para, quote):
         """Index (parmi les enfants directs du paragraphe) juste après le passage
         exact cité par le commentaire adverse, pour insérer notre réponse au bon
-        endroit plutôt qu'en fin de paragraphe. None si le passage n'est pas retrouvé."""
+        endroit plutôt qu'en fin de paragraphe. None si le passage n'est pas retrouvé.
+        Fallback uniquement (voir _find_insert_idx_after_comment_id) : matche la
+        PREMIÈRE occurrence du texte dans le paragraphe, ce qui peut être le mauvais
+        endroit si le même passage apparaît plusieurs fois avant le point commenté."""
         if not quote:
             return None
         cumulative = ""
@@ -4685,6 +4691,24 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
             cumulative += _elem_visible_text(ch)
             if quote in cumulative:
                 return idx + 1
+        return None
+
+    def _find_insert_idx_after_comment_id(para, cid):
+        """Localisation EXACTE et sans ambiguïté du point d'ancrage d'un commentaire :
+        position juste après <w:commentRangeEnd w:id=cid> (ou, à défaut,
+        <w:commentReference w:id=cid>) dans ce paragraphe. Contrairement au matching
+        par texte (_find_insert_idx_after_quote), ceci ne peut pas confondre deux
+        occurrences identiques du même passage dans le paragraphe."""
+        if not cid:
+            return None
+        children = list(para)
+        for idx, ch in enumerate(children):
+            if _tag(ch) == 'commentRangeEnd' and ch.get(_WNS + 'id') == cid:
+                return idx + 1
+        for idx, ch in enumerate(children):
+            for sub in ch.iter(_WNS + 'commentReference'):
+                if sub.get(_WNS + 'id') == cid:
+                    return idx + 1
         return None
 
     def _make_ins(text):
@@ -4790,8 +4814,15 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
             # adverse telle quelle) = aucune modification du document. Convention
             # identique aux branches insertion/deletion ci-dessus.
             if decision == "rejected" and proposed_text:
-                anchor_quote = (mod.get("anchor_quote") or "").strip()
-                idx = _find_insert_idx_after_quote(para, anchor_quote)
+                cid = str(mod.get("comment_id") or "").strip()
+                idx = _find_insert_idx_after_comment_id(para, cid)
+                if idx is None:
+                    # Filet de secours (anciennes analyses sauvegardées avant l'ajout
+                    # de comment_id, ou commentaire sans w:commentRangeEnd/Reference
+                    # retrouvable) : matching par texte, moins précis si le passage
+                    # cité apparaît plusieurs fois dans le paragraphe.
+                    anchor_quote = (mod.get("anchor_quote") or "").strip()
+                    idx = _find_insert_idx_after_quote(para, anchor_quote)
                 children = list(para)
                 if idx is None:
                     idx = len(children)
