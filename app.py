@@ -1833,8 +1833,42 @@ def create_docx_with_changes(contract_text, modifications, decisions):
     out = io.BytesIO(); doc.save(out); out.seek(0); return out
 
 
+def _unlock_sdt_content(doc):
+    """Unwrap any Word content control (<w:sdt>) explicitly marked content-locked.
+    Documents exported from Google Docs ("Télécharger au format Microsoft Word")
+    wrap blocks — often an entire table — in goog_rdk_* content controls for its
+    own internal suggestion-tracking bookkeeping; some of these come back with
+    <w:lock w:val="contentLocked"/>, which makes Word refuse ANY editing inside
+    them (reported as "impossible de cliquer/taper dans le tableau"), even though
+    nothing in the actual contract intended that restriction."""
+    _wns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    body = doc.element.body
+    to_unwrap = []
+    for sdt in body.iter(_wns + 'sdt'):
+        sdt_pr = sdt.find(_wns + 'sdtPr')
+        if sdt_pr is None:
+            continue
+        lock = sdt_pr.find(_wns + 'lock')
+        if lock is not None and lock.get(_wns + 'val') in ('contentLocked', 'sdtContentLocked'):
+            to_unwrap.append(sdt)
+    for sdt in to_unwrap:
+        parent = sdt.getparent()
+        if parent is None:
+            continue
+        content = sdt.find(_wns + 'sdtContent')
+        idx = list(parent).index(sdt)
+        if content is not None:
+            for j, ch in enumerate(list(content)):
+                parent.insert(idx + j, ch)
+        parent.remove(sdt)
+    return len(to_unwrap)
+
+
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
+    _n_unlocked = _unlock_sdt_content(doc)
+    if _n_unlocked:
+        print(f"[apply_track_changes] {_n_unlocked} bloc(s) verrouillé(s) (Google Docs) déverrouillé(s)", flush=True)
     author = "ContractSense"
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 1
@@ -4586,6 +4620,7 @@ def apply_adverse_markup_decisions(file_bytes, modifications, decisions):
     adverse selon les décisions accepter/refuser, et ajoute nos propres contre-
     propositions en Track Changes (auteur 'ContractSense') quand refusé."""
     doc = Document(io.BytesIO(file_bytes))
+    _unlock_sdt_content(doc)
     author = "ContractSense (contre-proposition)"
     date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     rev_id = 90000  # plage dédiée pour ne pas entrer en collision avec les w:id existants
