@@ -2601,11 +2601,15 @@ def legal_opinion_validate_by_director(opinion_id):
                 conversation = json.loads(conversation)
             except Exception:
                 conversation = []
-        qa_text = "\n\n".join(
-            ("QUESTION : " if t.get("role") == "user" else "RÉPONSE : ") + (t.get("content") or "").strip()
-            for t in conversation if isinstance(t, dict) and (t.get("content") or "").strip()
-        )
-        content_text = "AVIS JURIDIQUE [" + title + "]\n\n" + qa_text
+        memo_turn = next((t for t in conversation if isinstance(t, dict) and t.get("role") == "memo" and (t.get("content") or "").strip()), None)
+        if memo_turn:
+            content_text = "AVIS JURIDIQUE [" + title + "]\n\n" + memo_turn["content"].strip()
+        else:
+            qa_text = "\n\n".join(
+                ("QUESTION : " if t.get("role") == "user" else "RÉPONSE : ") + (t.get("content") or "").strip()
+                for t in conversation if isinstance(t, dict) and t.get("role") in ("user", "assistant") and (t.get("content") or "").strip()
+            )
+            content_text = "AVIS JURIDIQUE [" + title + "]\n\n" + qa_text
 
         patch = {"status": "final_validated", "director_email": director_email}
         patch_url = SUPA_URL + f"/rest/v1/legal_opinions?id=eq.{opinion_id}"
@@ -5843,120 +5847,156 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
         return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
 
-@app.route("/chat/export-memo", methods=["POST", "OPTIONS"])
-def export_chat_memo():
-    """Synthétise un échange de l'assistant 'Avis juridique' en mémo Word structuré."""
+def _memo_qa_text(history):
+    turns = [
+        h for h in (history or [])
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and (h.get("content") or "").strip()
+    ]
+    if not turns:
+        return None
+    turns = turns[-20:]
+    return "\n\n".join(
+        ("QUESTION : " if t["role"] == "user" else "RÉPONSE : ") + t["content"].strip()
+        for t in turns
+    )
+
+
+def _synthesize_memo_text(qa_text):
+    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    synth = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Tu vas rédiger une note juridique (mémo) structurée et rédigée en français à partir de l'échange "
+                "ci-dessous entre un avocat et un assistant de recherche juridique. "
+                "Respecte une structure stricte en 3 sections numérotées, avec ces en-têtes EXACTS précédés de '## ' :\n"
+                "## 1. Objet de la consultation\n"
+                "(2 à 4 phrases rédigées en prose, présentant clairement la question juridique posée et son contexte)\n"
+                "## 2. Analyse juridique\n"
+                "(développement rédigé en paragraphes complets et argumentés, citant les textes et règles applicables "
+                "évoqués dans l'échange ; n'utilise des listes à puces qu'à titre exceptionnel pour énumérer des "
+                "éléments réellement distincts, jamais comme structure principale de la section)\n"
+                "## 3. Conclusion et recommandations\n"
+                "(synthèse opérationnelle rédigée en 3 à 5 phrases, formulée comme une recommandation claire à l'avocat)\n"
+                "Rédige dans un style professionnel et fluide, en phrases complètes et bien construites — évite "
+                "absolument le style télégraphique ou les bouts de phrase juxtaposés. "
+                "N'invente AUCUNE information absente de l'échange ci-dessous. "
+                "Ne mentionne jamais de 'contrat' sauf si l'échange en parle explicitement.\n\n"
+                "ÉCHANGE :\n" + qa_text
+            )
+        }]
+    )
+    return synth.content[0].text.strip()
+
+
+def _lookup_firm_logo(user_email):
+    if not user_email:
+        return None
+    try:
+        accs = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "firm_logo,role,parent_email", "limit": "1"})
+        if accs:
+            logo_b64 = accs[0].get("firm_logo")
+            if not logo_b64 and accs[0].get("role") == "juriste" and accs[0].get("parent_email"):
+                dacc = supa_get("user_accounts", {"email": f"eq.{accs[0]['parent_email']}", "select": "firm_logo", "limit": "1"})
+                if dacc:
+                    logo_b64 = dacc[0].get("firm_logo")
+            return logo_b64
+    except Exception as _le:
+        print("firm logo lookup error: " + str(_le))
+    return None
+
+
+def _build_memo_docx(memo_text, logo_b64=None):
+    from docx import Document as _MemoDoc
+    from docx.shared import Pt, Cm, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = _MemoDoc()
+    for section in doc.sections:
+        section.top_margin = Cm(2.2); section.bottom_margin = Cm(2.2)
+        section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
+
+    if logo_b64:
+        try:
+            _logo_data = logo_b64.split(",", 1)[1] if "," in logo_b64 else logo_b64
+            doc.add_picture(io.BytesIO(base64.b64decode(_logo_data)), width=Inches(1.6))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        except Exception as _le2:
+            print("memo logo embed error: " + str(_le2))
+
+    h = doc.add_heading("Note juridique", level=0)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    meta = doc.add_paragraph()
+    meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    mr = meta.add_run("Généré le " + datetime.datetime.now().strftime("%d/%m/%Y à %H:%M"))
+    mr.font.size = Pt(9); mr.font.color.rgb = RGBColor(0x70, 0x70, 0x70); mr.italic = True
+
+    doc.add_paragraph()
+
+    for block in re.split(r'\n(?=##\s)', memo_text):
+        block = block.strip()
+        if not block:
+            continue
+        m = re.match(r'##\s*(.+?)\n(.*)', block, re.DOTALL)
+        if m:
+            heading_txt, body = m.group(1).strip(), m.group(2).strip()
+            doc.add_heading(heading_txt, level=2)
+            for line in body.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith('- ') or line.startswith('• '):
+                    p = doc.add_paragraph('• ' + line[2:].strip())
+                    p.paragraph_format.left_indent = Cm(0.6)
+                else:
+                    doc.add_paragraph(line)
+        else:
+            doc.add_paragraph(block)
+
+    out = io.BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return out
+
+
+@app.route("/chat/synthesize-memo", methods=["POST", "OPTIONS"])
+def synthesize_chat_memo():
+    """Génère uniquement le texte structuré du mémo (sans docx), pour aperçu/édition
+    côté client avant export — utilisé par la modale d'aperçu de la note juridique."""
     if request.method == "OPTIONS": return "", 204
     try:
         data = request.get_json() or {}
-        history = data.get("history") or []
-
-        turns = [
-            h for h in history
-            if isinstance(h, dict) and h.get("role") in ("user", "assistant") and (h.get("content") or "").strip()
-        ]
-        if not turns:
+        qa_text = _memo_qa_text(data.get("history"))
+        if not qa_text:
             return jsonify({"error": "Aucun échange à synthétiser"}), 400
-        turns = turns[-20:]
+        memo_text = _synthesize_memo_text(qa_text)
+        return jsonify({"memo_text": memo_text})
+    except Exception as e:
+        return jsonify({"error": _anthropic_error_msg(e) or str(e)}), 500
 
-        qa_text = "\n\n".join(
-            ("QUESTION : " if t["role"] == "user" else "RÉPONSE : ") + t["content"].strip()
-            for t in turns
-        )
+
+@app.route("/chat/export-memo", methods=["POST", "OPTIONS"])
+def export_chat_memo():
+    """Génère le mémo Word à partir d'un texte déjà synthétisé/édité (memo_text), ou
+    synthétise l'échange de l'assistant 'Avis juridique' si memo_text n'est pas fourni."""
+    if request.method == "OPTIONS": return "", 204
+    try:
+        data = request.get_json() or {}
+        memo_text = (data.get("memo_text") or "").strip()
+
+        if not memo_text:
+            qa_text = _memo_qa_text(data.get("history"))
+            if not qa_text:
+                return jsonify({"error": "Aucun échange à synthétiser"}), 400
+            memo_text = _synthesize_memo_text(qa_text)
 
         # Logo du cabinet (remplace le branding "Omniscient" dans le document généré)
-        user_email = (data.get("user_email") or "").strip()
-        logo_b64 = None
-        if user_email:
-            try:
-                accs = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "firm_logo,role,parent_email", "limit": "1"})
-                if accs:
-                    logo_b64 = accs[0].get("firm_logo")
-                    if not logo_b64 and accs[0].get("role") == "juriste" and accs[0].get("parent_email"):
-                        dacc = supa_get("user_accounts", {"email": f"eq.{accs[0]['parent_email']}", "select": "firm_logo", "limit": "1"})
-                        if dacc:
-                            logo_b64 = dacc[0].get("firm_logo")
-            except Exception as _le:
-                print("export-memo logo lookup error: " + str(_le))
+        logo_b64 = _lookup_firm_logo((data.get("user_email") or "").strip())
 
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        synth = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Tu vas rédiger une note juridique (mémo) structurée et rédigée en français à partir de l'échange "
-                    "ci-dessous entre un avocat et un assistant de recherche juridique. "
-                    "Respecte une structure stricte en 3 sections numérotées, avec ces en-têtes EXACTS précédés de '## ' :\n"
-                    "## 1. Objet de la consultation\n"
-                    "(2 à 4 phrases rédigées en prose, présentant clairement la question juridique posée et son contexte)\n"
-                    "## 2. Analyse juridique\n"
-                    "(développement rédigé en paragraphes complets et argumentés, citant les textes et règles applicables "
-                    "évoqués dans l'échange ; n'utilise des listes à puces qu'à titre exceptionnel pour énumérer des "
-                    "éléments réellement distincts, jamais comme structure principale de la section)\n"
-                    "## 3. Conclusion et recommandations\n"
-                    "(synthèse opérationnelle rédigée en 3 à 5 phrases, formulée comme une recommandation claire à l'avocat)\n"
-                    "Rédige dans un style professionnel et fluide, en phrases complètes et bien construites — évite "
-                    "absolument le style télégraphique ou les bouts de phrase juxtaposés. "
-                    "N'invente AUCUNE information absente de l'échange ci-dessous. "
-                    "Ne mentionne jamais de 'contrat' sauf si l'échange en parle explicitement.\n\n"
-                    "ÉCHANGE :\n" + qa_text
-                )
-            }]
-        )
-        memo_text = synth.content[0].text.strip()
-
-        from docx import Document as _MemoDoc
-        from docx.shared import Pt, Cm, RGBColor, Inches
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-        doc = _MemoDoc()
-        for section in doc.sections:
-            section.top_margin = Cm(2.2); section.bottom_margin = Cm(2.2)
-            section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
-
-        if logo_b64:
-            try:
-                _logo_data = logo_b64.split(",", 1)[1] if "," in logo_b64 else logo_b64
-                doc.add_picture(io.BytesIO(base64.b64decode(_logo_data)), width=Inches(1.6))
-                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            except Exception as _le2:
-                print("export-memo logo embed error: " + str(_le2))
-
-        h = doc.add_heading("Note juridique", level=0)
-        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        meta = doc.add_paragraph()
-        meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        mr = meta.add_run("Généré le " + datetime.datetime.now().strftime("%d/%m/%Y à %H:%M"))
-        mr.font.size = Pt(9); mr.font.color.rgb = RGBColor(0x70, 0x70, 0x70); mr.italic = True
-
-        doc.add_paragraph()
-
-        for block in re.split(r'\n(?=##\s)', memo_text):
-            block = block.strip()
-            if not block:
-                continue
-            m = re.match(r'##\s*(.+?)\n(.*)', block, re.DOTALL)
-            if m:
-                heading_txt, body = m.group(1).strip(), m.group(2).strip()
-                doc.add_heading(heading_txt, level=2)
-                for line in body.split('\n'):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if line.startswith('- ') or line.startswith('• '):
-                        p = doc.add_paragraph('• ' + line[2:].strip())
-                        p.paragraph_format.left_indent = Cm(0.6)
-                    else:
-                        doc.add_paragraph(line)
-            else:
-                doc.add_paragraph(block)
-
-        out = io.BytesIO()
-        doc.save(out)
-        out.seek(0)
+        out = _build_memo_docx(memo_text, logo_b64)
         return send_file(
             out,
             mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
