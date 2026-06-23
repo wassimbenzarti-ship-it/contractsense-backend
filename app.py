@@ -3734,7 +3734,7 @@ def export_translation():
                 modified_sections[matched_idx] = prop
                 applied_count += 1
 
-        lang_label = {"en": "English", "fr": "Français", "ar": "العربية"}.get(target_lang, target_lang)
+        lang_label = {"en": "English", "fr": "Français", "ar": "العربية", "es": "Español"}.get(target_lang, target_lang)
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         client = anthropic.Anthropic(api_key=api_key)
 
@@ -3833,7 +3833,7 @@ def export_translation():
         tblPr.append(tblBorders)
 
         # Subtle header row: light gray, small bold labels, thin bottom border
-        lang_hdr = {"en": "English Translation", "fr": "Traduction française", "ar": "الترجمة العربية"}.get(target_lang, target_lang)
+        lang_hdr = {"en": "English Translation", "fr": "Traduction française", "ar": "الترجمة العربية", "es": "Traducción española"}.get(target_lang, target_lang)
         hdr_row = tbl.add_row()
         for cell, txt, align in [(hdr_row.cells[0], "النص الأصلي", WD_ALIGN_PARAGRAPH.RIGHT),
                                    (hdr_row.cells[1], lang_hdr, WD_ALIGN_PARAGRAPH.LEFT)]:
