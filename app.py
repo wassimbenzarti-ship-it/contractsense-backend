@@ -3424,6 +3424,7 @@ def analyze():
         # Decrement analyses_remaining after successful analysis
         if user_email and remaining is not None:
             supa_patch("user_accounts", {"analyses_remaining": remaining - 1}, f"email=eq.{user_email}")
+        result["analyses_remaining"] = max(0, (remaining or 0) - 1)
 
         # ── Cache en mémoire (toujours disponible dans la session serveur) ───
         file_cache_id = None
