@@ -84,42 +84,146 @@ def _handle_exception(e):
         resp.headers["Access-Control-Allow-Credentials"] = "true"
     return resp
 
-def get_legal_framework(contract_type):
-    """Return mandatory legal constraints per contract type"""
-    frameworks = {
+def get_legal_framework(contract_type, jurisdiction="Maroc"):
+    """Return mandatory legal constraints per contract type and jurisdiction"""
+
+    # ── Droit marocain ────────────────────────────────────────────────────────
+    if jurisdiction in ("Maroc", "droit_marocain"):
+        frameworks = {
+            "employment": (
+                "DROIT DU TRAVAIL MAROCAIN — RÈGLES IMPÉRATIVES:\n"
+                "- CDD (contrat de projet/durée déterminée): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
+                "- Renouvellement abusif = requalification automatique en CDI\n"
+                "- Préavis légaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
+                "- Préavis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
+                "- Indemnité de licenciement: 96h/an pour les 3 premières années, 144h/an après\n"
+                "- Licenciement abusif interdit — cause réelle et sérieuse obligatoire\n"
+                "- Heures supplémentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
+                "- Congé annuel: 1,5 jour/mois travaillé (min 18 jours/an)\n"
+                "- Toute clause moins favorable que la loi est NULLE de plein droit"
+            ),
+            "nda": (
+                "DROIT MAROCAIN — CONFIDENTIALITÉ:\n"
+                "- Durée maximale raisonnable: 3-5 ans post-contrat\n"
+                "- Clause doit définir précisément les informations confidentielles\n"
+                "- Pénalités doivent être proportionnées (Art. 264 DOC)"
+            ),
+            "service": (
+                "DROIT MAROCAIN — PRESTATION DE SERVICES:\n"
+                "- Délai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
+                "- Pénalités de retard légales: taux directeur BAM + 3 points\n"
+                "- Clauses limitatives de responsabilité admises si non abusives\n"
+                "- Clause de non-concurrence: limitée dans le temps et l'espace"
+            ),
+            "purchase": (
+                "DROIT MAROCAIN — VENTE:\n"
+                "- Garantie des vices cachés: 1 an (Art. 573 DOC)\n"
+                "- Transfert de propriété: à la livraison sauf clause contraire\n"
+                "- Réserve de propriété possible jusqu'au paiement complet"
+            ),
+        }
+        return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes généraux du DOC.")
+
+    # ── Droit espagnol ────────────────────────────────────────────────────────
+    if jurisdiction in ("droit_espagnol", "España", "Spain"):
+        frameworks = {
+            "employment": (
+                "DERECHO LABORAL ESPAÑOL — REGLAS IMPERATIVAS (Estatuto de los Trabajadores):\n"
+                "- Contrato temporal: máximo 6 meses (eventual) o duración de la obra/servicio\n"
+                "- Encadenamiento de contratos temporales (+24 meses en 30) → conversión en indefinido\n"
+                "- Preaviso de extinción: mínimo 15 días (según convenio colectivo aplicable)\n"
+                "- Indemnización por despido improcedente: 33 días/año trabajado, máximo 24 mensualidades\n"
+                "- Horas extraordinarias: máximo 80 h/año; retribuidas al menos +75% o compensación en descanso\n"
+                "- Vacaciones: mínimo 30 días naturales por año (no compensables en metálico salvo extinción)\n"
+                "- Salario Mínimo Interprofesional (SMI): actualizado anualmente por RD\n"
+                "- Toda cláusula por debajo de las condiciones mínimas legales es NULA de pleno derecho"
+            ),
+            "nda": (
+                "DERECHO ESPAÑOL — SECRETOS EMPRESARIALES (Ley 1/2019):\n"
+                "- Duración razonable: 2-5 años post-contrato\n"
+                "- Obligación de definir con precisión la información confidencial\n"
+                "- Las penalidades deben ser proporcionadas y no abusivas (Art. 7 CC)"
+            ),
+            "service": (
+                "DERECHO ESPAÑOL — PRESTACIÓN DE SERVICIOS:\n"
+                "- Plazo de pago máximo: 30 días entre empresas, 60 días sector público (Ley 15/2010)\n"
+                "- Intereses de demora: tipo de interés legal del dinero + 8 puntos (Ley 3/2004)\n"
+                "- Cláusulas limitativas de responsabilidad admitidas si no son abusivas\n"
+                "- Cláusula de no competencia postcontractual: máximo 2 años con compensación económica"
+            ),
+            "purchase": (
+                "DERECHO ESPAÑOL — COMPRAVENTA (Código Civil / TRLGDCU):\n"
+                "- Garantía por vicios ocultos: 6 meses entre empresas, 2 años en consumidores (TRLGDCU)\n"
+                "- Transmisión de la propiedad: a la entrega salvo pacto de reserva de dominio\n"
+                "- Reserva de dominio válida y oponible si se inscribe en el registro correspondiente"
+            ),
+        }
+        return frameworks.get(contract_type, "Aplica el derecho español vigente, el Código Civil y la normativa sectorial correspondiente.")
+
+    # ── Droit français ────────────────────────────────────────────────────────
+    if jurisdiction in ("droit_francais", "France"):
+        frameworks = {
+            "employment": (
+                "DROIT DU TRAVAIL FRANÇAIS — RÈGLES IMPÉRATIVES (Code du Travail):\n"
+                "- CDD: motif obligatoire (remplacement, accroissement d'activité, usage); max 18 mois renouvellements inclus\n"
+                "- Renouvellement abusif ou succession de CDD = requalification en CDI (Art. L1245-1)\n"
+                "- Préavis légal: selon ancienneté et catégorie professionnelle (Art. L1234-1)\n"
+                "- Indemnité de licenciement: 1/4 de mois/an pour les 10 premières années (Art. R1234-2)\n"
+                "- Heures supplémentaires: majoration 25% (8 premières h), 50% au-delà\n"
+                "- Congés payés: 2,5 jours ouvrables/mois travaillé (30 jours/an)\n"
+                "- Toute clause moins favorable que la convention collective est NULLE"
+            ),
+            "nda": (
+                "DROIT FRANÇAIS — CONFIDENTIALITÉ (Loi du 30 juillet 2018):\n"
+                "- Durée raisonnable: 3-5 ans post-contrat\n"
+                "- Définition précise des informations confidentielles obligatoire\n"
+                "- Clause pénale admise si proportionnée (Art. 1231-5 CC)"
+            ),
+            "service": (
+                "DROIT FRANÇAIS — PRESTATION DE SERVICES:\n"
+                "- Délai de paiement: max 60 jours date de facture ou 45 jours fin de mois (LME Art. L441-10)\n"
+                "- Pénalités de retard: taux BCE × 3 minimum + indemnité forfaitaire 40€ (Art. L441-10)\n"
+                "- Clauses abusives entre professionnels sanctionnées (Art. L442-1 Code de commerce)"
+            ),
+            "purchase": (
+                "DROIT FRANÇAIS — VENTE:\n"
+                "- Garantie des vices cachés: 2 ans à compter de la découverte (Art. 1648 CC)\n"
+                "- Garantie de conformité consommateur: 2 ans (Art. L217-4 Code conso)\n"
+                "- Réserve de propriété opposable aux tiers si stipulée par écrit"
+            ),
+        }
+        return frameworks.get(contract_type, "Applique le droit français, le Code civil et les textes réglementaires sectoriels.")
+
+    # ── Universel / juridiction non identifiée ─────────────────────────────────
+    generic = {
         "employment": (
-            "DROIT DU TRAVAIL MAROCAIN — RÈGLES IMPÉRATIVES:\n"
-            "- CDD (contrat de projet/durée déterminée): max 1 an, renouvelable UNE seule fois (Art. 16 CT)\n"
-            "- Renouvellement abusif = requalification automatique en CDI\n"
-            "- Préavis légaux: 8 jours (<1 an), 1 mois (1-5 ans), 2 mois (>5 ans) pour ouvriers\n"
-            "- Préavis cadres: 1 mois (<1 an), 2 mois (1-5 ans), 3 mois (>5 ans)\n"
-            "- Indemnité de licenciement: 96h/an pour les 3 premières années, 144h/an après\n"
-            "- Licenciement abusif interdit — cause réelle et sérieuse obligatoire\n"
-            "- Heures supplémentaires: majoration 25% (jour), 50% (nuit/vendredi), 100% (dimanche)\n"
-            "- Congé annuel: 1,5 jour/mois travaillé (min 18 jours/an)\n"
-            "- Toute clause moins favorable que la loi est NULLE de plein droit"
+            "RÈGLES IMPÉRATIVES — CONTRAT DE TRAVAIL (principes internationaux):\n"
+            "- Durée déterminée: motif légitime requis; renouvellements abusifs interdits\n"
+            "- Licenciement: cause réelle et sérieuse obligatoire; préavis raisonnable\n"
+            "- Heures supplémentaires: compensation obligatoire selon droit local\n"
+            "- Toute clause moins favorable que le droit local impératif est NULLE\n"
+            "- Applique STRICTEMENT le droit du travail de la juridiction détectée dans le contrat"
         ),
         "nda": (
-            "DROIT MAROCAIN — CONFIDENTIALITÉ:\n"
-            "- Durée maximale raisonnable: 3-5 ans post-contrat\n"
-            "- Clause doit définir précisément les informations confidentielles\n"
-            "- Pénalités doivent être proportionnées (Art. 264 DOC)"
+            "CONFIDENTIALITÉ — PRINCIPES GÉNÉRAUX:\n"
+            "- Durée raisonnable et proportionnée à l'objet\n"
+            "- Définition précise des informations couvertes\n"
+            "- Pénalités proportionnées au préjudice réel"
         ),
         "service": (
-            "DROIT MAROCAIN — PRESTATION DE SERVICES:\n"
-            "- Délai de paiement: max 60 jours (Art. 78 loi 15-95)\n"
-            "- Pénalités de retard légales: taux directeur BAM + 3 points\n"
-            "- Clauses limitatives de responsabilité admises si non abusives\n"
-            "- Clause de non-concurrence: limitée dans le temps et l'espace"
+            "PRESTATION DE SERVICES — PRINCIPES GÉNÉRAUX:\n"
+            "- Délai de paiement conforme au droit local applicable\n"
+            "- Pénalités de retard légales selon juridiction du contrat\n"
+            "- Clauses limitatives de responsabilité: admises si non abusives"
         ),
         "purchase": (
-            "DROIT MAROCAIN — VENTE:\n"
-            "- Garantie des vices cachés: 1 an (Art. 573 DOC)\n"
-            "- Transfert de propriété: à la livraison sauf clause contraire\n"
-            "- Réserve de propriété possible jusqu'au paiement complet"
+            "VENTE — PRINCIPES GÉNÉRAUX:\n"
+            "- Garantie des défauts cachés selon droit local\n"
+            "- Transfert de propriété et des risques: clause expresse recommandée\n"
+            "- Réserve de propriété: valide si expressément stipulée"
         ),
     }
-    return frameworks.get(contract_type, "Respecte le droit marocain applicable et les principes généraux du DOC.")
+    return generic.get(contract_type, "Applique le droit impératif de la juridiction identifiée dans le contrat. Ne cite aucune règle d'un autre pays.")
 
 # ── Party label normalization ─────────────────────────────
 CONTRACT_CATEGORIES = {
@@ -1025,6 +1129,10 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             return "droit_marocain", False
         if any(k in s for k in ["droit français", "loi française", "france", "code civil français", "droit de la france"]):
             return "droit_francais", False
+        if any(k in s for k in ["derecho español", "legislación española", "estatuto de los trabajadores",
+                                  "droit espagnol", "spanish law", "ley española", "código civil español",
+                                  "españa", "boletín oficial", "boe ", "ley orgánica", "código de comercio español"]):
+            return "droit_espagnol", False
         # Detect foreign jurisdictions we have no RAG for — don't inject wrong-law docs
         _foreign_kw = [
             "estonian law", "droit estonien", "estonia", "estonie",
@@ -1035,7 +1143,6 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
             "swiss law", "droit suisse", "switzerland",
             "belgian law", "droit belge", "belgique",
             "luxembourg law", "droit luxembourgeois",
-            "spanish law", "droit espagnol",
             "italian law", "droit italien",
             "portuguese law", "droit portugais",
             "polish law", "droit polonais",
@@ -1477,7 +1584,7 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "Étape 4: Parcours la CHECKLIST THÉMATIQUE ci-dessus point par point — pour chaque thème non couvert ou mal couvert → crée une modification ou une nouvelle clause\n"
         "Étape 5: Vérifie chaque modification contre le RAG pour citer les sources pertinentes\n"
         "Étape 6: VÉRIFICATION FINALE — relis ta liste de modifications et demande-toi: 'Ai-je laissé passer une clause qui désavantage " + partie + " ?' Si oui → ajoute-la maintenant\n\n"
-        + get_legal_framework(contract_type) +
+        + get_legal_framework(contract_type, _jurisdiction) +
         "\n\n"
         + rag_context
         + legal_context
