@@ -1361,6 +1361,8 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     _coalition_parties = [p.strip() for p in partie.split(" et ")] if " et " in partie else []
     _is_coalition = len(_coalition_parties) >= 2
 
+    _ilang_name = {"fr": "FRANÇAIS", "en": "ANGLAIS", "es": "ESPAÑOL", "ar": "ARABE"}.get(interface_lang, "FRANÇAIS")
+
     system = (
         "Tu es un avocat d'affaires senior avec 20 ans d'expérience en droit des contrats. Ta responsabilité professionnelle est engagée.\n"
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
@@ -1396,15 +1398,15 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "LANGUE DU CONTRAT: " + detected_lang + "\n"
         "LANGUE DE L'INTERFACE (langue de travail de l'avocat): " + interface_lang + "\n"
         "RÈGLE ABSOLUE DE LANGUE:\n"
-        "• Le champ 'reason' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (langue de l'avocat — bouton FR/EN)\n"
-        "• Le champ 'clause_name' → TOUJOURS en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + " (étiquette courte pour l'avocat)\n"
+        "• Le champ 'reason' → TOUJOURS en " + _ilang_name + " (langue de l'avocat — bouton FR/EN/ES)\n"
+        "• Le champ 'clause_name' → TOUJOURS en " + _ilang_name + " (étiquette courte pour l'avocat)\n"
         "• Le champ 'proposed' → TOUJOURS dans la MÊME LANGUE que le champ 'original' correspondant.\n"
         "  - Si original est en français → proposed en français.\n"
         "  - Si original est en anglais → proposed en anglais.\n"
         "  - Si original est en arabe → proposed en arabe.\n"
         "  - Si le contrat est bilingue (clauses mixtes FR+EN), chaque proposed doit correspondre à la langue de son original.\n"
-        "INTERDIT: rédiger proposed dans une langue différente de son original — même si l'avocat travaille en " + ("FRANÇAIS" if interface_lang == "fr" else "ANGLAIS" if interface_lang == "en" else "ARABE") + ".\n"
-        "Le bouton FR/EN influence uniquement reason et clause_name, jamais proposed.\n"
+        "INTERDIT: rédiger proposed dans une langue différente de son original — même si l'avocat travaille en " + _ilang_name + ".\n"
+        "Le bouton FR/EN/ES influence uniquement reason et clause_name, jamais proposed.\n"
         "TYPE DE CONTRAT: " + contract_type + "\n"
         "PARTIE À PROTÉGER: " + partie + "\n"
         "OBJECTIFS CONCRETS pour " + partie + ": " + role_obj + "\n\n"
