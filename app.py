@@ -3236,6 +3236,10 @@ def analyze_stream():
     api_key  = os.environ.get("ANTHROPIC_API_KEY") or request.form.get("api_key", "")
     partie   = request.form.get("partie", "la partie beneficiaire") or "la partie beneficiaire"
     user_email = request.form.get("user_email", "").strip()
+    if not user_email:
+        import hashlib as _hl
+        _ip = (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "").split(",")[0].strip()
+        user_email = "anon_" + _hl.md5((_ip or "unknown").encode()).hexdigest()[:16] + "@anonymous.local"
     file_bytes = file.read() if file else None
     filename   = file.filename if file else ""
 
@@ -3246,10 +3250,7 @@ def analyze_stream():
             q.put({"type": "progress", "message": msg})
         try:
             _cb("\U0001f4c4 Lecture du document...")
-            # Auth / quota check
-            if not user_email:
-                q.put({"type": "error", "message": "Connexion requise."})
-                return
+            # Auth / quota check (user_email already resolved to anon_* if anonymous)
             rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
             remaining = 9999
             _dir_email_stream = ""
@@ -3355,9 +3356,11 @@ def analyze():
         partie = request.form.get("partie", "la partie bénéficiaire") or "la partie bénéficiaire"
         user_email = request.form.get("user_email", "").strip()
 
-        # Require login
+        # Anonymous users: track by IP
         if not user_email:
-            return jsonify({"error": "Connexion requise pour analyser un contrat."}), 401
+            import hashlib as _hl
+            _ip = (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "").split(",")[0].strip()
+            user_email = "anon_" + _hl.md5((_ip or "unknown").encode()).hexdigest()[:16] + "@anonymous.local"
 
         # Check analyses_remaining — upsert row if missing (3 free analyses by default)
         rows = supa_get("user_accounts", {"email": f"eq.{user_email}", "select": "analyses_remaining,is_admin,parent_email,role", "limit": "1"})
