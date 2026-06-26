@@ -399,16 +399,22 @@ def supa_patch(table, updates, filter_str):
 
 _SUPA_MODEL_PREF_EMAIL = "__model_pref__@system"
 
+_ALLOWED_MODELS = {"claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"}
+
 def _load_model_pref_from_supa():
-    """Load persisted model preference from Supabase at startup. Skipped if Railway env var is set."""
+    """Load persisted model preference from Supabase.
+    Priority: Supabase explicit override > ANTHROPIC_MODEL env var > default.
+    If Supabase has no row, fall back to env var so Railway default still works."""
     global _MAIN_MODEL
-    if _MAIN_MODEL_ENV:
-        return  # Railway env var takes absolute precedence
     try:
         if not SUPA_URL:
+            if _MAIN_MODEL_ENV:
+                _MAIN_MODEL = _MAIN_MODEL_ENV
             return
         _svc_key = SUPA_SERVICE_KEY or SUPA_KEY
         if not _svc_key:
+            if _MAIN_MODEL_ENV:
+                _MAIN_MODEL = _MAIN_MODEL_ENV
             return
         _load_headers = {
             "apikey": _svc_key,
@@ -419,12 +425,19 @@ def _load_model_pref_from_supa():
         r = requests.get(url, headers=_load_headers, timeout=5)
         if r.ok:
             data = r.json()
-            if data and data[0].get('role') in ("claude-haiku-4-5-20251001", "claude-sonnet-4-6",
-                                                 "claude-opus-4-8", "claude-haiku-4-5"):
+            if data and data[0].get('role') in _ALLOWED_MODELS:
+                # Admin has explicitly set a model — this wins over any env var
                 _MAIN_MODEL = data[0]['role']
-                print(f"[startup] model pref loaded from Supabase: {_MAIN_MODEL}", flush=True)
+                print(f"[model] loaded from Supabase admin override: {_MAIN_MODEL}", flush=True)
+                return
+        # No Supabase preference — fall back to Railway env var or keep current default
+        if _MAIN_MODEL_ENV and _MAIN_MODEL_ENV in _ALLOWED_MODELS:
+            _MAIN_MODEL = _MAIN_MODEL_ENV
+            print(f"[model] using ANTHROPIC_MODEL env var: {_MAIN_MODEL}", flush=True)
     except Exception as e:
-        print(f"[startup] _load_model_pref_from_supa failed: {e}")
+        print(f"[model] _load_model_pref_from_supa failed: {e}")
+        if _MAIN_MODEL_ENV and _MAIN_MODEL_ENV in _ALLOWED_MODELS:
+            _MAIN_MODEL = _MAIN_MODEL_ENV
 
 def _save_model_pref_to_supa(model_name):
     """Persist model preference in Supabase so it survives Railway restarts.
@@ -456,11 +469,9 @@ def _save_model_pref_to_supa(model_name):
 
 def _get_model():
     """Return the active model, refreshing from Supabase every 30s.
-    Solves gunicorn multi-worker drift: worker A sets haiku, worker B still has sonnet.
-    After ≤30s all workers converge to the Supabase value."""
+    Priority: Supabase admin override > ANTHROPIC_MODEL env var > default sonnet.
+    Supabase wins so the admin panel is always effective across gunicorn workers."""
     global _MAIN_MODEL, _MAIN_MODEL_REFRESH_TS
-    if _MAIN_MODEL_ENV:
-        return _MAIN_MODEL_ENV  # Railway env var is immutable
     import time as _time
     if _time.time() - _MAIN_MODEL_REFRESH_TS > 30:
         _load_model_pref_from_supa()
