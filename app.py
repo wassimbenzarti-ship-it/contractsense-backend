@@ -405,10 +405,18 @@ def _load_model_pref_from_supa():
     if _MAIN_MODEL_ENV:
         return  # Railway env var takes absolute precedence
     try:
-        if not SUPA_URL or not SUPA_KEY:
+        if not SUPA_URL:
             return
+        _svc_key = SUPA_SERVICE_KEY or SUPA_KEY
+        if not _svc_key:
+            return
+        _load_headers = {
+            "apikey": _svc_key,
+            "Authorization": "Bearer " + _svc_key,
+            "Content-Type": "application/json",
+        }
         url = SUPA_URL + f"/rest/v1/user_accounts?email=eq.{_SUPA_MODEL_PREF_EMAIL}&select=role&limit=1"
-        r = requests.get(url, headers=supa_headers(), timeout=5)
+        r = requests.get(url, headers=_load_headers, timeout=5)
         if r.ok:
             data = r.json()
             if data and data[0].get('role') in ("claude-haiku-4-5-20251001", "claude-sonnet-4-6",
@@ -419,19 +427,30 @@ def _load_model_pref_from_supa():
         print(f"[startup] _load_model_pref_from_supa failed: {e}")
 
 def _save_model_pref_to_supa(model_name):
-    """Persist model preference in Supabase so it survives Railway restarts."""
+    """Persist model preference in Supabase so it survives Railway restarts.
+    Uses service key to bypass RLS — anon key is blocked by user_accounts policies."""
     try:
-        if not SUPA_URL or not SUPA_KEY:
+        if not SUPA_URL:
             return
-        headers_ups = supa_headers()
-        headers_ups["Prefer"] = "resolution=merge-duplicates"
+        _svc_key = SUPA_SERVICE_KEY or SUPA_KEY
+        if not _svc_key:
+            return
+        headers_ups = {
+            "apikey": _svc_key,
+            "Authorization": "Bearer " + _svc_key,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates",
+        }
         url = SUPA_URL + "/rest/v1/user_accounts"
-        requests.post(url, headers=headers_ups, json={
+        r = requests.post(url, headers=headers_ups, json={
             "email": _SUPA_MODEL_PREF_EMAIL,
             "role": model_name,
             "is_admin": False,
         }, timeout=5)
-        print(f"[admin] model pref persisted to Supabase: {model_name}", flush=True)
+        if r.ok:
+            print(f"[admin] model pref persisted to Supabase: {model_name}", flush=True)
+        else:
+            print(f"[admin] _save_model_pref_to_supa HTTP {r.status_code}: {r.text[:200]}", flush=True)
     except Exception as e:
         print(f"[admin] _save_model_pref_to_supa failed: {e}")
 
@@ -2882,7 +2901,7 @@ def admin_create_user():
 @app.route("/admin/get-model", methods=["GET", "OPTIONS"])
 def admin_get_model():
     if request.method == "OPTIONS": return "", 204
-    return jsonify({"model": _MAIN_MODEL})
+    return jsonify({"model": _get_model()})
 
 @app.route("/admin/set-model", methods=["POST", "OPTIONS"])
 def admin_set_model():
