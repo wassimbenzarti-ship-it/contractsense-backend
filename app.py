@@ -419,21 +419,48 @@ def _load_model_pref_from_supa():
         print(f"[startup] _load_model_pref_from_supa failed: {e}")
 
 def _save_model_pref_to_supa(model_name):
-    """Persist model preference in Supabase so it survives Railway restarts."""
+    """Persist model preference in Supabase so it survives Railway restarts.
+    Strategy: PATCH existing row first; if no row matched, INSERT with all required fields.
+    Uses service key to bypass RLS."""
     try:
-        if not SUPA_URL or not SUPA_KEY:
-            return
-        headers_ups = supa_headers()
-        headers_ups["Prefer"] = "resolution=merge-duplicates"
-        url = SUPA_URL + "/rest/v1/user_accounts"
-        requests.post(url, headers=headers_ups, json={
+        if not SUPA_URL:
+            return False
+        _svc_key = SUPA_SERVICE_KEY or SUPA_KEY
+        if not _svc_key:
+            return False
+        _hdrs = {
+            "apikey": _svc_key,
+            "Authorization": "Bearer " + _svc_key,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        # 1. Try PATCH (update existing row)
+        patch_url = SUPA_URL + f"/rest/v1/user_accounts?email=eq.{_SUPA_MODEL_PREF_EMAIL}"
+        r_patch = requests.patch(patch_url, headers=_hdrs, json={"role": model_name}, timeout=5)
+        if r_patch.ok:
+            patched = r_patch.json()
+            if patched:  # at least one row was updated
+                print(f"[admin] model pref PATCH ok: {model_name}", flush=True)
+                return True
+        # 2. No existing row — INSERT with all potentially-required columns
+        insert_url = SUPA_URL + "/rest/v1/user_accounts"
+        r_ins = requests.post(insert_url, headers=_hdrs, json={
             "email": _SUPA_MODEL_PREF_EMAIL,
             "role": model_name,
             "is_admin": False,
+            "payment_status": "system",
+            "analyses_remaining": 9999,
+            "subscription_end": "2099-12-31",
         }, timeout=5)
-        print(f"[admin] model pref persisted to Supabase: {model_name}", flush=True)
+        if r_ins.ok:
+            print(f"[admin] model pref INSERT ok: {model_name}", flush=True)
+            return True
+        else:
+            print(f"[admin] _save_model_pref_to_supa INSERT {r_ins.status_code}: {r_ins.text[:300]}", flush=True)
+            return False
     except Exception as e:
         print(f"[admin] _save_model_pref_to_supa failed: {e}")
+        return False
 
 def _get_model():
     """Return the active model, refreshing from Supabase every 30s.
