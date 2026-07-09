@@ -1121,13 +1121,13 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Build numbered paragraphs for precise matching
     paragraphs = build_numbered_paragraphs(file_bytes, filename) if file_bytes else []
 
-    # Build numbered contract text for AI — up to 600 paragraphs / 120k chars
-    # Pactes d'actionnaires and long service contracts routinely exceed 300 paragraphs.
-    # Claude's 200k-token window handles 120k chars (~30k tokens) without issue.
+    # Build numbered contract text for AI — up to 1200 paragraphs / 220k chars
+    # Raised from 600/120k to support long contracts (~31k words / 200k chars).
+    # Claude's 200k-token window handles 220k chars (~55k tokens) comfortably alongside prompt+RAG.
     if paragraphs:
-        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:600])
+        numbered_text = "\n".join(("[P" + str(p["idx"]) + "] " + p["text"]) for p in paragraphs[:1200])
     else:
-        numbered_text = contract_text[:120000]
+        numbered_text = contract_text[:220000]
 
     # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
     numbered_text, _anon_mapping = anonymize_contract(numbered_text)
