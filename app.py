@@ -1131,6 +1131,56 @@ def deanonymize_text(text, mapping):
     return text
 
 
+def _extract_doc_comments(file_bytes):
+    """Extrait les commentaires Word du DOCX pour injection dans le prompt d'analyse.
+    Retourne une liste de dicts {para_idx, author, text, para_text}."""
+    if not file_bytes:
+        return []
+    _NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    try:
+        doc = Document(io.BytesIO(file_bytes))
+        body = doc.element.body
+        paragraphs = []
+        for child in body.iter():
+            tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+            if tag == 'p':
+                txt = "".join(t.text or '' for t in child.iter(_NS + 't')).strip()
+                has_ref = any(True for _ in child.iter(_NS + 'commentReference'))
+                if txt or has_ref:
+                    paragraphs.append(child)
+        para_index = {id(p): i for i, p in enumerate(paragraphs)}
+        comments = []
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+            cp = next((n for n in z.namelist() if n.endswith('word/comments.xml')), None)
+            if not cp:
+                return []
+            from lxml import etree
+            croot = etree.fromstring(z.read(cp))
+            cmap = {}
+            for c in croot.iter(_NS + 'comment'):
+                cid = c.get(_NS + 'id')
+                ctext = "".join(t.text or '' for t in c.iter(_NS + 't')).strip()
+                if ctext:
+                    cmap[cid] = {"author": c.get(_NS + 'author') or '', "text": ctext}
+            for p in paragraphs:
+                pidx = para_index[id(p)]
+                for ref in p.iter(_NS + 'commentReference'):
+                    cid = ref.get(_NS + 'id')
+                    cdata = cmap.get(cid)
+                    if cdata:
+                        para_txt = "".join(t.text or '' for t in p.iter(_NS + 't')).strip()
+                        comments.append({
+                            "para_idx": pidx,
+                            "author": cdata["author"],
+                            "text": cdata["text"],
+                            "para_text": para_txt[:100],
+                        })
+        return comments
+    except Exception as e:
+        print(f"[_extract_doc_comments] {e}")
+        return []
+
+
 def analyze_contract(contract_text, lang, contract_type, api_key, partie="la partie bénéficiaire", file_bytes=None, filename="", progress_cb=None, director_email="", user_models_extra=None, interface_lang="fr"):
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -1151,6 +1201,24 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
     # Anonymise PII avant envoi à Claude (emails, tél, IBAN, CIN, noms, sociétés)
     numbered_text, _anon_mapping = anonymize_contract(numbered_text)
     print(f"[ANON] {len(_anon_mapping)} valeurs anonymisées: {list(_anon_mapping.keys())}", flush=True)
+
+    # Extraire les commentaires Word pour injection comme priorités dans le prompt
+    _doc_comments = _extract_doc_comments(file_bytes) if file_bytes else []
+    _doc_comments_block = ""
+    if _doc_comments:
+        lines = []
+        for c in _doc_comments:
+            author_part = f" ({c['author']})" if c['author'] else ""
+            lines.append(f"  - [P{c['para_idx']}]{author_part} : \"{c['text']}\"")
+        _doc_comments_block = (
+            "\n\n⚠️ COMMENTAIRES ANNOTÉS DANS LE DOCUMENT — PRIORITÉ ABSOLUE :\n"
+            "Ces commentaires ont été insérés dans le document par les parties, leurs conseils ou le service juridique.\n"
+            "RÈGLE IMPÉRATIVE : Analyse EN PREMIER et avec le plus haut niveau d'exigence les clauses portant un commentaire.\n"
+            "Comprends le sens de chaque commentaire (signal d'attention, renvoi DAJ/DRH/Direction, point à négocier, urgence) "
+            "et traduis-le en modification concrète si la clause présente un risque pour " + partie + ".\n"
+            + "\n".join(lines)
+        )
+        print(f"[COMMENTS] {len(_doc_comments)} commentaires Word détectés et injectés dans le prompt", flush=True)
 
     # ── Structured RAG: separate model docs (protection) from legal docs (conformite) ──
     if progress_cb: progress_cb("\U0001f4da Consultation de la base légale...")
@@ -1520,8 +1588,9 @@ def analyze_contract(contract_text, lang, contract_type, api_key, partie="la par
         "Tu es un avocat d'affaires senior avec 20 ans d'expérience en droit des contrats. Ta responsabilité professionnelle est engagée.\n"
         "MISSION CRITIQUE: Analyser EXHAUSTIVEMENT ce contrat. Tu n'as pas le droit à l'erreur — chaque clause désavantageuse non identifiée est une faute professionnelle.\n"
         "OBLIGATION D'EXHAUSTIVITÉ: Tu DOIS analyser CHAQUE clause du contrat, une par une. Ne saute AUCUN paragraphe.\n"
-        "FAVORISER: " + partie + "\n\n"
-        "RÈGLE FONDAMENTALE — UNILATÉRALITÉ STRICTE:\n"
+        "FAVORISER: " + partie + "\n"
+        + _doc_comments_block +
+        "\n\nRÈGLE FONDAMENTALE — UNILATÉRALITÉ STRICTE:\n"
         "Tu représentes EXCLUSIVEMENT " + partie + ". Toute modification doit AVANTAGER " + partie + " et seulement " + partie + ".\n"
         "INTERDIT ABSOLU: Ne propose JAMAIS une modification qui réduit les obligations de la CONTREPARTIE envers " + partie + ".\n"
         "- Une clause qui IMPOSE des obligations à la CONTREPARTIE est FAVORABLE pour " + partie + " → NE PAS l'affaiblir.\n"
