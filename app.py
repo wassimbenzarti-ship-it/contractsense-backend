@@ -6515,7 +6515,9 @@ def chat():
         if general_qa:
             # Avis juridique général — pas de contrat ouvert, pas de blocs <modification>,
             # le bot ne doit jamais évoquer ou demander un contrat à analyser.
-            system_prompt = (
+            # _sys_static = role + rules (stable, mise en cache)
+            # _sys_dynamic = RAG context (change à chaque question, pas en cache)
+            _sys_static = (
                 "Tu es Omniscient, un assistant de recherche juridique générale multi-juridiction. "
                 "L'utilisateur n'a AUCUN contrat ouvert — il pose une question juridique générale "
                 "(loi, procédure, délai, garantie, jurisprudence, gouvernance, réglementation, etc.). "
@@ -6535,10 +6537,12 @@ def chat():
                 "réellement constitué.\n"
                 + _legal_sourcing_rules
                 + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-                + _legal_rag_ctx
             )
+            _sys_dynamic = _legal_rag_ctx
         else:
-            system_prompt = (
+            # _sys_static = rôle + règles + contrat (stable par session, mise en cache Anthropic)
+            # _sys_dynamic = RAG context + résumé mods (change à chaque appel, pas en cache)
+            _sys_static = (
                 "RÈGLE #0 — PRIORITÉ MAXIMALE — BLOC <modification> EN PREMIER :\n"
                 "Dès que tu modifies ou proposes une nouvelle rédaction pour une clause, "
                 "produis LE BLOC <modification> IMMÉDIATEMENT, AVANT tout texte explicatif. "
@@ -6570,9 +6574,7 @@ def chat():
                     if partie else ""
                 )
                 + (f"Juridiction : {jurisdiction}.\n" if jurisdiction and jurisdiction != "universel" else "")
-                + _legal_rag_ctx
                 + (f"\nCONTRAT COMPLET:\n{contract_excerpt}\n" if contract_excerpt else "")
-                + mods_summary
                 + """
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -6620,6 +6622,7 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
 </modification>
 """
             )
+            _sys_dynamic = _legal_rag_ctx + mods_summary
 
         # Build messages list for Claude
         messages = []
@@ -6633,8 +6636,12 @@ J'ai analysé l'Article 15.1. Je propose une rédaction renforcée qui : allonge
             messages.append({"role": "user", "content": message})
 
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        # Use prompt caching: contract text cached after 1st call (~90% cost reduction on cache hits)
-        system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+        # Two-block caching: _sys_static (rôle + règles + contrat) est stable par session →
+        # Anthropic le cache 5 min → ~90% de réduction sur les tokens input du contrat.
+        # _sys_dynamic (RAG context + mods) change à chaque appel → pas en cache.
+        system_blocks = [{"type": "text", "text": _sys_static, "cache_control": {"type": "ephemeral"}}]
+        if _sys_dynamic.strip():
+            system_blocks.append({"type": "text", "text": _sys_dynamic})
         response = client.messages.create(
             model=_get_model(),
             max_tokens=8192,
