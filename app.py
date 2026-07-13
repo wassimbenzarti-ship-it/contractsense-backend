@@ -3557,7 +3557,7 @@ def analyze_stream():
                             result["file_storage_path"] = storage_path
                 except Exception:
                     pass
-            result["contract_text"] = contract_text[:80000]
+            result["contract_text"] = contract_text[:200000]
             q.put({"type": "result", "data": result})
         except Exception as e:
             q.put({"type": "error", "message": _anthropic_error_msg(e) or str(e)})
@@ -3693,7 +3693,7 @@ def analyze():
                 print(f"Storage upload error: {_e}")
         result["file_storage_path"] = file_storage_path
         # Include extracted contract text so frontend can cache it for chatbot
-        result["contract_text"] = contract_text[:80000]
+        result["contract_text"] = contract_text[:200000]
 
         return jsonify(result)
     except Exception as e:
@@ -6412,7 +6412,7 @@ def chat():
             cached = _cache_get(file_cache_id)
             if cached:
                 try:
-                    contract_text = cached.decode("utf-8", errors="replace")[:80000]
+                    contract_text = cached.decode("utf-8", errors="replace")[:200000]
                 except Exception:
                     pass
         if not contract_text and file_storage_path and SUPA_URL and (SUPA_SERVICE_KEY or SUPA_KEY):
@@ -6423,9 +6423,9 @@ def chat():
                     if fname.endswith(".docx"):
                         import io as _io
                         doc = Document(_io.BytesIO(downloaded))
-                        contract_text = "\n".join(p.text for p in doc.paragraphs)[:80000]
+                        contract_text = "\n".join(p.text for p in doc.paragraphs)[:200000]
                     else:
-                        contract_text = downloaded.decode("utf-8", errors="replace")[:80000]
+                        contract_text = downloaded.decode("utf-8", errors="replace")[:200000]
                 except Exception:
                     pass
 
@@ -6444,7 +6444,7 @@ def chat():
             mods_summary = "\nCLAUSES DU CONTRAT (modifications proposées par l'analyse):\n" + "\n\n".join(lines)
 
         # Full contract sent every time — prompt caching makes it cheap after 1st call
-        contract_excerpt = contract_text[:80000] if contract_text else ""
+        contract_excerpt = contract_text[:200000] if contract_text else ""
 
         # Search RAG for legal context relevant to the user's question
         # Build a composite query from recent conversation history + current message
