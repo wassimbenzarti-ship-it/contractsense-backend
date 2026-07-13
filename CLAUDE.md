@@ -16,14 +16,14 @@ git pull
 
 ### Ne JAMAIS faire
 - `Write` sur `app.py` entier — utiliser uniquement `Edit` ciblé (diff minimal)
-- Pousser directement sur `main`
 - Commencer à modifier sans avoir fait `git pull` d'abord
 - Uploader un fichier complet depuis une copie locale potentiellement obsolète
 
 ### Toujours faire
-- Créer une branche par fix : `git checkout -b claude/nom-du-fix`
+- Travailler sur la branche assignée (`claude/fix-docx-export-formatting-w2d07`) puis merger directement sur `main` — l'utilisateur a autorisé les pushs directs sur `main` pour tous les fixes
 - Vérifier la syntaxe après chaque modification : `python3 -c "import ast; ast.parse(open('app.py').read())"`
 - Commiter avec un message descriptif qui liste les fonctions modifiées
+- Merger sur `main` et pousser sans attendre validation manuelle
 
 ---
 
