@@ -2104,6 +2104,19 @@ def _unlock_sdt_content(doc):
     return len(to_unwrap)
 
 
+def _plain_text_to_docx_bytes(text):
+    """Convert plain text to a minimal DOCX — one paragraph per non-empty line."""
+    doc = Document()
+    for line in text.split('\n'):
+        line = line.strip()
+        if line:
+            doc.add_paragraph(line)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
 def apply_track_changes(file_bytes, modifications, decisions):
     doc = Document(io.BytesIO(file_bytes))
     _n_unlocked = _unlock_sdt_content(doc)
@@ -3808,17 +3821,25 @@ def export():
                 text_content = extract_text_from_docx(file_bytes) or file_bytes.decode("utf-8", errors="ignore")
                 output = create_docx_with_changes(text_content, modifications, decisions)
         elif filename.endswith(".pdf"):
-            # PDF: can't do native track changes — extract text and produce a markup report
             pdf_text = ""
             try:
                 pdf_text = extract_text_from_pdf(file_bytes) or ""
             except Exception:
                 pass
-            output = create_docx_with_changes(pdf_text, modifications, decisions)
+            try:
+                tmp_bytes = _plain_text_to_docx_bytes(pdf_text)
+                output = apply_track_changes(tmp_bytes, modifications, decisions)
+            except Exception as _pdf_tc_err:
+                print(f"[/export] pdf track_changes failed: {_pdf_tc_err}", flush=True)
+                output = create_docx_with_changes(pdf_text, modifications, decisions)
         elif filename.endswith(".doc"):
-            # Old .doc format — extract text then create new DOCX
             doc_text = extract_text_from_docx(file_bytes) or ""
-            output = create_docx_with_changes(doc_text, modifications, decisions)
+            try:
+                tmp_bytes = _plain_text_to_docx_bytes(doc_text)
+                output = apply_track_changes(tmp_bytes, modifications, decisions)
+            except Exception as _doc_tc_err:
+                print(f"[/export] doc track_changes failed: {_doc_tc_err}", flush=True)
+                output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
             doc.add_heading("Modifications contractuelles acceptées", 0)
