@@ -2232,6 +2232,18 @@ def apply_track_changes(file_bytes, modifications, decisions):
         if _ctag == 'p' and _p_text(_child):
             paragraphs.append(_child)
 
+    # Detect last explicit article number (e.g. "16.  COMPÉTENCE") for auto-numbering new clauses
+    _art_num_re = re.compile(r'^(\d{1,3})\.\s+[A-ZÀ-ÿ؀-ۿ]')
+    _last_art_num = 0
+    for _pe in paragraphs:
+        _pt = _p_text(_pe)
+        _m = _art_num_re.match(_pt)
+        if _m:
+            _v = int(_m.group(1))
+            if _v > _last_art_num:
+                _last_art_num = _v
+    _next_clause_num = _last_art_num  # incremented per nouvelle_clause
+
     for mod in accepted:
         mod_id = mod.get("id")
         proposed = (mod.get("proposed") or "").strip()
@@ -2324,38 +2336,53 @@ def apply_track_changes(file_bytes, modifications, decisions):
                     _direct_runs = [r for r in insert_para if r.tag == _wr_tag]
                     ref_rpr = _direct_runs[0].find(qn('w:rPr')) if _direct_runs else None
 
-                    new_p = OxmlElement('w:p')
+                    # Split proposed into separate paragraphs (title + body)
+                    _prop_paras = [l.strip() for l in re.split(r'\n{2,}', proposed.replace('\r\n', '\n')) if l.strip()]
+                    if not _prop_paras:
+                        _prop_paras = [l.strip() for l in proposed.split('\n') if l.strip()]
+                    if not _prop_paras:
+                        _prop_paras = [proposed]
 
-                    _ppr = insert_para.find(qn('w:pPr'))
-                    if _ppr is not None:
-                        new_p.append(copy.deepcopy(_ppr))
+                    # Prefix first paragraph with article number when doc uses explicit numbering
+                    if _last_art_num > 0:
+                        _next_clause_num += 1
+                        _prop_paras[0] = f"{_next_clause_num}.\t{_prop_paras[0]}"
 
-                    ins_elem = OxmlElement('w:ins')
-                    ins_elem.set(qn('w:id'), str(rev_id))
-                    ins_elem.set(qn('w:author'), author)
-                    ins_elem.set(qn('w:date'), date)
-                    rev_id += 1
+                    _insert_after_p = insert_para
+                    for _ptext in _prop_paras:
+                        new_p = OxmlElement('w:p')
+                        _ppr = insert_para.find(qn('w:pPr'))
+                        if _ppr is not None:
+                            new_p.append(copy.deepcopy(_ppr))
 
-                    new_r = OxmlElement('w:r')
-                    if ref_rpr is not None:
-                        new_r.append(copy.deepcopy(ref_rpr))
-                    new_t = OxmlElement('w:t')
-                    new_t.text = proposed
-                    new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-                    new_r.append(new_t)
-                    ins_elem.append(new_r)
-                    new_p.append(ins_elem)
+                        ins_elem = OxmlElement('w:ins')
+                        ins_elem.set(qn('w:id'), str(rev_id))
+                        ins_elem.set(qn('w:author'), author)
+                        ins_elem.set(qn('w:date'), date)
+                        rev_id += 1
 
-                    next_sib = insert_para.getnext()
-                    _parent = insert_para.getparent()
-                    if next_sib is not None:
-                        _children = list(_parent)
-                        _idx = _children.index(next_sib) if next_sib in _children else len(_children)
-                        _parent.insert(_idx, new_p)
-                    else:
-                        _parent.append(new_p)
+                        new_r = OxmlElement('w:r')
+                        if ref_rpr is not None:
+                            new_r.append(copy.deepcopy(ref_rpr))
+                        new_t = OxmlElement('w:t')
+                        new_t.text = _ptext
+                        new_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                        new_r.append(new_t)
+                        ins_elem.append(new_r)
+                        new_p.append(ins_elem)
+
+                        _next_sib = _insert_after_p.getnext()
+                        _par = _insert_after_p.getparent()
+                        if _next_sib is not None:
+                            _ch = list(_par)
+                            _idx = _ch.index(_next_sib) if _next_sib in _ch else len(_ch)
+                            _par.insert(_idx, new_p)
+                        else:
+                            _par.append(new_p)
+                        _insert_after_p = new_p
+
                     applied.add(mod_id)
-                    print(f"Inserted new clause '{mod.get('clause_name')}' after para {insertion_after} (anchor='{insertion_after_text[:30] if insertion_after_text else 'none'}')", flush=True)
+                    print(f"Inserted new clause '{mod.get('clause_name')}' ({len(_prop_paras)}p) after para {insertion_after} (anchor='{insertion_after_text[:30] if insertion_after_text else 'none'}')", flush=True)
                 except Exception as _ins_err:
                     print(f"[apply_track_changes] nouvelle_clause insert failed: {_ins_err}", flush=True)
             else:
