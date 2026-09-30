@@ -2104,17 +2104,104 @@ def _unlock_sdt_content(doc):
     return len(to_unwrap)
 
 
-def _plain_text_to_docx_bytes(text):
-    """Convert plain text to a minimal DOCX — one paragraph per non-empty line."""
-    doc = Document()
-    for line in text.split('\n'):
-        line = line.strip()
-        if line:
-            doc.add_paragraph(line)
+def _pdf_text_to_markup_docx(full_text, modifications, decisions):
+    """Create DOCX from extracted PDF/DOC text: full contract with accepted modifications
+    shown as inline red-strikethrough (original) + green-bold (proposed)."""
+    import re as _re
+    from docx import Document as _Doc
+    from docx.shared import RGBColor as _RGB, Pt as _Pt, Cm as _Cm
+
+    accepted = [m for m in modifications if decisions.get(str(m.get("id", ""))) == "accepted"]
+
+    def _norm(t):
+        return _re.sub(r'\s+', ' ', t or '').strip()
+
+    flat = _norm(full_text)
+
+    # Mark each accepted modification with unique sentinels
+    SEP = '\x01'
+    marked = flat
+    applied = []
+    for mod in accepted:
+        orig_raw = _norm(mod.get("original") or "")
+        prop = _norm(mod.get("proposed") or "")
+        if not orig_raw or not prop:
+            continue
+        # Try exact match first, then first-80-chars anchor
+        pos = marked.find(orig_raw)
+        if pos == -1:
+            key = orig_raw[:80]
+            pos = marked.find(key)
+            if pos != -1:
+                orig_raw = key  # only replace the found portion
+        if pos != -1:
+            sentinel = f"{SEP}DEL{SEP}{orig_raw}{SEP}INS{SEP}{prop}{SEP}END{SEP}"
+            marked = marked[:pos] + sentinel + marked[pos + len(orig_raw):]
+            applied.append(mod.get("clause_name", ""))
+
+    doc = _Doc()
+    for sec in doc.sections:
+        sec.top_margin = sec.bottom_margin = _Cm(2)
+        sec.left_margin = sec.right_margin = _Cm(2.5)
+
+    # Header
+    h = doc.add_heading("Contrat — révision Omniscient", level=1)
+    if applied:
+        info = doc.add_paragraph()
+        info.add_run(f"{len(applied)} modification(s) acceptée(s) : {', '.join(applied[:5])}{'…' if len(applied) > 5 else ''}").bold = True
+    doc.add_paragraph()
+
+    # Render full text as ~600-char paragraphs, substituting markup at sentinel positions
+    parts = marked.split(SEP)
+    current_para = doc.add_paragraph()
+    char_buf = 0
+
+    def _new_para():
+        nonlocal current_para, char_buf
+        current_para = doc.add_paragraph()
+        char_buf = 0
+
+    i = 0
+    while i < len(parts):
+        tok = parts[i]
+        if tok == 'DEL':
+            orig_text = parts[i + 1] if i + 1 < len(parts) else ''
+            prop_text = parts[i + 3] if i + 3 < len(parts) else ''
+            r_del = current_para.add_run(orig_text)
+            r_del.font.strike = True
+            r_del.font.color.rgb = _RGB(0xCC, 0x00, 0x00)
+            r_ins = current_para.add_run(' ' + prop_text + ' ')
+            r_ins.font.color.rgb = _RGB(0x00, 0x99, 0x00)
+            r_ins.bold = True
+            char_buf += len(orig_text) + len(prop_text)
+            i += 5  # DEL, orig, INS, prop, END
+        elif tok in ('INS', 'END'):
+            i += 1
+        else:
+            # Plain text: emit in ~600-char chunks, breaking at sentence ends
+            text = tok
+            while text:
+                space = max(600 - char_buf, 80)
+                if len(text) <= space:
+                    current_para.add_run(text)
+                    char_buf += len(text)
+                    text = ''
+                else:
+                    chunk = text[:space]
+                    cut = max(chunk.rfind('. '), chunk.rfind('.\n'),
+                              chunk.rfind('; '), chunk.rfind(':\n'))
+                    if cut < 30:
+                        cut = chunk.rfind(' ')
+                    cut = cut + 1 if cut > 0 else space
+                    current_para.add_run(text[:cut])
+                    _new_para()
+                    text = text[cut:].lstrip()
+            i += 1
+
     buf = io.BytesIO()
     doc.save(buf)
     buf.seek(0)
-    return buf.read()
+    return buf
 
 
 def apply_track_changes(file_bytes, modifications, decisions):
@@ -3827,18 +3914,16 @@ def export():
             except Exception:
                 pass
             try:
-                tmp_bytes = _plain_text_to_docx_bytes(pdf_text)
-                output = apply_track_changes(tmp_bytes, modifications, decisions)
-            except Exception as _pdf_tc_err:
-                print(f"[/export] pdf track_changes failed: {_pdf_tc_err}", flush=True)
+                output = _pdf_text_to_markup_docx(pdf_text, modifications, decisions)
+            except Exception as _pdf_err:
+                print(f"[/export] pdf markup failed: {_pdf_err}", flush=True)
                 output = create_docx_with_changes(pdf_text, modifications, decisions)
         elif filename.endswith(".doc"):
             doc_text = extract_text_from_docx(file_bytes) or ""
             try:
-                tmp_bytes = _plain_text_to_docx_bytes(doc_text)
-                output = apply_track_changes(tmp_bytes, modifications, decisions)
-            except Exception as _doc_tc_err:
-                print(f"[/export] doc track_changes failed: {_doc_tc_err}", flush=True)
+                output = _pdf_text_to_markup_docx(doc_text, modifications, decisions)
+            except Exception as _doc_err:
+                print(f"[/export] doc markup failed: {_doc_err}", flush=True)
                 output = create_docx_with_changes(doc_text, modifications, decisions)
         else:
             doc = Document()
