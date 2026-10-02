@@ -2233,8 +2233,11 @@ def apply_track_changes(file_bytes, modifications, decisions):
             paragraphs.append(_child)
 
     # Detect last explicit article number (e.g. "16.  COMPÉTENCE") for auto-numbering new clauses
+    # Also capture the pPr (paragraph style) of the last such header for reuse
+    import copy as _copy_mod
     _art_num_re = re.compile(r'^(\d{1,3})\.\s+[A-ZÀ-ÿ؀-ۿ]')
     _last_art_num = 0
+    _header_ppr = None  # pPr of an existing clause-title paragraph
     for _pe in paragraphs:
         _pt = _p_text(_pe)
         _m = _art_num_re.match(_pt)
@@ -2242,6 +2245,9 @@ def apply_track_changes(file_bytes, modifications, decisions):
             _v = int(_m.group(1))
             if _v > _last_art_num:
                 _last_art_num = _v
+            _found_ppr = _pe.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+            if _found_ppr is not None:
+                _header_ppr = _copy_mod.deepcopy(_found_ppr)
     _next_clause_num = _last_art_num  # incremented per nouvelle_clause
 
     for mod in accepted:
@@ -2301,21 +2307,20 @@ def apply_track_changes(file_bytes, modifications, decisions):
             insert_para = None
             MIN_INSERT_IDX = 5
 
-            # Method A: text anchor — find the paragraph whose text starts with / contains insertion_after_text
+            # Method A: text anchor — keep LAST match (new clauses go toward end of doc;
+            # using first match risks landing on an early header that repeats the anchor text)
             if insertion_after_text and len(insertion_after_text) >= 5:
                 _iat_lower = insertion_after_text.lower()
-                for _pe in paragraphs:
+                for _pe in paragraphs:  # iterate all, overwrite — last match wins
                     _pt = _p_text(_pe).lower()
                     if _pt and (_iat_lower in _pt or _pt.startswith(_iat_lower[:30])):
                         insert_para = _pe
-                        break
                 if insert_para is None:
-                    # Fuzzy fallback on anchor text
+                    # Fuzzy fallback on anchor text — last match wins
                     for _pe in paragraphs:
                         _pt = _p_text(_pe)
                         if _pt and fuzzy_match(insertion_after_text, _pt[:max(len(insertion_after_text)*3, 80)], threshold=0.5):
                             insert_para = _pe
-                            break
 
             # Method B: index fallback
             if insert_para is None and insertion_after is not None:
@@ -2349,11 +2354,17 @@ def apply_track_changes(file_bytes, modifications, decisions):
                         _prop_paras[0] = f"{_next_clause_num}.\t{_prop_paras[0]}"
 
                     _insert_after_p = insert_para
-                    for _ptext in _prop_paras:
+                    for _pi, _ptext in enumerate(_prop_paras):
                         new_p = OxmlElement('w:p')
-                        _ppr = insert_para.find(qn('w:pPr'))
-                        if _ppr is not None:
-                            new_p.append(copy.deepcopy(_ppr))
+
+                        # Title paragraph (first): use clause-header style if available,
+                        # otherwise fall back to insert_para's style
+                        if _pi == 0 and _header_ppr is not None:
+                            new_p.append(_copy_mod.deepcopy(_header_ppr))
+                        else:
+                            _ppr = insert_para.find(qn('w:pPr'))
+                            if _ppr is not None:
+                                new_p.append(copy.deepcopy(_ppr))
 
                         ins_elem = OxmlElement('w:ins')
                         ins_elem.set(qn('w:id'), str(rev_id))
