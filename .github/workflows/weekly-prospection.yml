@@ -2,7 +2,7 @@ name: Prospection hebdomadaire Omniscient
 
 on:
   schedule:
-    - cron: '0 8 * * 1'  # Lundi 9h Maroc (UTC+1)
+    - cron: 'CRON_TZ=Africa/Casablanca 0 9 * * 1-5'  # Lun-Ven 9h Maroc
   workflow_dispatch:
 
 jobs:
@@ -27,5 +27,5 @@ jobs:
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git add prospection/targets.json
-          git diff --staged --quiet || git commit -m "prospection: $(date +%Y-%m-%d) — envoi hebdo"
+          git diff --staged --quiet || git commit -m "prospection: $(date +%Y-%m-%d) — envoi quotidien"
           git push
