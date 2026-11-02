@@ -2,7 +2,7 @@ name: Prospection hebdomadaire Omniscient
 
 on:
   schedule:
-    - cron: 'CRON_TZ=Africa/Casablanca 0 9 * * 1-5'  # Lun-Ven 9h Maroc
+    - cron: '0 8 * * 1-5'  # Lun-Ven 9h Maroc (UTC+1 = 8h UTC)
   workflow_dispatch:
 
 jobs:
