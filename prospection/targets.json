@@ -60,35 +60,35 @@
     "sector": "Audit et conseil aux entreprises",
     "email": "info@fidaroc.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "CMS Francis Lefebvre Maroc",
     "sector": "Cabinet droit des affaires",
     "email": "contact@cms-fl.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Gide Casablanca",
     "sector": "Cabinet droit des affaires international",
     "email": "casablanca@gide.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Freshfields Bruckhaus Deringer Maroc",
     "sector": "Cabinet droit des affaires international",
     "email": "contact.maroc@freshfields.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Deloitte Maroc",
     "sector": "Audit, conseil et juridique",
     "email": "contact@deloitte.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "PwC Maroc",
