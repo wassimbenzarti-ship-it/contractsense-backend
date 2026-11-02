@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""
-Prospection hebdomadaire Omniscient by Westfield
-Génère des emails personnalisés via Claude API et les envoie via OVH SMTP
-"""
 import os
 import json
 import smtplib
+import imaplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import anthropic
 
 SMTP_HOST = "ssl0.ovh.net"
 SMTP_PORT = 465
+IMAP_HOST = "ssl0.ovh.net"
+IMAP_PORT = 993
 FROM_EMAIL = "contact@westfieldavocats.com"
 FROM_NAME = "Wassim Benzarti — Westfield Avocats"
 MAX_PER_WEEK = 5
@@ -44,13 +43,24 @@ Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte autour) 
     return json.loads(text[start:end])
 
 
-def send_email(smtp, to, subject, html):
+def build_message(to, subject, html):
     msg = MIMEMultipart("alternative")
     msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
     msg["To"] = to
     msg["Subject"] = subject
     msg.attach(MIMEText(html, "html", "utf-8"))
-    smtp.sendmail(FROM_EMAIL, to, msg.as_bytes())
+    return msg
+
+
+def copy_to_sent(imap, raw_msg):
+    _, folders = imap.list()
+    sent_folder = "Sent"
+    for f in folders:
+        name = f.decode().split('"')[-1].strip()
+        if any(x in name.lower() for x in ["sent", "envoy", "envoye"]):
+            sent_folder = name
+            break
+    imap.append(sent_folder, "\\Seen", None, raw_msg)
 
 
 def main():
@@ -70,19 +80,37 @@ def main():
     client = anthropic.Anthropic(api_key=anthropic_key)
 
     ok, fail = 0, 0
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
+    sent_raws = []
+
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
         smtp.login(FROM_EMAIL, smtp_password)
         for target in unsent:
             try:
                 print(f"Génération email pour {target['company']}...")
                 email_data = generate_email(client, target)
-                send_email(smtp, target["email"], email_data["subject"], email_data["html"])
+                msg = build_message(target["email"], email_data["subject"], email_data["html"])
+                raw = msg.as_bytes()
+                smtp.sendmail(FROM_EMAIL, target["email"], raw)
+                sent_raws.append(raw)
                 target["sent"] = True
                 print(f"✓ Envoyé → {target['email']}")
                 ok += 1
             except Exception as e:
                 print(f"✗ Échec → {target['email']}: {e}")
                 fail += 1
+
+    # Copie dans le dossier Envoyés via IMAP
+    if sent_raws:
+        try:
+            print("\nCopie dans le dossier Envoyés...")
+            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+            imap.login(FROM_EMAIL, smtp_password)
+            for raw in sent_raws:
+                copy_to_sent(imap, raw)
+            imap.logout()
+            print(f"✓ {len(sent_raws)} emails copiés dans Envoyés")
+        except Exception as e:
+            print(f"(dossier Envoyés non mis à jour : {e})")
 
     with open("prospection/targets.json", "w", encoding="utf-8") as f:
         json.dump(targets, f, ensure_ascii=False, indent=2)
