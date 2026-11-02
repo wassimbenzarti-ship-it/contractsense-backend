@@ -1,0 +1,107 @@
+[
+  {
+    "company": "LYDEC",
+    "sector": "Utilities / Délégation de service public",
+    "email": "contact@lydec.co.ma",
+    "contact": "Direction Juridique",
+    "sent": true
+  },
+  {
+    "company": "Cabinet Jawhari",
+    "sector": "Cabinet avocat droit du travail",
+    "email": "maha@avocat-jawhari.com",
+    "contact": "Maître Jawhari",
+    "sent": true
+  },
+  {
+    "company": "Casa Law Firm",
+    "sector": "Cabinet corporate / investissements étrangers",
+    "email": "contact@casalawfirm.co.ma",
+    "contact": "Direction",
+    "sent": true
+  },
+  {
+    "company": "Sentissi Legal Advisory",
+    "sector": "Direction juridique externalisée",
+    "email": "contact@sentissilegal.com",
+    "contact": "Direction",
+    "sent": true
+  },
+  {
+    "company": "LMT Auditing",
+    "sector": "Audit et accompagnement juridique PME",
+    "email": "legal@lmtauditing.ma",
+    "contact": "Direction Juridique",
+    "sent": true
+  },
+  {
+    "company": "Maroc Performance",
+    "sector": "Conseil PME",
+    "email": "contact@maroc-performance.com",
+    "contact": "Direction",
+    "sent": true
+  },
+  {
+    "company": "Auditia",
+    "sector": "Cabinet audit et conseil",
+    "email": "contact@auditia.ma",
+    "contact": "Direction",
+    "sent": true
+  },
+  {
+    "company": "Cabinet Daim Rousseau",
+    "sector": "Conseil juridique et fiscal",
+    "email": "contact@daimrousseau.com",
+    "contact": "Direction",
+    "sent": true
+  },
+  {
+    "company": "Fidaroc Grant Thornton Maroc",
+    "sector": "Audit et conseil aux entreprises",
+    "email": "info@fidaroc.com",
+    "contact": "Direction Juridique",
+    "sent": false
+  },
+  {
+    "company": "CMS Francis Lefebvre Maroc",
+    "sector": "Cabinet droit des affaires",
+    "email": "contact@cms-fl.ma",
+    "contact": "Direction",
+    "sent": false
+  },
+  {
+    "company": "Gide Casablanca",
+    "sector": "Cabinet droit des affaires international",
+    "email": "casablanca@gide.com",
+    "contact": "Direction",
+    "sent": false
+  },
+  {
+    "company": "Freshfields Bruckhaus Deringer Maroc",
+    "sector": "Cabinet droit des affaires international",
+    "email": "contact.maroc@freshfields.com",
+    "contact": "Direction",
+    "sent": false
+  },
+  {
+    "company": "Deloitte Maroc",
+    "sector": "Audit, conseil et juridique",
+    "email": "contact@deloitte.ma",
+    "contact": "Direction Juridique",
+    "sent": false
+  },
+  {
+    "company": "PwC Maroc",
+    "sector": "Audit et conseil",
+    "email": "contact@pwc.ma",
+    "contact": "Direction Juridique",
+    "sent": false
+  },
+  {
+    "company": "KPMG Maroc",
+    "sector": "Audit et conseil",
+    "email": "info@kpmg.ma",
+    "contact": "Direction Juridique",
+    "sent": false
+  }
+]

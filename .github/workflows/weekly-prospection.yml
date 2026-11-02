@@ -1,0 +1,31 @@
+name: Prospection hebdomadaire Omniscient
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Lundi 9h Maroc (UTC+1)
+  workflow_dispatch:
+
+jobs:
+  prospect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer anthropic
+        run: pip install anthropic
+
+      - name: Générer et envoyer les emails
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python3 prospection/weekly_send.py
+
+      - name: Mettre à jour targets.json
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add prospection/targets.json
+          git diff --staged --quiet || git commit -m "prospection: $(date +%Y-%m-%d) — envoi hebdo"
+          git push
