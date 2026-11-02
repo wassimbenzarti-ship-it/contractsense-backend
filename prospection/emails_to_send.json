@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "to": "contact@auditia.ma",
+    "dest": "Auditia (Cabinet audit & conseil, Casablanca)",
+    "subject": "Analysez les contrats de vos clients en 3 min — IA juridique",
+    "html": "<p>Bonjour,</p>\n<p>Les cabinets d'audit et de conseil accompagnent souvent leurs clients PME sur des sujets contractuels — baux commerciaux, contrats fournisseurs, contrats de prestation — sans toujours disposer d'un outil dédié pour la revue rapide des clauses risquées.</p>\n<p>Nous avons développé <strong>Omniscient by Westfield</strong>, un outil d'IA juridique qui analyse un contrat en quelques minutes : détection des clauses problématiques, vérification de conformité au droit marocain et français, suggestions concrètes de révision. À partir de 950 MAD/mois, il s'intègre directement à votre accompagnement client pour renforcer la valeur ajoutée juridique.</p>\n<p>Seriez-vous disponible 20 minutes cette semaine pour une démonstration rapide ?</p>\n<p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com | ai.westfieldavocats.com</p>"
+  },
+  {
+    "to": "contact@daimrousseau.com",
+    "dest": "Cabinet Daim Rousseau (Conseil juridique & fiscal, Casablanca)",
+    "subject": "Due diligence contractuelle en quelques minutes — IA juridique",
+    "html": "<p>Bonjour,</p>\n<p>Les cabinets de conseil juridique et fiscal accompagnant des opérations M&A ou des investissements au Maroc sont régulièrement confrontés à des volumes contractuels importants à analyser rapidement — SPA, shareholders agreements, contrats de distribution — avec une exigence de précision élevée.</p>\n<p>Nous avons développé <strong>Omniscient by Westfield</strong>, un outil d'IA juridique conçu pour accélérer la revue contractuelle : identification des clauses risquées, vérification de conformité (droit marocain, français et anglais), suggestions de modifications concrètes. Plusieurs cabinets l'utilisent pour réduire le temps de revue tout en maintenant le niveau d'exigence attendu par leurs clients.</p>\n<p>Seriez-vous disponible 20 minutes pour une démonstration cette semaine ?</p>\n<p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com | ai.westfieldavocats.com</p>"
+  }
+]
