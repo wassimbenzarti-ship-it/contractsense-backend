@@ -1,5 +1,7 @@
 name: Générer brouillons emails nominatifs
 on:
+  schedule:
+    - cron: '0 7 * * 1'  # Chaque lundi 8h Maroc (UTC+1 = 7h UTC)
   workflow_dispatch:
 jobs:
   generate:
@@ -10,14 +12,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Installer anthropic
         run: pip install anthropic
-      - name: Générer les brouillons
+      - name: Générer les brouillons et envoyer email de validation
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: python3 prospection/generate_drafts.py
       - name: Commiter les brouillons
         run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git add prospection/drafts.json
-          git diff --staged --quiet || git commit -m "prospection: brouillons emails nominatifs générés"
+          git diff --staged --quiet || git commit -m "prospection: brouillons emails nominatifs générés $(date +%Y-%m-%d)"
           git push
