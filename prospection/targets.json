@@ -1,394 +1,84 @@
 [
-  {
-    "company": "LYDEC",
-    "sector": "Utilities / Délégation de service public",
-    "email": "contact@lydec.co.ma",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "Cabinet Jawhari",
-    "sector": "Cabinet avocat droit du travail",
-    "email": "maha@avocat-jawhari.com",
-    "contact": "Maître Jawhari",
-    "sent": true
-  },
-  {
-    "company": "Casa Law Firm",
-    "sector": "Cabinet corporate",
-    "email": "contact@casalawfirm.co.ma",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Sentissi Legal Advisory",
-    "sector": "Direction juridique externalisée",
-    "email": "contact@sentissilegal.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "LMT Auditing",
-    "sector": "Audit et accompagnement juridique PME",
-    "email": "legal@lmtauditing.ma",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "Maroc Performance",
-    "sector": "Conseil PME",
-    "email": "contact@maroc-performance.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Auditia",
-    "sector": "Cabinet audit et conseil",
-    "email": "contact@auditia.ma",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Cabinet Daim Rousseau",
-    "sector": "Conseil juridique et fiscal",
-    "email": "contact@daimrousseau.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Fidaroc Grant Thornton Maroc",
-    "sector": "Audit et conseil aux entreprises",
-    "email": "info@fidaroc.com",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "CMS Francis Lefebvre Maroc",
-    "sector": "Cabinet droit des affaires",
-    "email": "contact@cms-fl.ma",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Gide Casablanca",
-    "sector": "Cabinet droit des affaires international",
-    "email": "casablanca@gide.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Freshfields Bruckhaus Deringer Maroc",
-    "sector": "Cabinet droit des affaires international",
-    "email": "contact.maroc@freshfields.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Deloitte Maroc",
-    "sector": "Audit, conseil et juridique",
-    "email": "contact@deloitte.ma",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "PwC Maroc",
-    "sector": "Audit et conseil",
-    "email": "contact@pwc.ma",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "KPMG Maroc",
-    "sector": "Audit et conseil",
-    "email": "info@kpmg.ma",
-    "contact": "Direction Juridique",
-    "sent": true
-  },
-  {
-    "company": "Naciri & Associés",
-    "sector": "Cabinet droit des affaires",
-    "email": "contact@naciri.ma",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Kettani Law Firm",
-    "sector": "Cabinet droit des affaires",
-    "email": "info@kettani.ma",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Clifford Chance Casablanca",
-    "sector": "Cabinet international droit des affaires",
-    "email": "casablanca@cliffordchance.com",
-    "contact": "Direction",
-    "sent": true
-  },
-  {
-    "company": "Dentons Maroc",
-    "sector": "Cabinet international droit des affaires",
-    "email": "casablanca@dentons.com",
-    "contact": "Direction",
-    "sent": false
-  },
-  {
-    "company": "Allen & Overy Casablanca",
-    "sector": "Cabinet international droit des affaires",
-    "email": "casablanca@allenovery.com",
-    "contact": "Direction",
-    "sent": false
-  },
-  {
-    "company": "Hogan Lovells Casablanca",
-    "sector": "Cabinet international droit des affaires",
-    "email": "casablanca@hoganlovells.com",
-    "contact": "Direction",
-    "sent": false
-  },
-  {
-    "company": "OCP Group",
-    "sector": "Industrie / Phosphates",
-    "email": "contact@ocpgroup.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "CDG Capital",
-    "sector": "Finance / Investissement",
-    "email": "info@cdgcapital.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "CIH Bank",
-    "sector": "Banque et immobilier",
-    "email": "cih@cih.co.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Bank of Africa (BMCE)",
-    "sector": "Banque",
-    "email": "contact@bankofafrica.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Société Générale Maroc",
-    "sector": "Banque",
-    "email": "contact@sgmaroc.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Lafarge Holcim Maroc",
-    "sector": "Matériaux de construction",
-    "email": "contact@lafarge.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Veolia Maroc",
-    "sector": "Utilities / Services environnementaux",
-    "email": "contact@veolia.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Total Energies Maroc",
-    "sector": "Energie / Distribution",
-    "email": "contact@total.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Renault Maroc",
-    "sector": "Automobile / Industrie",
-    "email": "contact@renault.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Marjane Holding",
-    "sector": "Distribution / Retail",
-    "email": "contact@marjane.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Label'Vie",
-    "sector": "Distribution / Retail",
-    "email": "info@labelvie.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Saham Group",
-    "sector": "Assurance et services",
-    "email": "contact@saham.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "BMCI",
-    "sector": "Banque (filiale BNP Paribas)",
-    "email": "contact@bmci.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Crédit du Maroc",
-    "sector": "Banque (filiale Crédit Agricole)",
-    "email": "info@cdm.co.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Wafa Assurance",
-    "sector": "Assurance",
-    "email": "contact@wafaassurance.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "RMA Assurance",
-    "sector": "Assurance",
-    "email": "contact@rmaassurance.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Oncf",
-    "sector": "Transport ferroviaire / Service public",
-    "email": "contact@oncf.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "ADM (Autoroutes du Maroc)",
-    "sector": "Infrastructure / Concession",
-    "email": "contact@adm.co.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "ANAPEC",
-    "sector": "Service public / Emploi",
-    "email": "contact@anapec.org",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "MEDZ (Groupe CDG)",
-    "sector": "Développement économique / Zones industrielles",
-    "email": "contact@medz.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "HPS (Hightech Payment Systems)",
-    "sector": "Fintech / Paiement",
-    "email": "info@hps-worldwide.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "M2M Group",
-    "sector": "Tech / Paiement mobile",
-    "email": "contact@m2mgroup.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Intelcia",
-    "sector": "BPO / Services externalisés",
-    "email": "contact@intelcia.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "OFFPPT",
-    "sector": "Formation professionnelle / Service public",
-    "email": "contact@ofppt.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Alliances Developpement Immobilier",
-    "sector": "Immobilier",
-    "email": "contact@alliances.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Douja Promotion Addoha",
-    "sector": "Immobilier",
-    "email": "contact@groupeaddoha.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Palmeraie Holding",
-    "sector": "Immobilier et tourisme",
-    "email": "contact@palmeraie.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "ONCF Voyages",
-    "sector": "Transport / Tourisme",
-    "email": "voyages@oncf.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Royal Air Maroc",
-    "sector": "Transport aérien",
-    "email": "contact@royalairmaroc.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Comanáv",
-    "sector": "Logistique portuaire",
-    "email": "contact@comarav.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Maghreb Steel",
-    "sector": "Industrie sidérurgique",
-    "email": "contact@maghrebsteel.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Bimo (biscuits)",
-    "sector": "Agroalimentaire",
-    "email": "contact@bimo.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Centrale Danone Maroc",
-    "sector": "Agroalimentaire (filiale Danone)",
-    "email": "contact@centraledanone.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Coca-Cola Maroc (NABC)",
-    "sector": "Agroalimentaire",
-    "email": "contact@nabc.ma",
-    "contact": "Direction Juridique",
-    "sent": false
-  },
-  {
-    "company": "Attijariwafa Bank",
-    "sector": "Banque",
-    "email": "contact@attijariwafabank.com",
-    "contact": "Direction Juridique",
-    "sent": false
-  }
+  {"company": "LYDEC", "sector": "Utilities / Délégation de service public", "email": "contact@lydec.co.ma", "contact": "Direction Juridique", "sent": true},
+  {"company": "Cabinet Jawhari", "sector": "Cabinet avocat droit du travail", "email": "maha@avocat-jawhari.com", "contact": "Maître Jawhari", "sent": true},
+  {"company": "Casa Law Firm", "sector": "Cabinet corporate", "email": "contact@casalawfirm.co.ma", "contact": "Direction", "sent": true},
+  {"company": "Sentissi Legal Advisory", "sector": "Direction juridique externalisée", "email": "contact@sentissilegal.com", "contact": "Direction", "sent": true},
+  {"company": "LMT Auditing", "sector": "Audit et accompagnement juridique PME", "email": "legal@lmtauditing.ma", "contact": "Direction Juridique", "sent": true},
+  {"company": "Maroc Performance", "sector": "Conseil PME", "email": "contact@maroc-performance.com", "contact": "Direction", "sent": true},
+  {"company": "Auditia", "sector": "Cabinet audit et conseil", "email": "contact@auditia.ma", "contact": "Direction", "sent": true},
+  {"company": "Cabinet Daim Rousseau", "sector": "Conseil juridique et fiscal", "email": "contact@daimrousseau.com", "contact": "Direction", "sent": true},
+  {"company": "Fidaroc Grant Thornton Maroc", "sector": "Audit et conseil aux entreprises", "email": "info@fidaroc.com", "contact": "Direction Juridique", "sent": true},
+  {"company": "CMS Francis Lefebvre Maroc", "sector": "Cabinet droit des affaires", "email": "contact@cms-fl.ma", "contact": "Direction", "sent": true},
+  {"company": "Gide Casablanca", "sector": "Cabinet droit des affaires international", "email": "casablanca@gide.com", "contact": "Direction", "sent": true},
+  {"company": "Freshfields Bruckhaus Deringer Maroc", "sector": "Cabinet droit des affaires international", "email": "contact.maroc@freshfields.com", "contact": "Direction", "sent": true},
+  {"company": "Deloitte Maroc", "sector": "Audit, conseil et juridique", "email": "contact@deloitte.ma", "contact": "Direction Juridique", "sent": true},
+  {"company": "PwC Maroc", "sector": "Audit et conseil", "email": "contact@pwc.ma", "contact": "Direction Juridique", "sent": true},
+  {"company": "KPMG Maroc", "sector": "Audit et conseil", "email": "info@kpmg.ma", "contact": "Direction Juridique", "sent": true},
+  {"company": "Naciri & Associés", "sector": "Cabinet droit des affaires", "email": "contact@naciri.ma", "contact": "Direction", "sent": true},
+  {"company": "Kettani Law Firm", "sector": "Cabinet droit des affaires", "email": "info@kettani.ma", "contact": "Direction", "sent": true},
+  {"company": "Clifford Chance Casablanca", "sector": "Cabinet international droit des affaires", "email": "casablanca@cliffordchance.com", "contact": "Direction", "sent": true},
+  {"company": "Dentons Maroc", "sector": "Cabinet international droit des affaires", "email": "casablanca@dentons.com", "contact": "Direction", "sent": false},
+  {"company": "Allen & Overy Casablanca", "sector": "Cabinet international droit des affaires", "email": "casablanca@allenovery.com", "contact": "Direction", "sent": false},
+  {"company": "Hogan Lovells Casablanca", "sector": "Cabinet international droit des affaires", "email": "casablanca@hoganlovells.com", "contact": "Direction", "sent": false},
+  {"company": "OCP Group", "sector": "Industrie / Phosphates", "email": "contact@ocpgroup.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "CDG Capital", "sector": "Finance / Investissement", "email": "info@cdgcapital.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "CIH Bank", "sector": "Banque et immobilier", "email": "cih@cih.co.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Bank of Africa (BMCE)", "sector": "Banque", "email": "contact@bankofafrica.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Société Générale Maroc", "sector": "Banque", "email": "contact@sgmaroc.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Lafarge Holcim Maroc", "sector": "Matériaux de construction", "email": "contact@lafarge.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Veolia Maroc", "sector": "Utilities / Services environnementaux", "email": "contact@veolia.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Total Energies Maroc", "sector": "Energie / Distribution", "email": "contact@total.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Renault Maroc", "sector": "Automobile / Industrie", "email": "contact@renault.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Marjane Holding", "sector": "Distribution / Retail", "email": "contact@marjane.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Label'Vie", "sector": "Distribution / Retail", "email": "info@labelvie.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Saham Group", "sector": "Assurance et services", "email": "contact@saham.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "BMCI", "sector": "Banque (filiale BNP Paribas)", "email": "contact@bmci.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Crédit du Maroc", "sector": "Banque (filiale Crédit Agricole)", "email": "info@cdm.co.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Wafa Assurance", "sector": "Assurance", "email": "contact@wafaassurance.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "RMA Assurance", "sector": "Assurance", "email": "contact@rmaassurance.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "ONCF", "sector": "Transport ferroviaire / Service public", "email": "contact@oncf.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "ADM (Autoroutes du Maroc)", "sector": "Infrastructure / Concession", "email": "contact@adm.co.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "ANAPEC", "sector": "Service public / Emploi", "email": "contact@anapec.org", "contact": "Direction Juridique", "sent": false},
+  {"company": "MEDZ (Groupe CDG)", "sector": "Développement économique / Zones industrielles", "email": "contact@medz.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "HPS (Hightech Payment Systems)", "sector": "Fintech / Paiement", "email": "info@hps-worldwide.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "M2M Group", "sector": "Tech / Paiement mobile", "email": "contact@m2mgroup.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Intelcia", "sector": "BPO / Services externalisés", "email": "contact@intelcia.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "OFPPT", "sector": "Formation professionnelle / Service public", "email": "contact@ofppt.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Alliances Développement Immobilier", "sector": "Immobilier", "email": "contact@alliances.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Douja Promotion Addoha", "sector": "Immobilier", "email": "contact@groupeaddoha.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Palmeraie Holding", "sector": "Immobilier et tourisme", "email": "contact@palmeraie.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Royal Air Maroc", "sector": "Transport aérien", "email": "contact@royalairmaroc.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Maghreb Steel", "sector": "Industrie sidérurgique", "email": "contact@maghrebsteel.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Centrale Danone Maroc", "sector": "Agroalimentaire (filiale Danone)", "email": "contact@centraledanone.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Attijariwafa Bank", "sector": "Banque", "email": "contact@attijariwafabank.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "HMI", "sector": "Industrie / Manufacturing", "email": "b.laghrabi@hmi.ma", "contact": "Bouchaib Laghrabi", "sent": false},
+  {"company": "Eurodefis", "sector": "Conseil / Formation", "email": "berrada.wadii@eurodefis.com", "contact": "Wadii Berrada Souni", "sent": false},
+  {"company": "Espace Semit", "sector": "Formation professionnelle", "email": "cboukadida@espace-semit.com", "contact": "Chiraz Boukadida", "sent": false},
+  {"company": "CIMAT", "sector": "Matériaux de construction", "email": "Hassan.ELOUMRI@cimat.ma", "contact": "Hassan El Oumri", "sent": false},
+  {"company": "Qanawat ME", "sector": "Télécom / Digital", "email": "imane.fassah@qanawat-me.com", "contact": "Imane Fassah", "sent": false},
+  {"company": "Job Connect Maroc", "sector": "RH / Recrutement", "email": "jawal.cherkaoui@jobconnectmaroc.com", "contact": "Jawal Cherkaoui", "sent": false},
+  {"company": "IMC", "sector": "Conseil / Formation", "email": "m.benomar@imc.co.ma", "contact": "Direction", "sent": false},
+  {"company": "Aria Group", "sector": "Tech / Investissement", "email": "fatima-ezzahra.elahrache@ariagroup.io", "contact": "Fatima-Ezzahra El Ahrache", "sent": false},
+  {"company": "STG Telecom", "sector": "Télécommunications", "email": "y.daou@stgtelecom.com", "contact": "Youssef Daou", "sent": false},
+  {"company": "Artemis", "sector": "Conseil / Gestion", "email": "z.mounib@artemis.ma", "contact": "Zineb Mounib", "sent": false},
+  {"company": "Webhelp Maroc", "sector": "BPO / Outsourcing", "email": "barjouzi@ma.webhelp.com", "contact": "Direction", "sent": false},
+  {"company": "OCP Foundation", "sector": "Fondation / RSE", "email": "s.ajib@ocpfoundation.org", "contact": "Direction", "sent": false},
+  {"company": "BMCE Capital", "sector": "Finance / Banque d'investissement", "email": "k.benis@bmcek.co.ma", "contact": "Direction", "sent": false},
+  {"company": "Procter & Gamble Maroc", "sector": "FMCG / Grande consommation", "email": "boujida.m.1@pg.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "Alliances (contact direct)", "sector": "Immobilier", "email": "ibelmejdoub@alliances.co.ma", "contact": "Direction", "sent": false},
+  {"company": "Holmarcom", "sector": "Holding industriel", "email": "latifa.boumediane@holmarcom.ma", "contact": "Latifa Boumediane", "sent": false},
+  {"company": "Cegelec Maroc", "sector": "Génie électrique / Construction", "email": "lamiaa.debbarh@cegelec.com", "contact": "Lamiaa Debbarh", "sent": false},
+  {"company": "CIH Bank (contact direct)", "sector": "Banque / Immobilier", "email": "douk@cih.co.ma", "contact": "Direction", "sent": false},
+  {"company": "Attijariwafa Bank (contact direct)", "sector": "Banque", "email": "a.elkettani@attijariwafa.com", "contact": "Direction", "sent": false},
+  {"company": "Caisse Centrale de Garantie", "sector": "Finance publique", "email": "m.filali@ccg.ma", "contact": "Direction Juridique", "sent": false},
+  {"company": "Cegelec Maroc (contact 2)", "sector": "Génie électrique / Construction", "email": "stephanie.heissat@cegelec.com", "contact": "Stephanie Heissat", "sent": false},
+  {"company": "Akwa Group", "sector": "Énergie / Distribution pétrolière", "email": "z.nabat@akwagroup.com", "contact": "Direction Juridique", "sent": false},
+  {"company": "ENGIE Maroc", "sector": "Énergie", "email": "benjamin.petteau@engie.com", "contact": "Benjamin Petteau", "sent": false},
+  {"company": "Régie 3", "sector": "Médias / Publicité", "email": "m.radi@regie3.ma", "contact": "Direction", "sent": false},
+  {"company": "Aya Gold & Silver", "sector": "Mines / Ressources naturelles", "email": "mustapha.elouafi@ayagoldsilver.com", "contact": "Mustapha El Ouafi", "sent": false},
+  {"company": "Agenz", "sector": "PropTech / Immobilier digital", "email": "mbelkeziz@agenz.ma", "contact": "Malik Belkeziz", "sent": false},
+  {"company": "SEAF", "sector": "Finance / Private Equity", "email": "abenlamlih@seaf.com", "contact": "Direction", "sent": false},
+  {"company": "CRBC", "sector": "Construction / BTP", "email": "loncle@crbc.com", "contact": "Direction", "sent": false},
+  {"company": "Aria Group (contact 2)", "sector": "Tech / Investissement", "email": "jalil.bensaid@ariagroup.io", "contact": "Jalil Bensaid", "sent": false},
+  {"company": "Mutation Event", "sector": "Événementiel / Communication", "email": "achraf.b@mutationevent.com", "contact": "Direction", "sent": false}
 ]

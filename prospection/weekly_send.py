@@ -13,10 +13,13 @@ IMAP_HOST = "ssl0.ovh.net"
 IMAP_PORT = 993
 FROM_EMAIL = "contact@westfieldavocats.com"
 FROM_NAME = "Wassim Benzarti — Westfield Avocats"
-MAX_PER_WEEK = 5
+MAX_PER_DAY = 5
 
 
 def generate_email(client, target):
+    first_name = target.get("contact", "").split()[0] if target.get("contact", "") not in ["Direction", "Direction Juridique", ""] else ""
+    greeting = f"Bonjour {first_name}," if first_name else "Bonjour,"
+
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=1200,
@@ -29,12 +32,13 @@ Cible:
 - Entreprise: {target['company']}
 - Secteur: {target['sector']}
 - Contact: {target.get('contact', 'la direction juridique')}
+- Salutation d'ouverture à utiliser: "{greeting}"
 
 Omniscient by Westfield: outil IA d'analyse de contrats (ai.westfieldavocats.com), à partir de 950 MAD/mois.
 Détecte les clauses risquées, vérifie conformité droit marocain et français, suggère des révisions.
 
 Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte autour) :
-{{"subject": "Objet court max 60 caractères spécifique au secteur", "html": "<p>Corps HTML 3 paragraphes max : accroche personnalisée sur le secteur + présentation Omniscient + CTA démo 20 min</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com | ai.westfieldavocats.com</p>"}}"""
+{{"subject": "Objet court max 60 caractères spécifique au secteur", "html": "<p>{greeting}</p><p>Corps HTML 2-3 paragraphes : accroche spécifique au secteur + présentation Omniscient + CTA démo 20 min</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com | ai.westfieldavocats.com</p>"}}"""
         }]
     )
     text = response.content[0].text.strip()
@@ -70,13 +74,13 @@ def main():
     with open("prospection/targets.json", "r", encoding="utf-8") as f:
         targets = json.load(f)
 
-    unsent = [t for t in targets if not t.get("sent", False)][:MAX_PER_WEEK]
+    unsent = [t for t in targets if not t.get("sent", False)][:MAX_PER_DAY]
 
     if not unsent:
-        print("Aucune cible à contacter cette semaine.")
+        print("Aucune cible à contacter aujourd'hui.")
         return
 
-    print(f"{len(unsent)} cibles à contacter cette semaine.")
+    print(f"{len(unsent)} cibles à contacter aujourd'hui.")
     client = anthropic.Anthropic(api_key=anthropic_key)
 
     ok, fail = 0, 0
@@ -86,7 +90,7 @@ def main():
         smtp.login(FROM_EMAIL, smtp_password)
         for target in unsent:
             try:
-                print(f"Génération email pour {target['company']}...")
+                print(f"Génération email pour {target['company']} ({target.get('contact', '')})...")
                 email_data = generate_email(client, target)
                 msg = build_message(target["email"], email_data["subject"], email_data["html"])
                 raw = msg.as_bytes()
@@ -99,7 +103,6 @@ def main():
                 print(f"✗ Échec → {target['email']}: {e}")
                 fail += 1
 
-    # Copie dans le dossier Envoyés via IMAP
     if sent_raws:
         try:
             print("\nCopie dans le dossier Envoyés...")
