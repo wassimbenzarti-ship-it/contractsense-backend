@@ -15,6 +15,28 @@ FROM_EMAIL = "contact@westfieldavocats.com"
 FROM_NAME = "Wassim Benzarti — Westfield Avocats"
 MAX_PER_DAY = 5
 
+GENERIC_KEYWORDS = ["Direction", "Maître"]
+
+
+def is_nominative(contact):
+    """True si le contact est un vrai nom (pas Direction / Maître X)."""
+    if not contact:
+        return False
+    for kw in GENERIC_KEYWORDS:
+        if kw in contact:
+            return False
+    return len(contact.strip().split()) >= 2
+
+
+def load_approved_drafts():
+    """Charge les brouillons approuvés pour les contacts nominatifs."""
+    try:
+        with open("prospection/drafts.json", "r", encoding="utf-8") as f:
+            drafts = json.load(f)
+        return {d["email"]: d for d in drafts if d.get("approved", False)}
+    except Exception:
+        return {}
+
 
 def generate_email(client, target):
     first_name = target.get("contact", "").split()[0] if target.get("contact", "") not in ["Direction", "Direction Juridique", ""] else ""
@@ -74,13 +96,28 @@ def main():
     with open("prospection/targets.json", "r", encoding="utf-8") as f:
         targets = json.load(f)
 
-    unsent = [t for t in targets if not t.get("sent", False)][:MAX_PER_DAY]
+    approved_drafts = load_approved_drafts()
 
-    if not unsent:
+    # File d'envoi :
+    # - contacts nominatifs : seulement si brouillon approuvé
+    # - contacts génériques : génération à la volée
+    send_queue = []
+    for t in targets:
+        if t.get("sent", False):
+            continue
+        if is_nominative(t.get("contact", "")):
+            if t["email"] in approved_drafts:
+                send_queue.append((t, approved_drafts[t["email"]]))
+        else:
+            send_queue.append((t, None))
+
+    send_queue = send_queue[:MAX_PER_DAY]
+
+    if not send_queue:
         print("Aucune cible à contacter aujourd'hui.")
         return
 
-    print(f"{len(unsent)} cibles à contacter aujourd'hui.")
+    print(f"{len(send_queue)} cibles à contacter aujourd'hui.")
     client = anthropic.Anthropic(api_key=anthropic_key)
 
     ok, fail = 0, 0
@@ -88,11 +125,18 @@ def main():
 
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
         smtp.login(FROM_EMAIL, smtp_password)
-        for target in unsent:
+        for target, draft in send_queue:
             try:
-                print(f"Génération email pour {target['company']} ({target.get('contact', '')})...")
-                email_data = generate_email(client, target)
-                msg = build_message(target["email"], email_data["subject"], email_data["html"])
+                print(f"Envoi pour {target['company']} ({target.get('contact', '')})...")
+                if draft:
+                    subject = draft["subject"]
+                    html = draft["body"]
+                    print(f"  (brouillon approuvé)")
+                else:
+                    email_data = generate_email(client, target)
+                    subject = email_data["subject"]
+                    html = email_data["html"]
+                msg = build_message(target["email"], subject, html)
                 raw = msg.as_bytes()
                 smtp.sendmail(FROM_EMAIL, target["email"], raw)
                 sent_raws.append(raw)

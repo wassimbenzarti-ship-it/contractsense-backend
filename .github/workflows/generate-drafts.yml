@@ -1,0 +1,23 @@
+name: Générer brouillons emails nominatifs
+on:
+  workflow_dispatch:
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer anthropic
+        run: pip install anthropic
+      - name: Générer les brouillons
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 prospection/generate_drafts.py
+      - name: Commiter les brouillons
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add prospection/drafts.json
+          git diff --staged --quiet || git commit -m "prospection: brouillons emails nominatifs générés"
+          git push
