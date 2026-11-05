@@ -165,35 +165,35 @@
     "sector": "Banque et immobilier",
     "email": "cih@cih.co.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Bank of Africa (BMCE)",
     "sector": "Banque",
     "email": "contact@bankofafrica.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Société Générale Maroc",
     "sector": "Banque",
     "email": "contact@sgmaroc.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Lafarge Holcim Maroc",
     "sector": "Matériaux de construction",
     "email": "contact@lafarge.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Veolia Maroc",
     "sector": "Utilities / Services environnementaux",
     "email": "contact@veolia.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Total Energies Maroc",
