@@ -200,35 +200,35 @@
     "sector": "Energie / Distribution",
     "email": "contact@total.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Renault Maroc",
     "sector": "Automobile / Industrie",
     "email": "contact@renault.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Marjane Holding",
     "sector": "Distribution / Retail",
     "email": "contact@marjane.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Label'Vie",
     "sector": "Distribution / Retail",
     "email": "info@labelvie.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Saham Group",
     "sector": "Assurance et services",
     "email": "contact@saham.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "BMCI",
