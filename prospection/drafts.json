@@ -1,18 +1,162 @@
 [
-  {"email": "o.bakhat@hns.ma", "contact": "Ouima Bakhat", "company": "HNS", "sector": "Industrie / Manufacturing", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "berrada.wadii@eurodefis.com", "contact": "Wadii Berrada Souni", "company": "Eurodefis", "sector": "Conseil / Formation", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "cboukadida@espace-semit.com", "contact": "Chiraz Boukadida", "company": "Espace Semit", "sector": "Formation professionnelle", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "Hassan.ELOUMRI@cimat.ma", "contact": "Hassan El Oumri", "company": "CIMAT", "sector": "Matériaux de construction", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "imane.fassah@qanawat-me.com", "contact": "Imane Fassah", "company": "Qanawat ME", "sector": "Télécom / Digital", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "jawal.cherkaoui@jobconnectmaroc.com", "contact": "Jawal Cherkaoui", "company": "Job Connect Maroc", "sector": "RH / Recrutement", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "fatima-ezzahra.elahrache@ariagroup.io", "contact": "Fatima-Ezzahra El Ahrache", "company": "Aria Group", "sector": "Tech / Investissement", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "y.daou@stgtelecom.com", "contact": "Youssef Daou", "company": "STG Telecom", "sector": "Télécommunications", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "z.mounib@artemis.ma", "contact": "Zineb Mounib", "company": "Artemis", "sector": "Conseil / Gestion", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "latifa.boumediane@holmarcom.ma", "contact": "Latifa Boumediane", "company": "Holmarcom", "sector": "Holding industriel", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "lamiaa.debbarh@cegelec.com", "contact": "Lamiaa Debbarh", "company": "Cegelec Maroc", "sector": "Génie électrique / Construction", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "stephanie.heissat@cegelec.com", "contact": "Stephanie Heissat", "company": "Cegelec Maroc (contact 2)", "sector": "Génie électrique / Construction", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "benjamin.petteau@engie.com", "contact": "Benjamin Petteau", "company": "ENGIE Maroc", "sector": "Énergie", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "mustapha.elouafi@ayagoldsilver.com", "contact": "Mustapha El Ouafi", "company": "Aya Gold & Silver", "sector": "Mines / Ressources naturelles", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "mbelkeziz@agenz.ma", "contact": "Malik Belkeziz", "company": "Agenz", "sector": "PropTech / Immobilier digital", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true},
-  {"email": "jalil.bensaid@ariagroup.io", "contact": "Jalil Bensaid", "company": "Aria Group (contact 2)", "sector": "Tech / Investissement", "subject": null, "body": null, "approved": false, "generated_at": null, "regen": true}
+  {
+    "email": "o.bakhat@hns.ma",
+    "contact": "Ouima Bakhat",
+    "company": "HNS",
+    "sector": "Industrie / Manufacturing",
+    "subject": "Automatisez l'analyse de vos contrats fournisseurs",
+    "body": "<p>Bonjour Ouima,</p><p>Dans le secteur du manufacturing, chaque contrat fournisseur ou de partenariat représente un enjeu stratégique majeur. Entre les délais serrés de production et la complexité croissante des obligations légales (droit marocain et français), l'analyse manuelle des clauses risquées devient chronophage et expose votre entreprise à des erreurs coûteuses.</p><p>C'est pourquoi nous avons développé <strong>Omniscient by Westfield</strong> : un outil IA qui analyse instantanément vos contrats, détecte les clauses dangereuses, vérifie la conformité avec la législation marocaine et française, et vous propose des révisions ciblées. Dès 950 MAD/mois, vous gagnez en sérénité juridique et en productivité.</p><p>Imaginez : réduire le temps de revue contractuelle de 80%, identifier les risques avant qu'ils ne deviennent des problèmes, et maîtriser votre exposition légale en temps réel.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:07.283883"
+  },
+  {
+    "email": "berrada.wadii@eurodefis.com",
+    "contact": "Wadii Berrada Souni",
+    "company": "Eurodefis",
+    "sector": "Conseil / Formation",
+    "subject": "Sécurisez vos contrats clients avec l'IA juridique",
+    "body": "<p>Bonjour Wadii,</p><p>Dans le secteur du conseil et de la formation, la qualité de vos contrats clients est un atout majeur de différenciation. Or, une clause mal négociée ou non conforme peut exposer votre entreprise à des risques importants—particulièrement quand vous intervenez auprès de clients français et marocains.</p><p>C'est précisément pourquoi nous avons créé <strong>Omniscient by Westfield</strong>, un outil IA qui analyse vos contrats en temps réel. Il détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions concrètes. En quelques minutes, vous gagnez la sérénité juridique que vous offrez à vos clients.</p><p>À partir de 950 MAD/mois, Omniscient devient votre conseiller juridique embarqué—parfait pour les cabinets de conseil qui veulent renforcer leur proposition de valeur.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:11.519959"
+  },
+  {
+    "email": "cboukadida@espace-semit.com",
+    "contact": "Chiraz Boukadida",
+    "company": "Espace Semit",
+    "sector": "Formation professionnelle",
+    "subject": "Simplifiez l'analyse de vos contrats de formation",
+    "body": "<p>Bonjour Chiraz,</p><p>Dans le secteur de la formation professionnelle, la qualité de vos contrats (avec apprenants, partenaires, prestataires) est cruciale pour sécuriser votre activité et votre responsabilité. Pourtant, analyser manuellement chaque clause pour détecter les risques juridiques est chronophage et source d'erreurs.</p><p>Omniscient by Westfield est un outil IA conçu pour vous faire gagner du temps et de la sérénité. En quelques secondes, il analyse vos contrats, identifie les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions ciblées. À partir de 950 MAD/mois, vous bénéficiez d'une analyse juridique fiable et instantanée, sans recourir à des consultations externes coûteuses.</p><p>Espace Semit pourrait ainsi renforcer sa sécurité juridique tout en optimisant ses processus contractuels.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez simplement à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:15.908968"
+  },
+  {
+    "email": "Hassan.ELOUMRI@cimat.ma",
+    "contact": "Hassan El Oumri",
+    "company": "CIMAT",
+    "sector": "Matériaux de construction",
+    "subject": "Sécurisez vos contrats matériaux avec l'IA juridique",
+    "body": "<p>Bonjour Hassan,</p><p>Dans le secteur des matériaux de construction, les contrats fournisseurs et de distribution sont complexes et les risques juridiques peuvent impacter directement vos marges. Entre les clauses de responsabilité mal définies, les conformités réglementaires multiples et les litiges potentiels, chaque contrat mérite une analyse rigoureuse.</p><p>C'est pour cela que nous avons créé <strong>Omniscient by Westfield</strong> : un outil IA qui analyse vos contrats en quelques secondes, détecte automatiquement les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions concrètes. À partir de 950 MAD/mois, vous gagnez du temps et sécurisez votre activité sans dépendre entièrement de consultations externes.</p><p>Idéal pour les équipes procurement et juridique qui traitent de nombreux contrats et souhaitent réduire les risques.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:20.281180"
+  },
+  {
+    "email": "imane.fassah@qanawat-me.com",
+    "contact": "Imane Fassah",
+    "company": "Qanawat ME",
+    "sector": "Télécom / Digital",
+    "subject": "Analysez vos contrats telecom en 2 minutes avec l'IA",
+    "body": "<p>Bonjour Imane,</p><p>Dans le secteur des télécoms et du digital, la gestion des contrats est critique : partenariats complexes, conformité réglementaire marocaine et française, clauses de responsabilité sensibles. Une relecture manuelle consomme du temps et expose à des risques.</p><p>Omniscient by Westfield est un outil IA conçu pour analyser automatiquement vos contrats en quelques secondes. Il détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et suggère des révisions précises. À partir de 950 MAD/mois seulement, vous gagnez en réactivité et en sécurité juridique.</p><p>Parfait pour Qanawat ME : analysez vos contrats fournisseurs, partenariats stratégiques et conditions clients sans surcharge administrative.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:24.513306"
+  },
+  {
+    "email": "jawal.cherkaoui@jobconnectmaroc.com",
+    "contact": "Jawal Cherkaoui",
+    "company": "Job Connect Maroc",
+    "sector": "RH / Recrutement",
+    "subject": "Analysez vos contrats RH en 30 secondes avec l'IA",
+    "body": "<p>Bonjour Jawal,</p><p>Dans le secteur du recrutement et des RH, chaque contrat compte : contrats de travail, accords de confidentialité, clauses de non-concurrence... Une clause mal rédigée ou non conforme au droit marocain peut exposer Job Connect Maroc à des risques juridiques importants et coûteux.</p><p>C'est pourquoi nous avons développé <strong>Omniscient by Westfield</strong>, un outil IA qui analyse vos contrats en quelques secondes. Il détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous suggère des révisions précises. Plus de relecture manuelle fastidieuse : gagnez du temps et sécurisez vos contrats de recrutement dès la signature.</p><p>À partir de <strong>950 MAD/mois</strong>, Omniscient devient votre partenaire juridique intégré dans vos workflows RH.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:28.886441"
+  },
+  {
+    "email": "fatima-ezzahra.elahrache@ariagroup.io",
+    "contact": "Fatima-Ezzahra El Ahrache",
+    "company": "Aria Group",
+    "sector": "Tech / Investissement",
+    "subject": "Analysez vos contrats d'investissement en 2 minutes",
+    "body": "<p>Bonjour Fatima-Ezzahra,</p><p>Dans le secteur de la tech et de l'investissement, chaque contrat doit être blindé. Entre les clauses de propriété intellectuelle, les conditions de financement et les engagements de conformité, les risques juridiques s'accumulent rapidement—et une seule erreur peut coûter cher.</p><p><strong>Omniscient by Westfield</strong> est un outil IA qui analyse vos contrats en temps réel pour vous. Il détecte automatiquement les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions concrètes. À partir de 950 MAD/mois, vous gagnez des semaines de revue juridique manuelle.</p><p>Pour Aria Group, cela signifie des négociations plus rapides, moins de litiges potentiels et une conformité garantie sur tous vos contrats d'investissement et partenariats tech.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement →</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:33.034913"
+  },
+  {
+    "email": "y.daou@stgtelecom.com",
+    "contact": "Youssef Daou",
+    "company": "STG Telecom",
+    "sector": "Télécommunications",
+    "subject": "Sécurisez vos contrats télécoms avec l'IA Omniscient",
+    "body": "<p>Bonjour Youssef,</p><p>Dans le secteur des télécommunications, la complexité des contrats d'infrastructure, de partenariat et de conformité réglementaire expose à des risques juridiques majeurs. Entre les obligations de conformité française et marocaine et les clauses potentiellement déséquilibrées, chaque contrat demande une vigilance accrue.</p><p>C'est pourquoi nous vous présentons <strong>Omniscient by Westfield</strong>, un outil IA qui analyse automatiquement vos contrats pour détecter les clauses risquées, vérifier la conformité avec le droit marocain et français, et vous suggérer des révisions concrètes. En quelques minutes, gagnez la certitude juridique que demande votre activité.</p><p>À partir de 950 MAD/mois seulement, transformez votre gestion contractuelle.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement →</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:36.950546"
+  },
+  {
+    "email": "z.mounib@artemis.ma",
+    "contact": "Zineb Mounib",
+    "company": "Artemis",
+    "sector": "Conseil / Gestion",
+    "subject": "Analysez vos contrats en 30 secondes avec l'IA",
+    "body": "<p>Bonjour Zineb,</p><p>Dans le secteur du conseil et de la gestion, la qualité de vos contrats est directement liée à votre crédibilité auprès de vos clients. Chaque clause mal rédigée ou non conforme expose votre entreprise à des risques juridiques et financiers.</p><p>C'est pourquoi nous avons créé <strong>Omniscient by Westfield</strong>, un outil IA qui analyse vos contrats en quelques secondes. Il détecte automatiquement les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous suggère des révisions pour sécuriser vos engagements. Un gain de temps précieux et une tranquillité d'esprit garantie.</p><p>À partir de <strong>950 MAD/mois</strong>, vous pouvez auditer tous vos contrats sans surcoûts juridiques.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:40.970825"
+  },
+  {
+    "email": "latifa.boumediane@holmarcom.ma",
+    "contact": "Latifa Boumediane",
+    "company": "Holmarcom",
+    "sector": "Holding industriel",
+    "subject": "Sécurisez vos contrats multi-filiales avec l'IA",
+    "body": "<p>Bonjour Latifa,</p><p>Dans un groupe holding industriel comme Holmarcom, la gestion des contrats entre filiales, fournisseurs et partenaires représente un enjeu stratégique majeur. Chaque clause mal négociée ou non-conforme aux droits marocain et français peut exposer votre groupe à des risques importants—particulièrement quand les transactions impliquent plusieurs juridictions.</p><p>C'est pour cela que nous avons créé <strong>Omniscient by Westfield</strong>, un outil IA d'analyse de contrats qui détecte automatiquement les clauses risquées, vérifie la conformité avec les législations marocaine et française, et propose des révisions immédiatement. En quelques secondes, vous gagnez la sérénité juridique que demande une structure multi-filiales.</p><p>À partir de 950 MAD/mois, Omniscient vous permet de centraliser le contrôle de vos engagements contractuels sans alourdir votre équipe juridique.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes. Je serai ravi de vous montrer comment Omniscient s'adapte à la réalité de Holmarcom.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:45.557864"
+  },
+  {
+    "email": "lamiaa.debbarh@cegelec.com",
+    "contact": "Lamiaa Debbarh",
+    "company": "Cegelec Maroc",
+    "sector": "Génie électrique / Construction",
+    "subject": "Analysez vos contrats en 60 secondes avec l'IA",
+    "body": "<p>Bonjour Lamiaa,</p><p>Dans le secteur du génie électrique et de la construction, chaque contrat engage votre responsabilité et votre rentabilité. Entre les appels d'offres, les marchés publics et les contrats fournisseurs, il est facile de passer à côté d'une clause risquée ou d'une non-conformité au droit marocain.</p><p>C'est pourquoi nous avons créé <strong>Omniscient by Westfield</strong> : un assistant IA qui analyse vos contrats en quelques secondes, détecte les clauses dangereuses, vérifie la conformité au droit marocain et français, et vous propose des révisions précises. Fini les allers-retours avec vos avocats sur chaque document.</p><p>Dès <strong>950 MAD/mois</strong>, vous gagnez du temps, réduisez vos risques juridiques et accélérez vos cycles de signature.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:49.818704"
+  },
+  {
+    "email": "stephanie.heissat@cegelec.com",
+    "contact": "Stephanie Heissat",
+    "company": "Cegelec Maroc (contact 2)",
+    "sector": "Génie électrique / Construction",
+    "subject": "Sécurisez vos contrats électriques avec l'IA Omniscient",
+    "body": "<p>Bonjour Stephanie,</p><p>Dans le secteur du génie électrique et de la construction, chaque contrat engage votre responsabilité et vos marges. Entre les normes marocaines et françaises, les clauses de garantie, et les risques de litiges, analyser manuellement chaque document représente un coût considérable.</p><p>Omniscient by Westfield est un outil IA qui scanne vos contrats en quelques secondes, détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions précises. Nos clients du secteur gagnen un temps précieux et réduisent significativement leurs risques juridiques.</p><p>À partir de 950 MAD/mois, vous pouvez sécuriser vos contrats d'électrification, de maintenance et de fournitures sans surcharge administrative.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:54.049504"
+  },
+  {
+    "email": "benjamin.petteau@engie.com",
+    "contact": "Benjamin Petteau",
+    "company": "ENGIE Maroc",
+    "sector": "Énergie",
+    "subject": "Sécuriser vos contrats énergétiques avec l'IA",
+    "body": "<p>Bonjour Benjamin,</p><p>Dans le secteur de l'énergie, la complexité des contrats d'approvisionnement, de distribution et de partenariat expose à des risques juridiques majeurs. Entre les évolutions réglementaires marocaines et françaises et les enjeux financiers considérables, une relecture exhaustive devient indispensable.</p><p>Omniscient by Westfield est un outil IA spécialisé qui analyse vos contrats en temps réel : il détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous suggère des révisions adaptées. Dès 950 MAD/mois, vous gagnez en sérénité juridique et en efficacité opérationnelle.</p><p>Particulièrement utile pour vos contrats de fourniture d'énergie, vos partenariats commerciaux et vos obligations de conformité réglementaire.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:36:58.291720"
+  },
+  {
+    "email": "mustapha.elouafi@ayagoldsilver.com",
+    "contact": "Mustapha El Ouafi",
+    "company": "Aya Gold & Silver",
+    "sector": "Mines / Ressources naturelles",
+    "subject": "Sécurisez vos contrats miniers avec l'IA",
+    "body": "<p>Bonjour Mustapha,</p><p>Dans le secteur minier, chaque contrat d'exploitation, de partenariat ou de concession représente des enjeux majeurs. Une clause mal négociée ou une non-conformité aux régulations marocaines et internationales peut coûter des millions et compromettre vos opérations.</p><p>Omniscient by Westfield est un outil IA conçu pour analyser vos contrats en profondeur : il détecte automatiquement les clauses à risque, vérifie la conformité avec le droit marocain et français, et vous suggère des révisions précises. En quelques minutes, obtenez une vue d'ensemble sécurisée de vos engagements juridiques.</p><p>À partir de 950 MAD/mois, bénéficiez d'une protection contractuelle intelligente, adaptée aux spécificités du secteur minier.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:37:02.307931"
+  },
+  {
+    "email": "mbelkeziz@agenz.ma",
+    "contact": "Malik Belkeziz",
+    "company": "Agenz",
+    "sector": "PropTech / Immobilier digital",
+    "subject": "Automatisez l'analyse de vos contrats immobiliers",
+    "body": "<p>Bonjour Malik,</p><p>Dans le secteur PropTech, la velocity est clé : chaque jour perdu à analyser manuellement des contrats est un jour sans fermeture. Chez Agenz, vous gérez des volumes de documents qui exigent une expertise juridique rapide et fiable, sans surcharger vos équipes.</p><p>C'est exactement ce que <strong>Omniscient by Westfield</strong> fait : en quelques secondes, notre outil IA analyse vos contrats immobiliers, détecte les clauses risquées, vérifie la conformité avec le droit marocain et français, et vous propose des révisions précises. Fini les allers-retours avec vos avocats pour chaque document. Fini les risques juridiques passés inaperçus.</p><p>À partir de 950 MAD/mois, vous gagnez du temps, réduisez vos risques et accélérez vos transactions. Vos clients apprécient aussi cette rigueur contractuelle.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p><p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes. Je vous montrerai comment d'autres PropTechs ont déjà transformé leur processus.</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:37:06.983924"
+  },
+  {
+    "email": "jalil.bensaid@ariagroup.io",
+    "contact": "Jalil Bensaid",
+    "company": "Aria Group (contact 2)",
+    "sector": "Tech / Investissement",
+    "subject": "Analysez vos contrats d'investissement en secondes",
+    "body": "<p>Bonjour Jalil,</p><p>Dans le secteur du tech et de l'investissement, chaque contrat représente une opportunité—ou un risque. Entre les due diligences accélérées, les multiples juridictions et la conformité réglementaire, vérifier manuellement chaque clause consomme du temps précieux à vos équipes.</p><p>C'est pourquoi nous avons créé <strong>Omniscient by Westfield</strong>, un outil IA qui analyse vos contrats instantanément. Il détecte les clauses risquées, vérifie la conformité aux droits marocain et français, et vous suggère des révisions précises. Résultat : vous gagnez 80% du temps de review et vous sécurisez vos transactions.</p><p>Chez Aria Group, cela signifie des due diligences plus rapides, une meilleure couverture légale et des décisions d'investissement plus robustes.</p><p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement →</a></p><p>À partir de 950 MAD/mois, sans engagement. Ou répondez simplement à cet email pour convenir d'un appel découverte de 20 minutes—je vous montrerai comment Omniscient s'adapte à vos flux de travail.</p><p>Cordialement,<br><strong>Wassim Benzarti</strong><br>Westfield Avocats<br><a href=\"mailto:contact@westfieldavocats.com\">contact@westfieldavocats.com</a></p>",
+    "approved": false,
+    "generated_at": "2026-11-09T17:37:11.835082"
+  }
 ]
