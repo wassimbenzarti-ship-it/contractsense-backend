@@ -13,6 +13,7 @@ SMTP_HOST = "ssl0.ovh.net"
 SMTP_PORT = 465
 FROM_EMAIL = "contact@westfieldavocats.com"
 FROM_NAME = "Omniscient Prospection"
+OMNISCIENT_URL = "https://ai.westfieldavocats.com"
 
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 smtp_password = os.environ["SMTP_PASSWORD"]
@@ -35,7 +36,7 @@ def generate_email(target):
 
     response = client.messages.create(
         model="claude-haiku-4-5",
-        max_tokens=1200,
+        max_tokens=1500,
         messages=[{
             "role": "user",
             "content": f"""Tu es l'assistant de prospection de Westfield Avocats.
@@ -47,11 +48,18 @@ Cible:
 - Contact: {target['contact']}
 - Salutation d'ouverture à utiliser: "{greeting}"
 
-Omniscient by Westfield: outil IA d'analyse de contrats (ai.westfieldavocats.com), à partir de 950 MAD/mois.
+Omniscient by Westfield: outil IA d'analyse de contrats (https://ai.westfieldavocats.com), à partir de 950 MAD/mois.
 Détecte les clauses risquées, vérifie conformité droit marocain et français, suggère des révisions.
 
-Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte autour) :
-{{"subject": "Objet court max 60 caractères spécifique au secteur", "html": "<p>{greeting}</p><p>Corps HTML 2-3 paragraphes : accroche spécifique au secteur + présentation Omniscient + CTA démo 20 min</p><p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com | ai.westfieldavocats.com</p>"}}"""
+RETOURNE UNIQUEMENT un objet JSON valide :
+{{"subject": "Objet court max 60 caractères spécifique au secteur",
+"html": "Corps HTML COMPLET avec :
+1. <p>{greeting}</p>
+2. <p>2-3 paragraphes : accroche sectorielle + présentation Omniscient + bénéfice concret</p>
+3. <p style=\"text-align:center;margin:24px 0;\"><a href=\"https://ai.westfieldavocats.com\" style=\"background:#1a1a2e;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;\">Essayer Omniscient gratuitement &rarr;</a></p>
+4. <p>Ou répondez à cet email pour convenir d'un appel découverte de 20 minutes.</p>
+5. <p>Cordialement,<br>Wassim Benzarti<br>Westfield Avocats<br>contact@westfieldavocats.com</p>"
+}}"""
         }]
     )
     text = response.content[0].text.strip()
@@ -62,7 +70,6 @@ Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte autour) 
 
 def send_validation_email(drafts):
     """Envoie un email récapitulatif à contact@ pour relecture avant envoi."""
-    # Exclure les brouillons sans contenu (body null)
     ready = [d for d in drafts if d.get("body")]
     if not ready:
         print("Aucun brouillon avec contenu à envoyer.")
@@ -129,8 +136,8 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 new_count = 0
 for target in nominative_pending:
-    # Générer si absent OU si body est null (entrée placeholder)
-    if target["email"] in existing and existing[target["email"]].get("body"):
+    # Générer si absent, body null, ou pas encore approuvé et marqué à regénérer
+    if target["email"] in existing and existing[target["email"]].get("body") and not existing[target["email"]].get("regen"):
         print(f"  Déjà généré : {target['contact']}")
         continue
 
