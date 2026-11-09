@@ -105,20 +105,20 @@ def main():
 
     approved_drafts = load_approved_drafts()
 
-    # File d'envoi :
-    # - contacts nominatifs : seulement si brouillon approuvé
-    # - contacts génériques : génération à la volée
-    send_queue = []
+    # Priorité aux contacts nominatifs avec brouillon approuvé,
+    # puis contacts génériques pour compléter jusqu'à MAX_PER_DAY
+    nominative_queue = []
+    generic_queue = []
     for t in targets:
         if t.get("sent", False):
             continue
         if is_nominative(t.get("contact", "")):
             if t["email"] in approved_drafts:
-                send_queue.append((t, approved_drafts[t["email"]]))
+                nominative_queue.append((t, approved_drafts[t["email"]]))
         else:
-            send_queue.append((t, None))
+            generic_queue.append((t, None))
 
-    send_queue = send_queue[:MAX_PER_DAY]
+    send_queue = (nominative_queue + generic_queue)[:MAX_PER_DAY]
 
     if not send_queue:
         print("Aucune cible à contacter aujourd'hui.")
