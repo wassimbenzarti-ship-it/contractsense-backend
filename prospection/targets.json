@@ -368,35 +368,35 @@
     "sector": "Industrie / Manufacturing",
     "email": "o.bakhat@hns.ma",
     "contact": "Ouima Bakhat",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Eurodefis",
     "sector": "Conseil / Formation",
     "email": "berrada.wadii@eurodefis.com",
     "contact": "Wadii Berrada Souni",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Espace Semit",
     "sector": "Formation professionnelle",
     "email": "cboukadida@espace-semit.com",
     "contact": "Chiraz Boukadida",
-    "sent": false
+    "sent": true
   },
   {
     "company": "CIMAT",
     "sector": "Matériaux de construction",
     "email": "Hassan.ELOUMRI@cimat.ma",
     "contact": "Hassan El Oumri",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Qanawat ME",
     "sector": "Télécom / Digital",
     "email": "imane.fassah@qanawat-me.com",
     "contact": "Imane Fassah",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Job Connect Maroc",
