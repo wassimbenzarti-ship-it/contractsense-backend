@@ -2,6 +2,7 @@
 """Génère les brouillons d'emails nominatifs et envoie un email de validation à contact@westfieldavocats.com."""
 import json
 import os
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -61,6 +62,12 @@ Retourne UNIQUEMENT un objet JSON valide (pas de markdown, pas de texte autour) 
 
 def send_validation_email(drafts):
     """Envoie un email récapitulatif à contact@ pour relecture avant envoi."""
+    # Exclure les brouillons sans contenu (body null)
+    ready = [d for d in drafts if d.get("body")]
+    if not ready:
+        print("Aucun brouillon avec contenu à envoyer.")
+        return
+
     html_parts = ["""
     <html><body style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
     <h1 style="color: #1a1a2e;">Brouillons à valider — Prospection Omniscient</h1>
@@ -68,12 +75,9 @@ def send_validation_email(drafts):
     <strong>Pour approuver</strong> : ouvrez votre session Claude et écrivez <em>"OK envoie les nominatifs"</em>.<br>
     <strong>Pour modifier</strong> : précisez le nom du contact et la correction souhaitée.</p>
     <hr/>
-    """.format(n=len(drafts))]
+    """.format(n=len(ready))]
 
-    for i, d in enumerate(drafts, 1):
-        # Strip HTML tags for plain preview
-        import re
-        body_text = re.sub(r'<[^>]+>', '', d['body']).strip()
+    for i, d in enumerate(ready, 1):
         html_parts.append(f"""
         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0; background: #f9f9f9;">
             <h2 style="margin-top: 0; color: #1a1a2e;">{i}. {d['contact']} — {d['company']}</h2>
@@ -93,13 +97,13 @@ def send_validation_email(drafts):
     msg = MIMEMultipart("alternative")
     msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
     msg["To"] = FROM_EMAIL
-    msg["Subject"] = f"[Validation requise] {len(drafts)} emails nominatifs à approuver"
+    msg["Subject"] = f"[Validation requise] {len(ready)} emails nominatifs à approuver"
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
         smtp.login(FROM_EMAIL, smtp_password)
         smtp.sendmail(FROM_EMAIL, FROM_EMAIL, msg.as_bytes())
-    print(f"✓ Email de validation envoyé à {FROM_EMAIL}")
+    print(f"✓ Email de validation envoyé à {FROM_EMAIL} ({len(ready)} brouillons)")
 
 
 # --- Main ---
@@ -125,7 +129,8 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 new_count = 0
 for target in nominative_pending:
-    if target["email"] in existing:
+    # Générer si absent OU si body est null (entrée placeholder)
+    if target["email"] in existing and existing[target["email"]].get("body"):
         print(f"  Déjà généré : {target['contact']}")
         continue
 
@@ -152,7 +157,7 @@ with open(drafts_path, "w", encoding="utf-8") as f:
 
 print(f"\n{new_count} nouveaux brouillons générés.")
 
-# Envoyer l'émail de validation avec TOUS les brouillons non encore approuvés
+# Envoyer l'émail de validation avec tous les brouillons non approuvés
 pending_approval = [d for d in existing.values() if not d.get("approved", False)]
 if pending_approval:
     print(f"\nEnvoi email de validation pour {len(pending_approval)} brouillons...")
