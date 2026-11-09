@@ -270,35 +270,35 @@
     "sector": "Infrastructure / Concession",
     "email": "contact@adm.co.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "ANAPEC",
     "sector": "Service public / Emploi",
     "email": "contact@anapec.org",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "MEDZ (Groupe CDG)",
     "sector": "Développement économique / Zones industrielles",
     "email": "contact@medz.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "HPS (Hightech Payment Systems)",
     "sector": "Fintech / Paiement",
     "email": "info@hps-worldwide.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "M2M Group",
     "sector": "Tech / Paiement mobile",
     "email": "contact@m2mgroup.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Intelcia",
