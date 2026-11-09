@@ -235,35 +235,35 @@
     "sector": "Banque (filiale BNP Paribas)",
     "email": "contact@bmci.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Crédit du Maroc",
     "sector": "Banque (filiale Crédit Agricole)",
     "email": "info@cdm.co.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Wafa Assurance",
     "sector": "Assurance",
     "email": "contact@wafaassurance.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "RMA Assurance",
     "sector": "Assurance",
     "email": "contact@rmaassurance.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "ONCF",
     "sector": "Transport ferroviaire / Service public",
     "email": "contact@oncf.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "ADM (Autoroutes du Maroc)",
