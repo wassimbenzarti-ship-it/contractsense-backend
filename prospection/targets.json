@@ -403,7 +403,7 @@
     "sector": "RH / Recrutement",
     "email": "jawal.cherkaoui@jobconnectmaroc.com",
     "contact": "Jawal Cherkaoui",
-    "sent": false
+    "sent": true
   },
   {
     "company": "IMC",
@@ -417,21 +417,21 @@
     "sector": "Tech / Investissement",
     "email": "fatima-ezzahra.elahrache@ariagroup.io",
     "contact": "Fatima-Ezzahra El Ahrache",
-    "sent": false
+    "sent": true
   },
   {
     "company": "STG Telecom",
     "sector": "Télécommunications",
     "email": "y.daou@stgtelecom.com",
     "contact": "Youssef Daou",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Artemis",
     "sector": "Conseil / Gestion",
     "email": "z.mounib@artemis.ma",
     "contact": "Zineb Mounib",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Webhelp Maroc",
@@ -473,7 +473,7 @@
     "sector": "Holding industriel",
     "email": "latifa.boumediane@holmarcom.ma",
     "contact": "Latifa Boumediane",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Cegelec Maroc",
