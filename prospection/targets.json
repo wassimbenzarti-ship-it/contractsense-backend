@@ -305,28 +305,28 @@
     "sector": "BPO / Services externalisés",
     "email": "contact@intelcia.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "OFPPT",
     "sector": "Formation professionnelle / Service public",
     "email": "contact@ofppt.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Alliances Développement Immobilier",
     "sector": "Immobilier",
     "email": "contact@alliances.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Douja Promotion Addoha",
     "sector": "Immobilier",
     "email": "contact@groupeaddoha.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Palmeraie Holding",
@@ -564,7 +564,7 @@
     "sector": "Tech / Investissement",
     "email": "jalil.bensaid@ariagroup.io",
     "contact": "Jalil Bensaid",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Mutation Event",
