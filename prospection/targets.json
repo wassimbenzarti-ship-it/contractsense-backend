@@ -333,35 +333,35 @@
     "sector": "Immobilier et tourisme",
     "email": "contact@palmeraie.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Royal Air Maroc",
     "sector": "Transport aérien",
     "email": "contact@royalairmaroc.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Maghreb Steel",
     "sector": "Industrie sidérurgique",
     "email": "contact@maghrebsteel.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Centrale Danone Maroc",
     "sector": "Agroalimentaire (filiale Danone)",
     "email": "contact@centraledanone.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Attijariwafa Bank",
     "sector": "Banque",
     "email": "contact@attijariwafabank.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "HNS",
