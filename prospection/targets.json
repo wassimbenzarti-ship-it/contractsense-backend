@@ -410,7 +410,7 @@
     "sector": "Conseil / Formation",
     "email": "m.benomar@imc.co.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Aria Group",
@@ -438,28 +438,28 @@
     "sector": "BPO / Outsourcing",
     "email": "barjouzi@ma.webhelp.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "OCP Foundation",
     "sector": "Fondation / RSE",
     "email": "s.ajib@ocpfoundation.org",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "BMCE Capital",
     "sector": "Finance / Banque d'investissement",
     "email": "k.benis@bmcek.co.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Procter & Gamble Maroc",
     "sector": "FMCG / Grande consommation",
     "email": "boujida.m.1@pg.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Alliances (contact direct)",
