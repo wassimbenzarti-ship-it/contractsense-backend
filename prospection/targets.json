@@ -466,7 +466,7 @@
     "sector": "Immobilier",
     "email": "ibelmejdoub@alliances.co.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Holmarcom",
@@ -487,21 +487,21 @@
     "sector": "Banque / Immobilier",
     "email": "douk@cih.co.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Attijariwafa Bank (contact direct)",
     "sector": "Banque",
     "email": "a.elkettani@attijariwafa.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Caisse Centrale de Garantie",
     "sector": "Finance publique",
     "email": "m.filali@ccg.ma",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Cegelec Maroc (contact 2)",
@@ -515,7 +515,7 @@
     "sector": "Énergie / Distribution pétrolière",
     "email": "z.nabat@akwagroup.com",
     "contact": "Direction Juridique",
-    "sent": false
+    "sent": true
   },
   {
     "company": "ENGIE Maroc",
