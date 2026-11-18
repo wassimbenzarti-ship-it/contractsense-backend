@@ -529,7 +529,7 @@
     "sector": "Médias / Publicité",
     "email": "m.radi@regie3.ma",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Aya Gold & Silver",
@@ -550,14 +550,14 @@
     "sector": "Finance / Private Equity",
     "email": "abenlamlih@seaf.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "CRBC",
     "sector": "Construction / BTP",
     "email": "loncle@crbc.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   },
   {
     "company": "Aria Group (contact 2)",
@@ -571,6 +571,6 @@
     "sector": "Événementiel / Communication",
     "email": "achraf.b@mutationevent.com",
     "contact": "Direction",
-    "sent": false
+    "sent": true
   }
 ]
